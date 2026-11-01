@@ -3,6 +3,7 @@
 from typing import Mapping
 
 from .ports import CommandClient, DecisionAdapter
+from .profiles import select
 
 
 class ScriptedAdapter:
@@ -18,12 +19,25 @@ class FakeClient:
         self.attempts.append(dict(proposal))
 
 
-def run(*, profile: str, fixture: Mapping[str, object], client: CommandClient, adapter: DecisionAdapter) -> dict[str, object]:
-    if profile != "hosted":
-        raise ValueError("only the hosted synthetic target is available")
-    observation = fixture["observation"]
-    if not isinstance(observation, dict):
-        raise ValueError("invalid fixture observation")
-    proposal = adapter.decide(observation)
-    client.submit(proposal)
+def run(*, profile: str, fixture: Mapping[str, object] | None, client: CommandClient, adapter: DecisionAdapter) -> dict[str, object]:
+    refusal = select(profile)
+    if refusal is not None:
+        return {"status": "REFUSED", "result": refusal}
+    try:
+        observation = fixture["observation"] if fixture is not None else None
+        if not isinstance(observation, dict) or observation.get("synthetic") is not True and observation != {}:
+            return {"status": "REFUSED", "result": "INVALID_FIXTURE", "profile": "hosted"}
+    except (KeyError, TypeError, ValueError):
+        return {"status": "REFUSED", "result": "INVALID_FIXTURE", "profile": "hosted"}
+    try:
+        proposal = adapter.decide(observation)
+    except Exception:
+        return {"status": "REFUSED", "result": "INVALID_PROPOSAL", "profile": "hosted"}
+    if (not isinstance(proposal, dict) or set(proposal) != {"action", "target_id", "arguments"}
+            or proposal["action"] != "LOOK" or proposal["target_id"] is not None or proposal["arguments"] != {}):
+        return {"status": "REFUSED", "result": "INVALID_PROPOSAL", "profile": "hosted"}
+    try:
+        client.submit(proposal)
+    except Exception:
+        return {"status": "FAILED_SUBMISSION", "result": "TRANSPORT_FAILURE", "profile": "hosted", "transport": "fake"}
     return {"status": "ATTEMPTED", "profile": "hosted", "transport": "fake"}
