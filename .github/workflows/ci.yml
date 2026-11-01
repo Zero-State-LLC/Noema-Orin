@@ -42,11 +42,41 @@ jobs:
       - name: Verify installed CLI outside source tree
         run: |
           cd "$RUNNER_TEMP"
-          python -m noema_orin --profile hosted --fixture "$GITHUB_WORKSPACE/fixtures/hosted-look.json" --dry-run
-          if python -m noema_orin --profile offline-spark --dry-run; then
-            echo 'offline-spark unexpectedly succeeded' >&2
-            exit 1
-          fi
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          import noema_orin
+
+          assert not noema_orin.__file__.startswith(os.environ["GITHUB_WORKSPACE"])
+          env = dict(os.environ)
+          env.pop("PYTHONPATH", None)
+          env.pop("PYTHONHOME", None)
+          common = {
+              "source_sha": "619d0674518761aa08462d3f5d5966a917259aa1",
+              "claim_label": "SPECULATIVE",
+              "client_version": "UNVERIFIED",
+              "device_metrics": "NOT_COMPUTABLE",
+          }
+          for args, expected_exit, expected_record in (
+              (["hosted", "--fixture", os.path.join(os.environ["GITHUB_WORKSPACE"], "fixtures/hosted-look.json")],
+               0, {**common, "status": "ATTEMPTED", "result": "FAKE_HANDOFF",
+                   "profile": "hosted", "transport": "fake", "action": "LOOK"}),
+              (["offline-spark"], 1,
+               {**common, "status": "REFUSED", "result": "BLOCKED_SPEC_DEFECT"}),
+          ):
+              result = subprocess.run(
+                  [sys.executable, "-m", "noema_orin", "--profile", *args, "--dry-run"],
+                  env=env, capture_output=True, text=True, check=False,
+              )
+              assert result.returncode == expected_exit, (args[0], result.returncode)
+              assert result.stderr == "", (args[0], "unexpected stderr")
+              assert len(result.stdout.splitlines()) == 1, (args[0], "record count")
+              record = json.loads(result.stdout)
+              assert record == expected_record, (args[0], "unexpected receipt shape or value")
+          PY
       - name: Verify patch hygiene
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then

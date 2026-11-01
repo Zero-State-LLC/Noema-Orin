@@ -209,6 +209,7 @@ class ProfileIsolationTests(unittest.TestCase):
             '{"observation":{"synthetic":false,"synthetic":true}}',
             '{"observation":{"synthetic":true},"observation":{"synthetic":true}}',
             '{"observation":{"synthetic":true,"extra":{"a":1,"a":2}}}',
+            '{"observation":{"synthetic":true,"extra":[{"a":1,"a":2}]}}',
         ):
             with self.subTest(body=body):
                 with tempfile.TemporaryDirectory() as directory:
