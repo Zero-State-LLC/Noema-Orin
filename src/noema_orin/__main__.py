@@ -16,6 +16,16 @@ class SafeParser(argparse.ArgumentParser):
         raise ValueError("invalid invocation")
 
 
+def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Reject ambiguous JSON keys at every object depth before controller work."""
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate fixture key")
+        result[key] = value
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = SafeParser(description="NOEMA Orin synthetic Controller dry-run", add_help=False)
     parser.add_argument("--profile")
@@ -33,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
             outcome = receipt("REFUSED", "DRY_RUN_REQUIRED", hosted=True)
         else:
             try:
-                fixture = json.loads(args.fixture.read_text(encoding="utf-8")) if args.fixture else None
+                fixture = json.loads(args.fixture.read_text(encoding="utf-8"), object_pairs_hook=_unique_object) if args.fixture else None
             except Exception:
                 # Fixture input is untrusted; never echo parser or filesystem errors.
                 fixture = None

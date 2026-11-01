@@ -204,6 +204,21 @@ class ProfileIsolationTests(unittest.TestCase):
         self.assertEqual((record["status"], record["result"]), ("REFUSED", "INVALID_PROPOSAL"))
         self.assertEqual((client.attempts, adapter.calls), ([], 1))
 
+    def test_duplicate_json_keys_refuse_without_fake_handoff(self):
+        for body in (
+            '{"observation":{"synthetic":false,"synthetic":true}}',
+            '{"observation":{"synthetic":true},"observation":{"synthetic":true}}',
+            '{"observation":{"synthetic":true,"extra":{"a":1,"a":2}}}',
+        ):
+            with self.subTest(body=body):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "duplicate.json"
+                    path.write_text(body, encoding="utf-8")
+                    result = invoke("--profile", "hosted", "--fixture", str(path), "--dry-run")
+                record = single_record(self, result, "REFUSED")
+                self.assertEqual(record["result"], "INVALID_FIXTURE")
+                self.assertEqual(result.stderr, "")
+
     def test_invalid_cli_invocations_produce_only_one_record(self):
         for args, expected in (
             (("--help",), "INVALID_INVOCATION"),
