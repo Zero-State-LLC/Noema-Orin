@@ -17,11 +17,11 @@ _GIB = 1024 ** 3
 _BUCKETS = (4, 8, 16, 32, 64, 128)
 _MODEL = "NVIDIA Jetson Orin Nano Developer Kit"
 _L4T = re.compile(
-    r"# R(\d{2}) \(release\), REVISION: (\d{1,2})\.(\d{1,2})"
-    r"(?:, GCID: \d{1,12})?(?:, BOARD: [a-z0-9_-]{1,24})?"
+    r"# R([0-9]{2}) \(release\), REVISION: ([0-9]{1,2})\.([0-9]{1,2})"
+    r"(?:, GCID: [0-9]{1,12})?(?:, BOARD: [a-z0-9_-]{1,24})?"
     r"(?:, EABI: aarch64)?(?:, DATE: [A-Za-z0-9 :+/-]{1,48})?"
 )
-_VERSION = re.compile(r"\d{1,2}\.\d{1,2}\.\d{1,3}")
+_VERSION = re.compile(r"[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,3}")
 
 
 class HostProbe(Protocol):
@@ -75,6 +75,10 @@ def _os_release(raw):
         return _UNKNOWN, _UNKNOWN
     fields = {}
     for key in ("ID", "VERSION_ID"):
+        # Count the field name before validating syntax: one malformed duplicate
+        # must not be ignored in favor of a well-formed value.
+        if len(re.findall(r"^[ \t]*" + key + r"\b", raw, re.MULTILINE)) != 1:
+            return _UNKNOWN, _UNKNOWN
         values = re.findall(r"^" + key + r"=(?:\"([^\"\n]*)\"|([^\n]*))$", raw, re.MULTILINE)
         if len(values) != 1:
             return _UNKNOWN, _UNKNOWN
@@ -108,7 +112,9 @@ def _bucket(value):
 def _ram(raw):
     if type(raw) is not str or len(raw) > _LIMIT:
         return _UNKNOWN
-    values = re.findall(r"^MemTotal:[ \t]*(\d{1,12})[ \t]+kB[ \t]*$", raw, re.MULTILINE)
+    if len(re.findall(r"^[ \t]*MemTotal\b", raw, re.MULTILINE)) != 1:
+        return _UNKNOWN
+    values = re.findall(r"^MemTotal:[ \t]*([0-9]{1,12})[ \t]+kB[ \t]*$", raw, re.MULTILINE)
     if len(values) != 1:
         return _UNKNOWN
     return _bucket(int(values[0]) * 1024)

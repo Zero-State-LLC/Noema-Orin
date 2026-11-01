@@ -170,6 +170,70 @@ class PreflightTests(unittest.TestCase):
                 record = run_preflight(FakeProbe({"/proc/meminfo": malformed}))
                 self.assertEqual(record["ram_gib_bucket"], "NOT_COMPUTABLE")
 
+    def test_unicode_digits_never_become_version_or_ram_observations(self):
+        for digits in ("٣.١٢.٣", "３.１２.３"):
+            with self.subTest(digits=digits):
+                record = run_preflight(FakeProbe({"python_version": digits,
+                                                   "client_version": digits}))
+                self.assertEqual(record["python_version"], "NOT_COMPUTABLE")
+                self.assertEqual(record["client_version"], "NOT_COMPUTABLE")
+        for release, mem in (("# R٣٩ (release), REVISION: ٢.١", "MemTotal: ٧٧٣٣٢٤٨ kB\n"),
+                             ("# R３９ (release), REVISION: ２.１", "MemTotal: ７７３３２４８ kB\n")):
+            with self.subTest(release=release):
+                record = run_preflight(FakeProbe({"/etc/nv_tegra_release": release,
+                                                   "/proc/meminfo": mem}))
+                self.assertEqual(record["l4t_release"], "NOT_COMPUTABLE")
+                self.assertEqual(record["ram_gib_bucket"], "NOT_COMPUTABLE")
+
+    def test_valid_and_malformed_duplicate_memtotal_is_unknown_in_either_order(self):
+        valid = "MemTotal: 7733248 kB\n"
+        malformed = "MemTotal: garbage kB\n"
+        for text in (valid + malformed, malformed + valid,
+                     valid + "MemTotal:\n", "MemTotal:\n" + valid,
+                     valid + "MemTotal=garbage\n", "MemTotal=garbage\n" + valid,
+                     valid + "MemTotal\u00a0: garbage kB\n"):
+            with self.subTest(text=text):
+                self.assertEqual(run_preflight(FakeProbe({"/proc/meminfo": text}))["ram_gib_bucket"],
+                                 "NOT_COMPUTABLE")
+
+    def test_malformed_os_key_duplicate_cannot_be_ignored(self):
+        good = "ID=ubuntu\nVERSION_ID=24.04\n"
+        for text in (good + "ID =debian\n", "ID =debian\n" + good,
+                     good + "VERSION_ID =22.04\n", "VERSION_ID =22.04\n" + good):
+            with self.subTest(text=text):
+                record = run_preflight(FakeProbe({"/etc/os-release": text}))
+                self.assertEqual((record["os_id"], record["os_version"]),
+                                 ("NOT_COMPUTABLE", "NOT_COMPUTABLE"))
+
+    def test_unicode_whitespace_does_not_normalize_host_file_fields(self):
+        for space in ("\u00a0", "\u2028", "\r"):
+            with self.subTest(space=repr(space)):
+                record = run_preflight(FakeProbe({"/proc/meminfo": f"MemTotal:{space}7733248 kB\n",
+                                                   "/etc/nv_tegra_release": f"# R39 (release), REVISION:{space}2.1"}))
+                self.assertEqual(record["ram_gib_bucket"], "NOT_COMPUTABLE")
+                self.assertEqual(record["l4t_release"], "NOT_COMPUTABLE")
+
+    def test_hostile_observations_never_escape_the_receipt_vocabulary(self):
+        import re
+        valid_buckets = {"NOT_COMPUTABLE", "0-4", "4-8", "8-16", "16-32", "32-64", "64-128", "128+"}
+        hostile = ("٣.١٢.٣", "３.１２.３", "\u00a0", "\u2028", "\r", "\x00",
+                   "\n", "sensitive-host-token-192.0.2.43", "9" * 5000)
+        for value in hostile:
+            with self.subTest(value=repr(value)[:80]):
+                record = run_preflight(FakeProbe({"python_version": value, "client_version": value,
+                    "/etc/nv_tegra_release": value, "/proc/meminfo": value,
+                    "/proc/device-tree/model": value, "/etc/os-release": value,
+                    "machine": value, "free_bytes": value}))
+                self.assertEqual(set(record), set(run_preflight(FakeProbe())))
+                self.assertEqual(record["source_sha"], SOURCE_SHA)
+                for field in ("machine", "os_id", "os_version", "l4t_release", "device_family",
+                              "python_version", "client_version"):
+                    self.assertTrue(re.fullmatch(r"[A-Za-z0-9_.+-]+", record[field]), field)
+                self.assertIn(record["ram_gib_bucket"], valid_buckets)
+                self.assertIn(record["storage_free_gib_bucket"], valid_buckets)
+                if len(value) > 3:
+                    self.assertNotIn(value, json.dumps(record))
+
     def test_unavailable_probes_are_not_computable(self):
         record = run_preflight(FakeProbe(failures=(
             "/etc/os-release", "/etc/nv_tegra_release", "/proc/device-tree/model",
