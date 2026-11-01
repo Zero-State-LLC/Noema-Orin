@@ -34,7 +34,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             try:
                 fixture = json.loads(args.fixture.read_text(encoding="utf-8")) if args.fixture else None
-            except (OSError, ValueError, UnicodeError):
+            except Exception:
+                # Fixture input is untrusted; never echo parser or filesystem errors.
                 fixture = None
             outcome = run(profile="hosted", fixture=fixture, client=FakeClient(), adapter=ScriptedAdapter())
     print(json.dumps(outcome, sort_keys=True, separators=(",", ":")))

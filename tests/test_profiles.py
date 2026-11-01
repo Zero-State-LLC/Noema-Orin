@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -94,6 +95,50 @@ class ProfileIsolationTests(unittest.TestCase):
                 self.assertEqual(client.attempts, [])
                 self.assertEqual(adapter.calls, 1)
                 self.assertNotIn("SECRET", json.dumps(record))
+
+    def test_fixture_access_exception_refuses_before_adapter_and_client(self):
+        class HostileFixture(dict):
+            def __getitem__(self, key):
+                raise RuntimeError("SENTINEL_FIXTURE_EXCEPTION")
+
+        client, adapter = FakeClient(), ProbeAdapter()
+        record = run(profile="hosted", fixture=HostileFixture(), client=client, adapter=adapter)
+        self.assertEqual((record["status"], record["result"]), ("REFUSED", "INVALID_FIXTURE"))
+        self.assertEqual((client.attempts, adapter.calls), ([], 0))
+        self.assertNotIn("SENTINEL_", json.dumps(record))
+
+    def test_deeply_nested_fixture_refuses_with_one_safe_cli_record(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "nested.json"
+            path.write_text('{"observation":' + '[' * 1500 + '0' + ']' * 1500 + '}', encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, "-c", "import json,runpy,sys; json.loads=lambda _: (_ for _ in ()).throw(RecursionError('SENTINEL_FIXTURE_EXCEPTION')); sys.argv=['noema_orin', '--profile', 'hosted', '--fixture', sys.argv[1], '--dry-run']; runpy.run_module('noema_orin', run_name='__main__')", str(path)],
+                cwd=ROOT, env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+                capture_output=True, text=True, check=False,
+            )
+        record = single_record(self, result, "REFUSED")
+        self.assertEqual(record["result"], "INVALID_FIXTURE")
+        self.assertNotIn("SENTINEL_FIXTURE_EXCEPTION", result.stdout + result.stderr)
+
+    def test_adversarial_proposal_validation_refuses_before_submit(self):
+        class HostileValue:
+            def __eq__(self, other):
+                raise RuntimeError("SENTINEL_PROPOSAL_EXCEPTION")
+
+        class HostileProposal(dict):
+            def __iter__(self):
+                raise RuntimeError("SENTINEL_ITER_EXCEPTION")
+
+        for proposal in (
+            {"action": HostileValue(), "target_id": None, "arguments": {}},
+            HostileProposal(action="LOOK", target_id=None, arguments={}),
+        ):
+            with self.subTest(proposal=type(proposal).__name__):
+                client, adapter = FakeClient(), ProbeAdapter(proposal)
+                record = run(profile="hosted", fixture={"observation": {"synthetic": True}}, client=client, adapter=adapter)
+                self.assertEqual((record["status"], record["result"]), ("REFUSED", "INVALID_PROPOSAL"))
+                self.assertEqual((client.attempts, adapter.calls), ([], 1))
+                self.assertNotIn("SENTINEL_", json.dumps(record))
 
     def test_invalid_cli_invocations_produce_only_one_record(self):
         for args, expected in (

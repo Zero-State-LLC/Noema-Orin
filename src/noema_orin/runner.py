@@ -28,14 +28,16 @@ def run(*, profile: str, fixture: Mapping[str, object] | None, client: CommandCl
         observation = fixture["observation"] if fixture is not None else None
         if not isinstance(observation, dict) or observation.get("synthetic") is not True:
             return receipt("REFUSED", "INVALID_FIXTURE", hosted=True)
-    except (KeyError, TypeError, ValueError):
+    except Exception:
         return receipt("REFUSED", "INVALID_FIXTURE", hosted=True)
     try:
         proposal = adapter.decide(observation)
+        if (type(proposal) is not dict or set(proposal) != {"action", "target_id", "arguments"}
+                or type(proposal["action"]) is not str or proposal["action"] != "LOOK"
+                or proposal["target_id"] is not None
+                or type(proposal["arguments"]) is not dict or proposal["arguments"]):
+            return receipt("REFUSED", "INVALID_PROPOSAL", hosted=True)
     except Exception:
-        return receipt("REFUSED", "INVALID_PROPOSAL", hosted=True)
-    if (not isinstance(proposal, dict) or set(proposal) != {"action", "target_id", "arguments"}
-            or proposal["action"] != "LOOK" or proposal["target_id"] is not None or proposal["arguments"] != {}):
         return receipt("REFUSED", "INVALID_PROPOSAL", hosted=True)
     try:
         client.submit(proposal)
