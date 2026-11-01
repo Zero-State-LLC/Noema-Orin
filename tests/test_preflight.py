@@ -234,6 +234,53 @@ class PreflightTests(unittest.TestCase):
                 if len(value) > 3:
                     self.assertNotIn(value, json.dumps(record))
 
+    def test_control_bearing_host_files_fail_closed_at_public_entry(self):
+        import json
+        os_good = "ID=ubuntu\nVERSION_ID=24.04\n"
+        ram_good = "MemTotal: 7733248 kB\n"
+        l4t_good = "# R39 (release), REVISION: 2.1\n"
+        for control in ("\r", "\x00", "\u2028", "\u0085", "\ufeff"):
+            with self.subTest(control=repr(control)):
+                for key, extra in (("ID", "debian"), ("VERSION_ID", "22.04")):
+                    bad = f"{control}{key}={extra}\n"
+                    for os_text in (os_good + bad, bad + os_good,
+                                    os_good + f"JUNK=1{control}{key}={extra}\n"):
+                        record = run_preflight(FakeProbe({"/etc/os-release": os_text}))
+                        self.assertEqual((record["os_id"], record["os_version"]),
+                                         ("NOT_COMPUTABLE", "NOT_COMPUTABLE"))
+                        self.assertNotIn(control, json.dumps(record, ensure_ascii=False))
+                for mem in (ram_good + control + "MemTotal: invalid kB\n",
+                            control + "MemTotal: invalid kB\n" + ram_good,
+                            ram_good + "JUNK=1" + control + "MemTotal: bad kB\n"):
+                    record = run_preflight(FakeProbe({"/proc/meminfo": mem}))
+                    self.assertEqual(record["ram_gib_bucket"], "NOT_COMPUTABLE")
+                    self.assertNotIn(control, json.dumps(record, ensure_ascii=False))
+                record = run_preflight(FakeProbe({"/etc/nv_tegra_release": l4t_good + control}))
+                self.assertEqual(record["l4t_release"], "NOT_COMPUTABLE")
+        ordinary = run_preflight(FakeProbe({"/etc/os-release": os_good,
+                                            "/proc/meminfo": ram_good,
+                                            "/etc/nv_tegra_release": l4t_good}))
+        self.assertEqual((ordinary["os_id"], ordinary["os_version"],
+                          ordinary["ram_gib_bucket"], ordinary["l4t_release"]),
+                         ("ubuntu", "24.04", "4-8", "R39.2.1"))
+
+    def test_nonprintable_and_non_ascii_host_file_sweep(self):
+        os_good = "ID=ubuntu\nVERSION_ID=24.04\n"
+        ram_good = "MemTotal: 7733248 kB\n"
+        for codepoint in (*range(32), *range(127, 256), 0x2028, 0x2029, 0xfeff):
+            if codepoint in (9, 10):
+                continue
+            char = chr(codepoint)
+            with self.subTest(codepoint=codepoint):
+                record = run_preflight(FakeProbe({
+                    "/etc/os-release": os_good + char + "ID=debian\n",
+                    "/proc/meminfo": ram_good + char + "MemTotal: invalid kB\n",
+                    "/etc/nv_tegra_release": "# R39 (release), REVISION: 2.1" + char,
+                }))
+                self.assertEqual((record["os_id"], record["os_version"],
+                                  record["ram_gib_bucket"], record["l4t_release"]),
+                                 ("NOT_COMPUTABLE",) * 4)
+
     def test_unavailable_probes_are_not_computable(self):
         record = run_preflight(FakeProbe(failures=(
             "/etc/os-release", "/etc/nv_tegra_release", "/proc/device-tree/model",

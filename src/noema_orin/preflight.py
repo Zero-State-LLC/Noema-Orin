@@ -70,8 +70,14 @@ def _version(raw):
     return raw if type(raw) is str and _VERSION.fullmatch(raw) else _UNKNOWN
 
 
+def _plain_host_text(raw):
+    """Accept bounded printable ASCII with LF and TAB, never hidden separators."""
+    return (type(raw) is str and len(raw) <= _LIMIT
+            and all(char in "\n\t" or " " <= char <= "~" for char in raw))
+
+
 def _os_release(raw):
-    if type(raw) is not str or len(raw) > _LIMIT:
+    if not _plain_host_text(raw):
         return _UNKNOWN, _UNKNOWN
     fields = {}
     for key in ("ID", "VERSION_ID"):
@@ -87,7 +93,7 @@ def _os_release(raw):
 
 
 def _l4t(raw):
-    if type(raw) is not str or len(raw) > _LIMIT:
+    if not _plain_host_text(raw):
         return _UNKNOWN
     # A local text file may end with one LF; never normalize other controls.
     match = _L4T.fullmatch(raw.removesuffix("\n"))
@@ -110,7 +116,7 @@ def _bucket(value):
 
 
 def _ram(raw):
-    if type(raw) is not str or len(raw) > _LIMIT:
+    if not _plain_host_text(raw):
         return _UNKNOWN
     if len(re.findall(r"^[ \t]*MemTotal\b", raw, re.MULTILINE)) != 1:
         return _UNKNOWN
