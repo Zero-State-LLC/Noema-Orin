@@ -26,7 +26,7 @@ def run(*, profile: str, fixture: Mapping[str, object] | None, client: CommandCl
         return receipt("REFUSED", refusal)
     try:
         observation = fixture["observation"] if fixture is not None else None
-        if not isinstance(observation, dict) or observation.get("synthetic") is not True and observation != {}:
+        if not isinstance(observation, dict) or observation.get("synthetic") is not True:
             return receipt("REFUSED", "INVALID_FIXTURE", hosted=True)
     except (KeyError, TypeError, ValueError):
         return receipt("REFUSED", "INVALID_FIXTURE", hosted=True)
