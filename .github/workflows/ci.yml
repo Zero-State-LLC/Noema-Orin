@@ -89,7 +89,6 @@ jobs:
           import sysconfig
 
           import noema_orin
-          from noema_orin.receipts import SOURCE_SHA
 
           roots = [Path(sysconfig.get_path(name)).resolve() for name in ("purelib", "platlib")]
           origin = Path(noema_orin.__file__).resolve()
@@ -103,7 +102,7 @@ jobs:
           assert len(result.stdout.splitlines()) == 1, "unexpected record count"
           record = json.loads(result.stdout)
           fixed = {
-              "source_sha": SOURCE_SHA,
+              "source_sha": "619d0674518761aa08462d3f5d5966a917259aa1",
               "claim_label": "SPECULATIVE",
               "evidence_scope": "LOCAL_PREFLIGHT_ONLY",
               "machine": "aarch64" if os.uname().machine == "aarch64" else "x86_64",
