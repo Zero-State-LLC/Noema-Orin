@@ -42,11 +42,32 @@ jobs:
       - name: Verify installed CLI outside source tree
         run: |
           cd "$RUNNER_TEMP"
-          python -m noema_orin --profile hosted --fixture "$GITHUB_WORKSPACE/fixtures/hosted-look.json" --dry-run
-          if python -m noema_orin --profile offline-spark --dry-run; then
-            echo 'offline-spark unexpectedly succeeded' >&2
-            exit 1
-          fi
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          import noema_orin
+
+          assert not noema_orin.__file__.startswith(os.environ["GITHUB_WORKSPACE"])
+          env = dict(os.environ)
+          env.pop("PYTHONPATH", None)
+          env.pop("PYTHONHOME", None)
+          for args, expected_exit, expected_status, expected_result in (
+              (["hosted", "--fixture", os.path.join(os.environ["GITHUB_WORKSPACE"], "fixtures/hosted-look.json")], 0, "ATTEMPTED", "FAKE_HANDOFF"),
+              (["offline-spark"], 1, "REFUSED", "BLOCKED_SPEC_DEFECT"),
+          ):
+              result = subprocess.run(
+                  [sys.executable, "-m", "noema_orin", "--profile", *args, "--dry-run"],
+                  env=env, capture_output=True, text=True, check=False,
+              )
+              assert result.returncode == expected_exit, (args[0], result.returncode)
+              assert result.stderr == "", (args[0], "unexpected stderr")
+              assert len(result.stdout.splitlines()) == 1, (args[0], "record count")
+              record = json.loads(result.stdout)
+              assert (record["status"], record["result"]) == (expected_status, expected_result)
+          PY
       - name: Verify patch hygiene
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
