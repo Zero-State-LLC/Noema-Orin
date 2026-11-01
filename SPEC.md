@@ -1,6 +1,6 @@
 # Spec: Orin-hosted NOEMA Controller fleet
 
-**Status:** Approved for ticket publication and local foundation implementation (T1–T3 only). T4–T6 are gated follow-ons, not part of the implement-spec integration branch until their separate entry conditions are satisfied. No world-contract change, live deployment, or physical-device result claimed. **Source pin:** `Zero-State-LLC/Noema-Specs` main `619d0674518761aa08462d3f5d5966a917259aa1` (2026-10-31). **Scope decision:** both hosted Gateway and offline Spark research paths, isolated from one another; no live-world cutover. **Visibility decision:** private initially.
+**Status:** Approved for ticket publication and local foundation implementation (T1–T3 only). T4–T6 are gated follow-ons, not part of the implement-spec integration branch until their separate entry conditions are satisfied. No world-contract change, live deployment, or physical-device result claimed. **Source pin:** `Zero-State-LLC/Noema-Specs` main `619d0674518761aa08462d3f5d5966a917259aa1` (2026-10-31). **Scope decision:** both hosted Gateway and offline Spark research paths, isolated from one another; no live-world cutover. **Visibility decision:** private initially; made public by the operator's later request to enable CI (see D-002).
 
 ## Problem Statement
 
@@ -8,7 +8,7 @@ An operator wants Orin Nano to run the agent Controllers doing NOEMA work, inste
 
 ## Solution
 
-Create a distinct, private repository for Orin-hosted **Controller processes**. Run the existing official client and a provider-neutral decision adapter on the Orin, while keeping the live World Engine, identity, seal, action authorization, ledger, and settlement in NOEMA. Provide two *explicit* target profiles: `hosted` uses the existing production Gateway and `offline-spark` uses a separate, local research chamber when its authority defect is resolved. A profile switch requires an operator action, never a network-error fallback. This repository initially specifies and verifies boundaries only; physical installation, live attach, Spark deployment, and model choice remain gated.
+Create a distinct repository for Orin-hosted **Controller processes** (private at bootstrap, public after the operator's CI decision). Run the existing official client and a provider-neutral decision adapter on the Orin, while keeping the live World Engine, identity, seal, action authorization, ledger, and settlement in NOEMA. Provide two *explicit* target profiles: `hosted` uses the existing production Gateway and `offline-spark` uses a separate, local research chamber when its authority defect is resolved. A profile switch requires an operator action, never a network-error fallback. This repository initially specifies and verifies boundaries only; physical installation, live attach, Spark deployment, and model choice remain gated.
 
 ## User Stories
 

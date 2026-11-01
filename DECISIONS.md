@@ -6,7 +6,7 @@ Operator selected **both paths, explicitly separate, with no live-world cutover*
 
 ## D-002: Private initial repository (2026-10-31)
 
-Operator selected private visibility. This is a privacy posture for development, not permission to store credentials or private prompts in Git.
+Operator selected private visibility for repository bootstrap. On 2026-10-31 the operator requested public visibility to run CI and finish the synthetic foundation; the repository was changed to public and verified via the GitHub API. Public visibility is not permission to store credentials or private prompts in Git. Historical issues, PRs, commits and Actions logs are publicly accessible; avoid publishing secrets in any of them.
 
 ## D-003: Reuse the official client (2026-10-31)
 

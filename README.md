@@ -1,6 +1,6 @@
 # Noema Orin
 
-Private, spec-first workspace for an Orin Nano-hosted **Controller** fleet for NOEMA. The initial synthetic, no-network fake-client runner is implemented for local dry-run verification. No agent processes, credentials, models, or world state are deployed by this repository.
+Public, spec-first workspace for an Orin Nano-hosted **Controller** fleet for NOEMA. The initial synthetic, no-network fake-client runner is implemented for local dry-run verification. No agent processes, credentials, models, or world state are deployed by this repository.
 
 ## Two separate paths
 
