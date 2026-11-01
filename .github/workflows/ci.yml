@@ -84,3 +84,50 @@ jobs:
           else
             git diff --check HEAD^ HEAD
           fi
+  official-client-loopback:
+    name: Official client loopback (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, python-version: '3.11'}
+          - {os: ubuntu-latest, python-version: '3.12'}
+          - {os: ubuntu-latest, python-version: '3.13'}
+          - {os: ubuntu-24.04-arm, python-version: '3.12'}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v7.0.1
+        with:
+          repository: Zero-State-LLC/noema-client
+          ref: 16ec5d1f472295055439975f88567a43fe6ee3b0
+          path: client-pin
+          persist-credentials: false
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install exact client and Orin package
+        run: |
+          test "$(git -C client-pin rev-parse HEAD)" = 16ec5d1f472295055439975f88567a43fe6ee3b0
+          python -m pip install ./client-pin .
+      - name: Verify installed real client against loopback fixture
+        env:
+          NOEMA_TOKEN: ''
+          NOEMA_SERVER: ''
+          NOEMA_CONFIG_DIR: ''
+          NOEMA_WORLD_ID: ''
+          NOEMA_ADMIN_TOKEN: ''
+          XDG_CONFIG_HOME: ''
+        run: |
+          cd "$RUNNER_TEMP"
+          env -u PYTHONPATH -u PYTHONHOME python -c 'import noema_client, noema_orin; assert not noema_orin.__file__.startswith(__import__("os").environ["GITHUB_WORKSPACE"]); print(noema_client.__version__, noema_orin.__file__)'
+          env -u PYTHONHOME PYTHONPATH="$GITHUB_WORKSPACE/client-pin/tests" python -m unittest discover -s "$GITHUB_WORKSPACE/tests_optional" -p 'test_official_client.py' -v
+      - name: Verify patch hygiene
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            git diff --check "$(git merge-base origin/main HEAD)" HEAD
+          else
+            git diff --check HEAD^ HEAD
+          fi
