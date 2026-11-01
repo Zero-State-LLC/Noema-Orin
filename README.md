@@ -11,10 +11,11 @@ The paths must have distinct endpoints, credentials, world identities, configura
 
 ## Start here
 
-- [SPEC-FOUNDATION.md](SPEC-FOUNDATION.md): **implementation contract for the first Pocock `implement-spec` run**, limited to [#1–#3](https://github.com/Zero-State-LLC/Noema-Orin/issues/7). [SPEC.md](SPEC.md) is the broader roadmap and does not authorize #4–#6.
+- [SPEC-FOUNDATION.md](SPEC-FOUNDATION.md): completed synthetic foundation contract for [#1–#3 and #7](https://github.com/Zero-State-LLC/Noema-Orin/issues/7), merged in PR #9 at `b6bb91c1d0be1ee48c009c746fb0767bb631bf79`. [SPEC.md](SPEC.md) is the broader Controller-host roadmap, not authorization for #4–#6.
 - [execplan/01-foundation.md](execplan/01-foundation.md): dependency-ordered implementation milestones and gates. Nothing here grants deployment authority.
 - [AGENTS.md](AGENTS.md): operating boundaries; [docs/agents/](docs/agents/domain.md): Pocock engineering-skills configuration.
 - [DECISIONS.md](DECISIONS.md): unresolved gates and decisions, not silent assumptions.
+- [docs/ORIN-8GB-PORT.md](docs/ORIN-8GB-PORT.md): portable install and day-one acceptance packet for the Jetson Orin Nano 8GB Developer Kit. Hermes stays on its existing host; only NOEMA Controller processes are in scope. No device run has been observed.
 - [GLOSSARY.md](GLOSSARY.md): local synthetic-run terms; [output-boundary ADR](docs/adr/0001-synthetic-runner-output-boundary.md): why refusals and failed submissions are distinct. Neither supersedes the canonical NOEMA glossary or world authority.
 
 The `mattpocock/skills` workflow is **grill-with-docs → to-spec → to-tickets → implement-spec → code-review** when those skills are available. This repository's initial spec follows the actual `to-spec` sections. Pocock does not require a `skill.yaml`, NVIDIA runtime manifest, or a mandatory `/runtime/` folder; none is invented here. Runtime work belongs in separate vertical-slice issues with explicit blocking edges and behavioral tests. The operator approved the T1–T6 graph; the first `implement-spec` integration branch is **T1–T3 only** (local synthetic foundation). T4–T6 remain gated follow-ons, not `ready-for-agent`. An optional agent-facing SKILL.md should be added only after a working, verified workflow exists; it cannot define world strategy or carry credentials.
