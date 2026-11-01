@@ -132,6 +132,26 @@ class ProfileIsolationTests(unittest.TestCase):
         self.assertEqual((client.attempts, adapter.calls), ([], 0))
         self.assertNotIn("SENTINEL_", json.dumps(record))
 
+    def test_lying_fixture_lookup_refuses_before_adapter_and_client(self):
+        class LyingFixture(dict):
+            def __getitem__(self, key):
+                return {"synthetic": True}
+
+        client, adapter = FakeClient(), ProbeAdapter()
+        record = run(profile="hosted", fixture=LyingFixture(observation={"synthetic": False}), client=client, adapter=adapter)
+        self.assertEqual((record["status"], record["result"]), ("REFUSED", "INVALID_FIXTURE"))
+        self.assertEqual((client.attempts, adapter.calls), ([], 0))
+
+    def test_lying_observation_get_refuses_before_adapter_and_client(self):
+        class LyingObservation(dict):
+            def get(self, key, default=None):
+                return True
+
+        client, adapter = FakeClient(), ProbeAdapter()
+        record = run(profile="hosted", fixture={"observation": LyingObservation(synthetic=False)}, client=client, adapter=adapter)
+        self.assertEqual((record["status"], record["result"]), ("REFUSED", "INVALID_FIXTURE"))
+        self.assertEqual((client.attempts, adapter.calls), ([], 0))
+
     def test_deeply_nested_fixture_refuses_with_one_safe_cli_record(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "nested.json"
@@ -164,6 +184,25 @@ class ProfileIsolationTests(unittest.TestCase):
                 self.assertEqual((record["status"], record["result"]), ("REFUSED", "INVALID_PROPOSAL"))
                 self.assertEqual((client.attempts, adapter.calls), ([], 1))
                 self.assertNotIn("SENTINEL_", json.dumps(record))
+
+    def test_fixture_with_string_subclass_marker_key_refuses_before_adapter(self):
+        class AliasKey(str):
+            pass
+
+        client, adapter = FakeClient(), ProbeAdapter()
+        record = run(profile="hosted", fixture={"observation": {AliasKey("synthetic"): True}}, client=client, adapter=adapter)
+        self.assertEqual((record["status"], record["result"]), ("REFUSED", "INVALID_FIXTURE"))
+        self.assertEqual((client.attempts, adapter.calls), ([], 0))
+
+    def test_proposal_with_string_subclass_key_refuses_before_submit(self):
+        class AliasKey(str):
+            pass
+
+        proposal = {AliasKey("action"): "LOOK", "target_id": None, "arguments": {}}
+        client, adapter = FakeClient(), ProbeAdapter(proposal)
+        record = run(profile="hosted", fixture={"observation": {"synthetic": True}}, client=client, adapter=adapter)
+        self.assertEqual((record["status"], record["result"]), ("REFUSED", "INVALID_PROPOSAL"))
+        self.assertEqual((client.attempts, adapter.calls), ([], 1))
 
     def test_invalid_cli_invocations_produce_only_one_record(self):
         for args, expected in (
