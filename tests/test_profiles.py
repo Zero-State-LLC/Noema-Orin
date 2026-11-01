@@ -1,11 +1,14 @@
 """Public synthetic runner and CLI failure-boundary contracts (#2)."""
 
+import io
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+from unittest.mock import patch
 
 from noema_orin.runner import FakeClient, ScriptedAdapter, run
 
@@ -15,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class ProbeAdapter:
     def __init__(self, proposal=None):
         self.calls = 0
-        self.proposal = proposal or {"action": "LOOK", "target_id": None, "arguments": {}}
+        self.proposal = proposal if proposal is not None else {"action": "LOOK", "target_id": None, "arguments": {}}
 
     def decide(self, observation):
         self.calls += 1
@@ -70,7 +73,7 @@ class ProfileIsolationTests(unittest.TestCase):
                 self.assertNotIn("SECRET_PATH_DO_NOT_ECHO", result.stdout + result.stderr)
 
     def test_invalid_hosted_fixture_stops_before_adapter_or_client(self):
-        for fixture in ({}, {"observation": []}):
+        for fixture in ({}, {"observation": []}, {"observation": {}}, {"observation": {"synthetic": False}}):
             with self.subTest(fixture=fixture):
                 client, adapter = FakeClient(), ProbeAdapter()
                 record = run(profile="hosted", fixture=fixture, client=client, adapter=adapter)
@@ -80,13 +83,13 @@ class ProfileIsolationTests(unittest.TestCase):
         self.assertEqual(single_record(self, result, "REFUSED")["result"], "INVALID_FIXTURE")
 
     def test_invalid_proposal_never_reaches_client(self):
-        for proposal in ({"action": "DELETE", "target_id": None, "arguments": {}},
+        for proposal in ({}, {"action": "DELETE", "target_id": None, "arguments": {}},
                          {"action": "LOOK", "target_id": None, "arguments": {}, "prompt": "SECRET"},
                          {"action": "LOOK", "target_id": "x", "arguments": {}},
                          {"action": "LOOK", "target_id": None, "arguments": []}):
             with self.subTest(proposal=proposal):
                 client, adapter = FakeClient(), ProbeAdapter(proposal)
-                record = run(profile="hosted", fixture={"observation": {}}, client=client, adapter=adapter)
+                record = run(profile="hosted", fixture={"observation": {"synthetic": True}}, client=client, adapter=adapter)
                 self.assertEqual((record["status"], record["result"]), ("REFUSED", "INVALID_PROPOSAL"))
                 self.assertEqual(client.attempts, [])
                 self.assertEqual(adapter.calls, 1)
@@ -102,9 +105,25 @@ class ProfileIsolationTests(unittest.TestCase):
                 record = single_record(self, invoke(*args), "REFUSED")
                 self.assertEqual(record["result"], expected)
 
+    def test_cli_transport_failure_is_one_failed_handoff_and_one_safe_record(self):
+        from noema_orin.__main__ import main
+
+        client = FailingClient()
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with patch("noema_orin.__main__.FakeClient", return_value=client):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = main(["--profile", "hosted", "--fixture", "fixtures/hosted-look.json", "--dry-run"])
+        self.assertNotEqual(code, 0)
+        self.assertEqual(len(client.attempts), 1)
+        self.assertEqual(stderr.getvalue(), "")
+        self.assertEqual(len(stdout.getvalue().splitlines()), 1)
+        record = json.loads(stdout.getvalue())
+        self.assertEqual(record["status"], "FAILED_SUBMISSION")
+        self.assertNotIn("TOP_SECRET_EXCEPTION_MARKER", stdout.getvalue() + stderr.getvalue())
+
     def test_transport_failure_is_one_submission_without_fallback(self):
         client, adapter = FailingClient(), ProbeAdapter()
-        record = run(profile="hosted", fixture={"observation": {}}, client=client, adapter=adapter)
+        record = run(profile="hosted", fixture={"observation": {"synthetic": True}}, client=client, adapter=adapter)
         self.assertEqual((record["status"], record["result"]), ("FAILED_SUBMISSION", "TRANSPORT_FAILURE"))
         self.assertEqual(len(client.attempts), 1)
         self.assertEqual(adapter.calls, 1)
