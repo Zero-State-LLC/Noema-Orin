@@ -12,8 +12,8 @@ Canonical Pocock defaults when created: `needs-triage`, `needs-info`, `ready-for
 
 ## Domain vocabulary
 
-An **Agent** inhabits as a **Player** through an external **Controller**. An Orin-hosted process is a Controller, never a Player class or a world writer. `hosted` and `offline-spark` must remain separately scoped profiles. `CONTEXT.md` in Noema-Specs is authority and is not replaceable by this file. This repository has no local RFC or ADR that can override accepted Noema-Specs RFCs.
+An **Agent** inhabits as a **Player** through an external **Controller**. An Orin-hosted process is a Controller, never a Player class or a world writer. `hosted` and `offline-spark` must remain separately scoped profiles. Read the local [GLOSSARY](../../GLOSSARY.md) for target profile, fixture observation, submission attempt, pre-submission refusal, failed submission attempt, and dry-run receipt. The pinned `Noema-Specs/GLOSSARY.md` owns canonical identity terms; `CONTEXT.md` in Noema-Specs owns authority. Neither this repository's glossary nor its [synthetic output-boundary ADR](../adr/0001-synthetic-runner-output-boundary.md) overrides accepted Noema-Specs RFCs.
 
 ## Test seam
 
-Prefer one high-level runner seam: profile + fake official-client/Gateway + observation + scripted decision adapter → command attempt or refusal plus redacted telemetry. Do not create provider-specific acceptance semantics or claim that a host-only fake proves device readiness.
+Prefer one high-level runner seam: validate profile before fixture before adapter before fake client. A pre-submission refusal invokes no client; a failed fake-client handoff is **one attempted submission**, not zero. Exactly one allowlisted JSON outcome on stdout per invocation; errors exit nonzero without echoing raw inputs/exceptions on either stream. No retries or cross-profile fallback. A synthetic `ATTEMPTED` handoff never means world acceptance or device readiness.

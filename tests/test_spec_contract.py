@@ -37,15 +37,24 @@ class SpecificationBootstrapTests(unittest.TestCase):
         for token in ("#1", "#2", "#3", "#4–#6", "BLOCKED_SPEC_DEFECT"):
             with self.subTest(token=token):
                 self.assertIn(token, foundation + plan)
+        for token in ("REFUSED", "FAILED_SUBMISSION", "ATTEMPTED", "before fixture loading", "exactly one", "no retry", "stdout", "stderr"):
+            with self.subTest(outcome_contract=token):
+                self.assertIn(token, foundation + plan)
+        self.assertIn("GLOSSARY.md", foundation)
+        self.assertIn("docs/adr/0001-synthetic-runner-output-boundary.md", foundation)
+        glossary = (ROOT / "GLOSSARY.md").read_text(encoding="utf-8")
+        for term in ("Target profile", "Submission attempt", "Refusal record", "Failed submission attempt", "Dry-run receipt", "Fixture observation"):
+            with self.subTest(local_term=term):
+                self.assertIn(f"**{term}**:", glossary)
         for section in ("Progress", "Surprises & Discoveries", "Decision Log", "Outcomes & Retrospective", "Validation and Acceptance"):
             with self.subTest(section=section):
                 self.assertIn(f"## {section}", plan)
 
     def test_local_links_and_plan(self):
-        for rel in ("README.md", "SPEC.md", "SPEC-FOUNDATION.md", "AGENTS.md", "DECISIONS.md", "docs/agents/domain.md", "execplan/01-foundation.md"):
+        for rel in ("README.md", "SPEC.md", "SPEC-FOUNDATION.md", "AGENTS.md", "DECISIONS.md", "GLOSSARY.md", "docs/adr/0001-synthetic-runner-output-boundary.md", "docs/agents/domain.md", "execplan/01-foundation.md"):
             with self.subTest(rel=rel):
                 self.assertTrue((ROOT / rel).is_file())
-        for rel in ("README.md", "SPEC.md", "SPEC-FOUNDATION.md"):
+        for rel in ("README.md", "SPEC.md", "SPEC-FOUNDATION.md", "docs/agents/domain.md"):
             text = (ROOT / rel).read_text(encoding="utf-8")
             for target in re.findall(r"\]\(([^)]+)\)", text):
                 if target.startswith(("http://", "https://", "#")):
