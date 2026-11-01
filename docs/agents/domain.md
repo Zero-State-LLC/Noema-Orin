@@ -4,7 +4,7 @@
 
 ## Issue tracker
 
-GitHub Issues on `Zero-State-LLC/Noema-Orin` (private). Read the full issue and comments before editing. Use one independently demoable vertical slice per issue and list `Blocked by` issue links. No issue marked `ready-for-agent` is authorization to run against production.
+GitHub Issues on `Zero-State-LLC/Noema-Orin` (public). Read the full issue and comments before editing. Use one independently demoable vertical slice per issue and list `Blocked by` issue links. No issue marked `ready-for-agent` is authorization to run against production.
 
 ## Triage labels
 

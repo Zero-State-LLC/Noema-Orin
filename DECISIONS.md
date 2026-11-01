@@ -6,7 +6,7 @@ Operator selected **both paths, explicitly separate, with no live-world cutover*
 
 ## D-002: Private initial repository (2026-10-31)
 
-Operator selected private visibility. This is a privacy posture for development, not permission to store credentials or private prompts in Git.
+Operator selected private visibility for repository bootstrap. On 2026-10-31 the operator requested public visibility to run CI and finish the synthetic foundation; the repository was changed to public and verified via the GitHub API. Public visibility is not permission to store credentials or private prompts in Git. Historical issues, PRs, commits and Actions logs are publicly accessible; avoid publishing secrets in any of them.
 
 ## D-003: Reuse the official client (2026-10-31)
 
@@ -14,7 +14,7 @@ Accepted RFC-0116 identifies `scrimshawlife-ctrl/noema-client` as the official f
 
 ## D-004: Synthetic foundation outcome boundary (operator-confirmed)
 
-For issues #1–#3 only, validate profile before fixture, adapter, or client; reject blocked/unknown/missing profiles before reading any fixture. A bad hosted fixture refuses before adapter/client, and an invalid proposal refuses before client. Each invocation emits one allowlisted JSON record on stdout with no raw input or exception on either stream. `REFUSED` means no submission; `FAILED_SUBMISSION` means exactly one failed hosted handoff, nonzero exit, no retry or cross-profile fallback; `ATTEMPTED` means one successful fake handoff but never world acceptance or settlement. See `SPEC-FOUNDATION.md`, `GLOSSARY.md`, and `docs/adr/0001-synthetic-runner-output-boundary.md`. This does not authorize live execution, physical-device claims, or offline Spark.
+For issues #1–#3 only, validate profile before fixture, adapter, or client; reject blocked/unknown/missing profiles before reading any fixture. At the injectable runner boundary, only plain `str` profiles and plain `dict` fixtures/observations/proposals with plain `str` keys are accepted: subclass overrides must not fabricate a valid marker or action. A bad hosted fixture refuses before adapter/client, and an invalid proposal refuses before client. Each invocation emits one allowlisted JSON record on stdout with no raw input or exception on either stream. `REFUSED` means no submission; `FAILED_SUBMISSION` means exactly one failed hosted handoff, nonzero exit, no retry or cross-profile fallback; `ATTEMPTED` means one successful fake handoff but never world acceptance or settlement. See `SPEC-FOUNDATION.md`, `GLOSSARY.md`, and `docs/adr/0001-synthetic-runner-output-boundary.md`. This does not authorize live execution, physical-device claims, or offline Spark.
 
 ## G-001: Offline authority defect, BLOCKED
 

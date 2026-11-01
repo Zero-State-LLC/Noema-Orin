@@ -1,0 +1,40 @@
+name: Synthetic foundation CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-foundation:
+    name: Synthetic foundation (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Verify synthetic runner and boundary tests
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
+      - name: Verify CLI dry-run
+        env:
+          PYTHONPATH: src
+        run: python -m noema_orin --profile hosted --fixture fixtures/hosted-look.json --dry-run
+      - name: Verify patch hygiene
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            git diff --check "$(git merge-base origin/main HEAD)" HEAD
+          else
+            git diff --check HEAD^ HEAD
+          fi

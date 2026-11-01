@@ -1,6 +1,6 @@
 # Noema Orin
 
-Private, spec-first workspace for an Orin Nano-hosted **Controller** fleet for NOEMA. No agent processes, credentials, models, or world state are deployed by this repository yet.
+Public, spec-first workspace for an Orin Nano-hosted **Controller** fleet for NOEMA. The initial synthetic, no-network fake-client runner is implemented for local dry-run verification. No agent processes, credentials, models, or world state are deployed by this repository.
 
 ## Two separate paths
 
@@ -28,4 +28,4 @@ The `mattpocock/skills` workflow is **grill-with-docs → to-spec → to-tickets
 
 ## Validation
 
-From the repository root run `python3 -m unittest discover -s tests -v` and `git diff --check`. These check document integrity only, not physical readiness or hosted conformance. Do not publish credentials or private model prompts in issues, commits, logs, or test fixtures.
+From the repository root run `PYTHONPATH=src python3 -m unittest discover -s tests -v`, then `PYTHONPATH=src python3 -m noema_orin --profile hosted --fixture fixtures/hosted-look.json --dry-run`. The CLI emits one `ATTEMPTED` fake-handoff receipt; `--profile offline-spark` refuses before loading a fixture. Run `git diff --check` for patch hygiene. These checks establish local synthetic behavior only, not physical readiness or hosted conformance. Do not publish credentials or private model prompts in issues, commits, logs, or test fixtures.
