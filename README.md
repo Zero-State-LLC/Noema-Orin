@@ -11,8 +11,8 @@ The paths must have distinct endpoints, credentials, world identities, configura
 
 ## Start here
 
-- [SPEC.md](SPEC.md): user stories, decisions, testing, non-goals, provenance.
-- [execplan/01-foundation.md](execplan/01-foundation.md): dependency-ordered, gated implementation milestones. Nothing in this document grants deployment authority.
+- [SPEC-FOUNDATION.md](SPEC-FOUNDATION.md): **implementation contract for the first Pocock `implement-spec` run**, limited to [#1–#3](https://github.com/Zero-State-LLC/Noema-Orin/issues/7). [SPEC.md](SPEC.md) is the broader roadmap and does not authorize #4–#6.
+- [execplan/01-foundation.md](execplan/01-foundation.md): dependency-ordered implementation milestones and gates. Nothing here grants deployment authority.
 - [AGENTS.md](AGENTS.md): operating boundaries; [docs/agents/](docs/agents/domain.md): Pocock engineering-skills configuration.
 - [DECISIONS.md](DECISIONS.md): unresolved gates and decisions, not silent assumptions.
 

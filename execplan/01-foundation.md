@@ -11,7 +11,7 @@ Move the *Controller host*, not the world writer. A Controller running on Orin c
 - [x] (2026-10-31) Pin governing Noema-Specs and identify spec 014's open defect.
 - [x] (2026-10-31) Confirm two separate paths, no cutover, and private repo with operator.
 - [x] (2026-10-31) Operator approved the proposed runner test seam and T1–T6 dependency graph for publication.
-- [ ] Publish T1–T6 tickets in the private tracker with exact blocking edges; only T1–T3 are ready-for-agent.
+- [x] (2026-10-31) Published T1–T6 as [#1](https://github.com/Zero-State-LLC/Noema-Orin/issues/1) through [#6](https://github.com/Zero-State-LLC/Noema-Orin/issues/6) with exact blocking edges; only T1–T3 have the `ready-for-agent` label.
 - [ ] T1: deliver deterministic hosted dry-run with a scripted proposal and fake client.
 - [ ] T2: deliver isolation/refusal for offline Spark, invalid profiles, and cross-target fallback.
 - [ ] T3: deliver secret-safe, labeled dry-run receipts with source/client pins.
@@ -32,7 +32,7 @@ Move the *Controller host*, not the world writer. A Controller running on Orin c
 
 ## Outcomes & Retrospective
 
-Specification and ticket graph drafted. No runner, real-client integration, hardware measurement, or live attach has been implemented. Update this section with exact commands/results at each milestone.
+Specification and approved ticket graph published as private GitHub issues #1–#6. The first `implement-spec` integration branch must implement and review **only #1–#3**; #4–#6 remain `ready-for-human` and outside its scope. No runner, real-client integration, hardware measurement, or live attach has been implemented. Update this section with exact commands/results at each milestone.
 
 ## Context and Orientation
 
@@ -81,3 +81,5 @@ Expose `run(profile: str, fixture: Mapping[str, object], client: CommandClient, 
 ## Change note
 
 2026-10-31: Initial self-contained implementation plan. Local dry-run and offline refusal are executable first; hardware, live attach and Spark execution are explicit gates, not implicit phases of a single deployment.
+
+2026-10-31: Operator approved and published #1–#6. The first Pocock `implement-spec` run now consumes `SPEC-FOUNDATION.md` and exactly #1–#3; #4–#6 are `ready-for-human` follow-ons. This revision prevents the umbrella roadmap from being mistaken for a single authorized integration branch.
