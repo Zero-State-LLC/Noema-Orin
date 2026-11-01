@@ -63,6 +63,20 @@ class ProfileIsolationTests(unittest.TestCase):
         record = single_record(self, cli, "REFUSED")
         self.assertEqual(record["result"], "BLOCKED_SPEC_DEFECT")
 
+    def test_hostile_profile_refuses_before_any_collaborator(self):
+        class HostileProfile(str):
+            def __eq__(self, other):
+                raise RuntimeError("SENTINEL_PROFILE_EXCEPTION")
+
+            def __hash__(self):
+                raise RuntimeError("SENTINEL_PROFILE_EXCEPTION")
+
+        client, adapter = FakeClient(), ProbeAdapter()
+        record = run(profile=HostileProfile("hosted"), fixture={"observation": {"synthetic": True}}, client=client, adapter=adapter)
+        self.assertEqual((record["status"], record["result"]), ("REFUSED", "INVALID_PROFILE"))
+        self.assertEqual((client.attempts, adapter.calls), ([], 0))
+        self.assertNotIn("SENTINEL_", json.dumps(record))
+
     def test_missing_and_unknown_profiles_never_echo_raw_input(self):
         for args in (("--fixture", "SECRET_PATH_DO_NOT_ECHO", "--dry-run"),
                      ("--profile", "UNKNOWN_PROFILE_SECRET", "--fixture", "SECRET_PATH_DO_NOT_ECHO", "--dry-run")):
@@ -103,6 +117,17 @@ class ProfileIsolationTests(unittest.TestCase):
 
         client, adapter = FakeClient(), ProbeAdapter()
         record = run(profile="hosted", fixture=HostileFixture(), client=client, adapter=adapter)
+        self.assertEqual((record["status"], record["result"]), ("REFUSED", "INVALID_FIXTURE"))
+        self.assertEqual((client.attempts, adapter.calls), ([], 0))
+        self.assertNotIn("SENTINEL_", json.dumps(record))
+
+    def test_hostile_observation_refuses_before_adapter_and_client(self):
+        class HostileObservation(dict):
+            def get(self, key, default=None):
+                raise RuntimeError("SENTINEL_OBSERVATION_EXCEPTION")
+
+        client, adapter = FakeClient(), ProbeAdapter()
+        record = run(profile="hosted", fixture={"observation": HostileObservation()}, client=client, adapter=adapter)
         self.assertEqual((record["status"], record["result"]), ("REFUSED", "INVALID_FIXTURE"))
         self.assertEqual((client.attempts, adapter.calls), ([], 0))
         self.assertNotIn("SENTINEL_", json.dumps(record))

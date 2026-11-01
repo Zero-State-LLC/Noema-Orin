@@ -3,6 +3,8 @@
 
 def select(profile: object) -> str | None:
     """Return a safe refusal code, or None for the only runnable profile."""
+    if type(profile) is not str:
+        return "INVALID_PROFILE"
     if profile == "hosted":
         return None
     if profile == "offline-spark":
