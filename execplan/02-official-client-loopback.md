@@ -16,7 +16,8 @@ A user can verify that a NOEMA Controller's scripted LOOK goes through the real,
 - [x] (2026-10-31) Re-ran 13 optional tests on Python 3.11–3.13, 26 synthetic tests on Python 3.10–3.13, and 13 optional tests against installed wheels outside the checkout on Python 3.11. Installed CLI hosted and blocked offline receipts retained their exit codes and safe fields.
 - [x] (2026-10-31) PR #14 head `6bb2f8d0b7bae4b7d7e3b954d2ef73d451574aa6` passed all ten CI jobs. Independent Spec review passed; Standards blocked on accepting a caller-supplied symlinked config directory and insufficient installed-client import-origin assertion. Replaced caller-supplied config with an owned, private temporary directory; made both import-origin assertions run inside the optional test process and proved that a shadowed client makes the gate fail. The earlier reviews are historical, not clearance for the repaired head.
 - [x] (2026-10-31) Re-ran 26 synthetic tests on Python 3.10–3.13, 14 optional tests on Python 3.11–3.13, and 14 installed-package tests on Python 3.11 outside the checkout. A poisoned client-source `PYTHONPATH` fails the installed-origin guard before any optional test runs. Committed the repair as `956b4e173f26b3298c8baf4c222e9b877fc47c5a`.
-- [ ] Push the repair, confirm new-head hosted CI and both independent reviews, then merge #13's PR with exact-head guard if authorized.
+- [x] (2026-10-31) Pushed final PR #14 head `3d46b6516f62c90dd2b3fcb13b11b3493a1c0f74`. All ten CI jobs passed in run `41271611236` (six synthetic, four installed official-client loopback, including Ubuntu arm64). Fresh independent Standards and Spec reviews both passed on that exact head.
+- [x] (2026-10-31) Merged PR #14 with the exact-head guard into `b6ad65a5f01bcecd1b37ba50f4573bd028a3aa6a`; issue #13 closed. Post-merge main run `41271783602` passed all ten jobs. Local main synthetic suites passed 26 tests on each Python 3.10–3.13. Live attach #4, physical Orin #5, and Spark writer authority #6 remain open.
 
 ## Surprises & Discoveries
 
@@ -28,11 +29,11 @@ A user can verify that a NOEMA Controller's scripted LOOK goes through the real,
 
 - Decision: Keep the optional local proof separate from the CLI and synthetic runner's package floor. Rationale: `noema-client` requires Python >=3.11 while the Python >=3.10 foundation remains useful and dependency-free. Date/Author: 2026-10-31/Bob.
 - Decision: Use the official client's pinned fake HTTP server, not a copied protocol server. Rationale: exercises the real public client and reuse of its own fixture while pinning provenance. Date/Author: 2026-10-31/Bob.
-- Decision: Admit only explicit `http://127.0.0.1:<ephemeral-port>` with empty config and no NOEMA selectors for the optional adapter. Rationale: prevent a local CI proof from becoming a live endpoint. Date/Author: 2026-10-31/Bob.
+- Decision: Admit only explicit `http://127.0.0.1:<ephemeral-port>` with an adapter-owned private temporary config directory and no inherited NOEMA selectors. Rationale: prevent a local CI proof from becoming a live endpoint or writing fixture credentials to a caller-controlled path. Date/Author: 2026-10-31/Bob.
 
 ## Outcomes & Retrospective
 
-The local implementation has passed the first optional loopback tests on Python 3.11, but the branch and hosted CI are not yet reviewed. After finishing, record exact test counts, a pinned GitHub Actions run, and the remaining #4/#5/#6 blockers here. Do not replace this with a hardware or live-world assertion.
+The T4a credential-free loopback slice is complete in merged PR #14 (`b6ad65a5f01bcecd1b37ba50f4573bd028a3aa6a`). Its reviewed head `3d46b6516f62c90dd2b3fcb13b11b3493a1c0f74` passed both independent Standards and Spec reviews and all ten hosted CI jobs in run `41271611236`. Post-merge main run `41271783602` passed all ten jobs; local main synthetic tests passed 26/26 on each Python 3.10–3.13. The optional installed-package suite passed 14/14 locally on Python 3.11 outside the checkout and in the hosted Python 3.11 job. Issue #13 closed on merge; issues #4/#5/#6 remain open for separately authorized live attach, physical Orin measurements, and canonical Spark writer authority. None of these results proves physical-device operation or live-world acceptance.
 
 ## Context and Orientation
 
