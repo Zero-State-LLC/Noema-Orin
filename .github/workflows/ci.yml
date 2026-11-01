@@ -32,4 +32,9 @@ jobs:
           PYTHONPATH: src
         run: python -m noema_orin --profile hosted --fixture fixtures/hosted-look.json --dry-run
       - name: Verify patch hygiene
-        run: git diff --check "$(git merge-base origin/main HEAD)" HEAD
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            git diff --check "$(git merge-base origin/main HEAD)" HEAD
+          else
+            git diff --check HEAD^ HEAD
+          fi
