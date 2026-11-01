@@ -12,9 +12,9 @@ Move the *Controller host*, not the world writer. A Controller running on Orin c
 - [x] (2026-10-31) Confirm two separate paths, no cutover, and private repo with operator.
 - [x] (2026-10-31) Operator approved the proposed runner test seam and T1–T6 dependency graph for publication.
 - [x] (2026-10-31) Published T1–T6 as [#1](https://github.com/Zero-State-LLC/Noema-Orin/issues/1) through [#6](https://github.com/Zero-State-LLC/Noema-Orin/issues/6) with exact blocking edges; only T1–T3 have the `ready-for-agent` label.
-- [ ] T1: deliver deterministic hosted dry-run with a scripted proposal and fake client.
-- [ ] T2: deliver isolation/refusal for offline Spark, invalid profiles, and cross-target fallback.
-- [ ] T3: deliver secret-safe, labeled dry-run receipts with source/client pins.
+- [x] (2026-10-31) T1: deterministic hosted dry-run with a scripted proposal and fake client (integration branch).
+- [x] (2026-10-31) T2: isolation/refusal for offline Spark, invalid profiles, and cross-target fallback (integration branch).
+- [x] (2026-10-31) T3: secret-safe, labeled dry-run receipts with source/client pins (integration branch).
 - [ ] T4: integrate the existing official client behind the tested boundary in an isolated test environment; live attach requires a separate explicit authorization.
 - [ ] T5: collect physical Orin feasibility receipts before selecting a model or changing the operational posture.
 - [ ] T6: resolve the offline Spark writer defect *in Noema-Specs* before enabling that separate research path.
@@ -22,6 +22,7 @@ Move the *Controller host*, not the world writer. A Controller running on Orin c
 ## Surprises & Discoveries
 
 - Spec 014 calls Spark the sole writer, while `Noema-Specs/CONTEXT.md` gives hosted live serialization to Cloudflare Durable Objects and durable canonical history to Postgres. The source flags this as a SPEC DEFECT. This repo cannot resolve it by reinterpretation.
+- The first implementation's independent review subagents could not start because their provider reported a billing limit; local standards/spec review found and fixed an empty-observation validation gap. This is not independent review evidence.
 - The official Python Controller already has its own repository (`scrimshawlife-ctrl/noema-client`). Orin integration must not copy its internals or create a competing package.
 
 ## Decision Log
@@ -32,7 +33,7 @@ Move the *Controller host*, not the world writer. A Controller running on Orin c
 
 ## Outcomes & Retrospective
 
-Specification and approved ticket graph published as private GitHub issues #1–#6. The first `implement-spec` integration branch must implement and review **only #1–#3**; #4–#6 remain `ready-for-human` and outside its scope. No runner, real-client integration, hardware measurement, or live attach has been implemented. Update this section with exact commands/results at each milestone.
+The approved T1–T3 synthetic implementation is on `integrate/foundation-t1-t3`, awaiting PR merge; #4–#6 remain gated. The test-first slices and local two-axis review found an unsuitable empty observation that incorrectly reached the fake client; the review worktree added a failing regression, rejected it before adapter/client, and added CLI failed-handoff coverage. On the integration branch after that fix, `PYTHONPATH=src python3 -m unittest discover -s tests -v` passed **16 tests**, and `git diff --check` passed. The hosted CLI printed one `ATTEMPTED`/`hosted`/`fake` allowlisted JSON receipt; the blocked offline-Spark CLI printed one `REFUSED`/`BLOCKED_SPEC_DEFECT` record and exited 1. The independent Pocock review subagents could not start because their provider reported a billing limit; the two review axes were instead checked locally against `9e86d471c280fe5671db493845ace79de74bc68d`. These are local synthetic observations only, not hosted-world, independent-review, or physical-device evidence. No official-client integration, live attach, or Orin measurement has occurred.
 
 ## Context and Orientation
 
