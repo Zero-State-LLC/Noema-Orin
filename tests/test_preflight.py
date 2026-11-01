@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 from typing import cast
@@ -322,9 +323,31 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual((result.returncode, result.stderr), (0, ""))
         self.assertEqual(len(result.stdout.splitlines()), 1)
         record = json.loads(result.stdout)
+        self.assertEqual(set(record), {
+            "source_sha", "claim_label", "evidence_scope", "machine", "os_id",
+            "os_version", "l4t_release", "device_family", "python_version",
+            "client_version", "ram_gib_bucket", "storage_free_gib_bucket",
+            "jetpack_version", "device_metrics", "model_load", "tokens_per_second",
+            "power", "command_latency",
+        })
+        self.assertEqual(record["source_sha"], "619d0674518761aa08462d3f5d5966a917259aa1")
+        self.assertEqual(record["claim_label"], "SPECULATIVE")
         self.assertEqual(record["evidence_scope"], "LOCAL_PREFLIGHT_ONLY")
-        self.assertEqual(record["device_metrics"], "NOT_COMPUTABLE")
-        self.assertEqual(record["source_sha"], SOURCE_SHA)
+        self.assertIn(record["machine"], {"aarch64", "arm64", "x86_64", "NOT_COMPUTABLE"})
+        self.assertIn(record["os_id"], {"ubuntu", "NOT_COMPUTABLE"})
+        self.assertIn(record["os_version"], {"22.04", "24.04", "NOT_COMPUTABLE"})
+        self.assertIn(record["device_family"], {"JETSON_ORIN_NANO_CANDIDATE", "NOT_COMPUTABLE"})
+        for field, pattern in (("l4t_release", r"R[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,2}"),
+                               ("python_version", r"[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,3}"),
+                               ("client_version", r"[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,3}")):
+            self.assertTrue(record[field] == "NOT_COMPUTABLE" or re.fullmatch(
+                pattern, record[field]), field)
+        buckets = {"NOT_COMPUTABLE", "0-4", "4-8", "8-16", "16-32", "32-64", "64-128", "128+"}
+        for field in ("ram_gib_bucket", "storage_free_gib_bucket"):
+            self.assertIn(record[field], buckets)
+        for field in ("jetpack_version", "device_metrics", "model_load", "tokens_per_second",
+                      "power", "command_latency"):
+            self.assertEqual(record[field], "NOT_COMPUTABLE")
 
 
 if __name__ == "__main__":
