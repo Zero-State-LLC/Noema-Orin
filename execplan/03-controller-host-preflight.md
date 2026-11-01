@@ -18,8 +18,8 @@ From the returned Orin host, an operator can run `python -m noema_orin.preflight
 - [x] (2026-10-31) Third PR #18 head `0edd17baea5fd30470d046baa7792804dc85dae5` passed ten hosted jobs but both independent reviews BLOCKED it: Unicode decimal digits escaped the ASCII receipt grammar, and a malformed duplicate `MemTotal` was ignored. Public-entry regressions reproduced both failures before replacing `\d` with `[0-9]` and counting raw key occurrences. An expanded parser sweep reproduced malformed OS-key duplicates too; the same fix now refuses them. Added a hostile-observation vocabulary regression. The third-head CI remains historical.
 - [x] (2026-10-31) Ran 45 core tests per interpreter on Python 3.10–3.13 and installed-package preflight outside the checkout on macOS arm64 for the repaired tree. These local results do not replace hosted CI or device proof.
 - [x] (2026-10-31) Fourth head `0795e413c839b846aedd3b713cb787c24a363db3` passed ten hosted jobs (run `41275073961`), including installed-package cells on Ubuntu x86_64 and arm64; both independent exact-head reviews BLOCKED it. A CR, NUL, Unicode separator or BOM before a second OS/RAM key hid the malformed duplicate from LF-anchored key counting. Reproduced at `run_preflight` with RED tests, then rejected control-bearing host text at the file-parser boundary (printable ASCII plus LF/TAB only; exact model-file NUL remains separate). The repaired local suite passed 47 tests on each Python 3.10–3.13, including an ASCII/control-code sweep. Isolated installed-package CLI passed outside checkout on macOS arm64 across those interpreters. Fourth-head CI is historical, not clearance for the repair.
-- [ ] Obtain hosted x86/arm64 installed-package CI and fresh independent exact-head Standards and Spec reviews for the new head.
-- [ ] Merge and record post-merge evidence without closing #4–#6.
+- [x] (2026-10-31) Final PR #18 head `4388b1825ee0d3920eb4ec5c40e7972ed925c7f5` passed all ten hosted jobs in run `41275393841`, including installed-package preflight on Ubuntu x86_64 and arm64. Two independent exact-head delegated reviews returned PASS with no blocker; these were not formal GitHub approvals. Nonblocking follow-ups: independently pin `source_sha` in the installed CI assertion and assert the complete record in the subprocess CLI test.
+- [x] (2026-10-31) Merged PR #18 with `--merge --delete-branch --match-head-commit` at merge SHA `d2abd94c21d5ecd6baaef85aca3e6867420516a2`. Verified remote `main` and clean fast-forwarded local `main`; issue #17 closed, while #4–#6 and spec #16 remained open at verification. Post-merge run `41275586379` passed all ten jobs on that exact merge SHA. This is package/synthetic evidence, not physical Orin qualification.
 
 ## Surprises & Discoveries
 
@@ -34,7 +34,7 @@ From the returned Orin host, an operator can run `python -m noema_orin.preflight
 
 ## Outcomes & Retrospective
 
-Pending tests and device evidence. A passing preflight is not a passing physical-device qualification.
+T5a local preflight merged via PR #18 at reviewed head `4388b1825ee0d3920eb4ec5c40e7972ed925c7f5`; merge SHA `d2abd94c21d5ecd6baaef85aca3e6867420516a2`. Exact-head CI run `41275393841` and post-merge main run `41275586379` each passed ten jobs. Two independent delegated exact-head reviews returned PASS, not formal GitHub approvals. Issue #17 closed; spec #16 remains open for separate disposition. Live attach #4, physical qualification #5, and offline Spark writer authority #6 remain open. No returned board was measured; hosted arm64 and local macOS checks establish packaging and synthetic behavior only.
 
 ## Context and Orientation
 
