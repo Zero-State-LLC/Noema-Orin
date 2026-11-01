@@ -10,7 +10,7 @@ Operator selected private visibility for repository bootstrap. On 2026-10-31 the
 
 ## D-003: Reuse the official client (2026-10-31)
 
-Accepted RFC-0116 identifies `scrimshawlife-ctrl/noema-client` as the official first-party Controller package. This repository integrates that package instead of forking it or introducing another Player class. A scripted adapter is sufficient for a first executable proof; a specific NVIDIA model is not a prerequisite.
+Accepted RFC-0116 identifies `scrimshawlife-ctrl/noema-client` as the official first-party Controller package. This repository integrates that package instead of forking it or introducing another Player class. A scripted adapter is sufficient for a first executable proof; a specific NVIDIA model is not a prerequisite. Read-only API inspection at `noema-client` v0.1.23 (`16ec5d1f472295055439975f88567a43fe6ee3b0`) found `NoemaClient.act(ActionProposal)` and an injectable HTTP transport, not the synthetic `CommandClient.submit(Mapping)` interface. The foundation remains stdlib-only and supports Python >=3.10; the inspected official client requires Python >=3.11. Issue #4 must own the tested translation and interpreter decision. Fake/local integration is feasible without credentials, but real isolated attach remains separately authorized and cannot be inferred from that proof.
 
 ## D-004: Synthetic foundation outcome boundary (operator-confirmed)
 
