@@ -8,10 +8,13 @@ from __future__ import annotations
 import json
 import os
 import socket
-import tempfile
+import sysconfig
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+import noema_client
+import noema_orin
 
 from fake_server import FakeNoema, serve_fake
 from noema_client.policy import ClientPolicy
@@ -25,13 +28,27 @@ SELECTORS = (
 
 
 class LoopbackProof(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if os.environ.get("NOEMA_ORIN_ASSERT_INSTALLED") == "1":
+            roots = []
+            for name in ("purelib", "platlib"):
+                root = sysconfig.get_path(name)
+                if root is not None:
+                    roots.append(Path(root).resolve())
+            for module in (noema_client, noema_orin):
+                origin = Path(module.__file__).resolve()
+                if not any(origin.is_relative_to(root) for root in roots):
+                    raise AssertionError(f"{module.__name__} did not import from installed site-packages")
+            if noema_client.__version__ != "0.1.23":
+                raise AssertionError("unexpected official client version")
+
     def setUp(self):
         # Both server and SDK are real, but the server exists only on loopback.
         self.env = patch.dict(os.environ, {key: "" for key in SELECTORS})
         self.env.start()
         for key in SELECTORS:
             os.environ.pop(key, None)
-        self.temp = tempfile.TemporaryDirectory()
         self.fake = FakeNoema()
         self.fake.auto_approve = True
         self.origin, self.httpd, self.thread = serve_fake(self.fake)
@@ -54,13 +71,10 @@ class LoopbackProof(unittest.TestCase):
         self.httpd.shutdown()
         self.httpd.server_close()
         self.thread.join(timeout=5)
-        self.temp.cleanup()
         self.env.stop()
 
     def make_client(self, **kwargs):
-        self.client = OfficialLoopbackClient(
-            server=self.origin, config_home=Path(self.temp.name), **kwargs,
-        )
+        self.client = OfficialLoopbackClient(server=self.origin, **kwargs)
         return self.client
 
     def assert_safe(self, record, status, result, *, handoff=False):
@@ -161,13 +175,13 @@ class LoopbackProof(unittest.TestCase):
         for server in ("https://noema.guru", "http://localhost:80", "http://127.0.0.1:80/path",
                        "http://127.0.0.1:80@elsewhere.example", "http://127.0.0.2:80"):
             with self.subTest(server=server), self.assertRaises(ValueError):
-                OfficialLoopbackClient(server=server, config_home=Path(self.temp.name))
+                OfficialLoopbackClient(server=server)
         self.assertEqual(self.fake.device_starts, 0)
 
     def test_inherited_selector_refuses_before_sdk_construction(self):
         with patch.dict(os.environ, {"NOEMA_TOKEN": "fixture-inherited-credential"}):
             with self.assertRaises(ValueError):
-                OfficialLoopbackClient(server=self.origin, config_home=Path(self.temp.name))
+                OfficialLoopbackClient(server=self.origin)
         self.assertEqual(self.fake.device_starts, 0)
 
     def test_discovered_external_command_uri_refuses_before_command(self):
@@ -200,9 +214,20 @@ class LoopbackProof(unittest.TestCase):
         self.assertEqual(client.submissions, 0)
         self.assertEqual(self.fake.device_starts, 0)
 
-    def test_reused_config_directory_is_rejected(self):
-        config = Path(self.temp.name)
-        (config / "credential.json").write_text('not-a-real-credential', encoding="utf-8")
-        with self.assertRaises(ValueError):
-            OfficialLoopbackClient(server=self.origin, config_home=config)
+    def test_client_owns_and_removes_fixture_credential_directory(self):
+        client = self.make_client()
+        config = Path(client._client.config_home)
+        self.assertTrue(config.is_dir())
+        self.assertFalse(config.is_symlink())
+        self.assertEqual(config.stat().st_mode & 0o077, 0)
+        client.prepare()
+        self.assertTrue((config / "credential.json").is_file())
+        client.close()
+        self.assertFalse(config.exists())
+        self.client = None
+
+    def test_caller_cannot_supply_config_path(self):
+        # No caller-controlled path, whether a symlink or an empty persistent dir.
+        with self.assertRaises(TypeError):
+            OfficialLoopbackClient(**{"server": self.origin, "config_home": Path.home()})
         self.assertEqual(self.fake.device_starts, 0)

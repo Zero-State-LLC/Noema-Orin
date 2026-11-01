@@ -7,7 +7,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
-from pathlib import Path
+import tempfile
 from typing import Mapping
 from urllib.parse import urlsplit
 
@@ -52,7 +52,7 @@ def _loopback_http(origin: str):
 class OfficialLoopbackClient:
     """Translate the synthetic CommandClient seam into a real client on loopback."""
 
-    def __init__(self, *, server: str, config_home: Path, policy: object = None) -> None:
+    def __init__(self, *, server: str, policy: object = None) -> None:
         parsed = urlsplit(server)
         if (parsed.scheme != "http" or parsed.hostname != "127.0.0.1"
                 or not parsed.port or parsed.username or parsed.password
@@ -61,15 +61,19 @@ class OfficialLoopbackClient:
             raise ValueError("loopback HTTP origin with explicit port required")
         if any(os.environ.get(key) for key in _SELECTORS):
             raise ValueError("inherited NOEMA configuration is forbidden in loopback proof")
-        if (not isinstance(config_home, Path) or not config_home.is_absolute()
-                or not config_home.is_dir() or any(config_home.iterdir())):
-            raise ValueError("empty, absolute temporary config_home required")
         from noema_client import NoemaClient, __version__
         if __version__ != "0.1.23":
             raise ValueError("unexpected official client version")
         self.server = server
-        self._client = NoemaClient(server=server, config_home=config_home,
-                                   transport="http", http=_loopback_http(server), policy=policy)
+        # Own the directory: accepting even an empty caller path could redirect
+        # fixture credentials through a symlink or into a persistent home.
+        self._config = tempfile.TemporaryDirectory(prefix="noema-orin-loopback-")
+        try:
+            self._client = NoemaClient(server=server, config_home=self._config.name,
+                                       transport="http", http=_loopback_http(server), policy=policy)
+        except BaseException:
+            self._config.cleanup()
+            raise
         self.submissions = 0
         self._prepared = False
 
@@ -77,6 +81,9 @@ class OfficialLoopbackClient:
         discovery = self._client.discover()
         # The SDK uses the discovered command path after enrollment; refuse
         # a substituted origin or path before a fixture token is issued.
+        # FakeNoema publishes http://fixture/v1/command as fixture metadata;
+        # the SDK extracts only its path. The injected HTTP transport still
+        # enforces the actual destination for every request.
         if discovery.command_uri not in {f"{self.server}/v1/command", "http://fixture/v1/command"}:
             raise ValueError("unexpected loopback command URI")
         # connect(auto_enter=True) already observes after ENTER_WORLD.
@@ -101,4 +108,7 @@ class OfficialLoopbackClient:
         return result
 
     def close(self) -> None:
-        self._client.close()
+        try:
+            self._client.close()
+        finally:
+            self._config.cleanup()

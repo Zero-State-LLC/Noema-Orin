@@ -122,8 +122,7 @@ jobs:
           XDG_CONFIG_HOME: ''
         run: |
           cd "$RUNNER_TEMP"
-          env -u PYTHONPATH -u PYTHONHOME python -c 'import noema_client, noema_orin; assert not noema_orin.__file__.startswith(__import__("os").environ["GITHUB_WORKSPACE"]); print(noema_client.__version__, noema_orin.__file__)'
-          env -u PYTHONHOME PYTHONPATH="$GITHUB_WORKSPACE/client-pin/tests" python -m unittest discover -s "$GITHUB_WORKSPACE/tests_optional" -p 'test_official_client.py' -v
+          env -u PYTHONHOME NOEMA_ORIN_ASSERT_INSTALLED=1 PYTHONPATH="$GITHUB_WORKSPACE/client-pin/tests" python -m unittest discover -s "$GITHUB_WORKSPACE/tests_optional" -p 'test_official_client.py' -v
       - name: Verify patch hygiene
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then

@@ -14,8 +14,9 @@ A user can verify that a NOEMA Controller's scripted LOOK goes through the real,
 - [x] (2026-10-31) Completed fail-closed URL/config/version/rejection coverage. A failing-first discovered external command URI regression found that the client used the published path after enrollment; the adapter now refuses it before a fixture token is issued.
 - [x] (2026-10-31) Ran 26 synthetic tests on each of Python 3.10–3.13 and 12 optional tests on each of Python 3.11–3.13 before the last HTTP-guard regression. Installed both wheels into a fresh Python 3.11 venv, imported them from site-packages and ran 13 optional tests outside the checkout after the final fix. The installed synthetic CLI yielded hosted exit 0/ATTEMPTED and offline-spark exit 1/REFUSED with empty stderr.
 - [x] (2026-10-31) Re-ran 13 optional tests on Python 3.11–3.13, 26 synthetic tests on Python 3.10–3.13, and 13 optional tests against installed wheels outside the checkout on Python 3.11. Installed CLI hosted and blocked offline receipts retained their exit codes and safe fields.
-- [ ] Confirm hosted CI on the exact branch head.
-- [ ] Obtain independent Standards and Spec exact-head reviews, then merge #13's PR with exact-head guard if authorized.
+- [x] (2026-10-31) PR #14 head `6bb2f8d0b7bae4b7d7e3b954d2ef73d451574aa6` passed all ten CI jobs. Independent Spec review passed; Standards blocked on accepting a caller-supplied symlinked config directory and insufficient installed-client import-origin assertion. Replaced caller-supplied config with an owned, private temporary directory; made both import-origin assertions run inside the optional test process and proved that a shadowed client makes the gate fail. These repairs are local pending re-verification and a new head.
+- [x] (2026-10-31) Re-ran 26 synthetic tests on Python 3.10–3.13, 14 optional tests on Python 3.11–3.13, and 14 installed-package tests on Python 3.11 outside the checkout. A poisoned client-source `PYTHONPATH` fails the installed-origin guard before any optional test runs.
+- [ ] Commit and push the repair, confirm new-head hosted CI and both independent reviews, then merge #13's PR with exact-head guard if authorized.
 
 ## Surprises & Discoveries
 
@@ -75,7 +76,7 @@ Observed initial RED: `ModuleNotFoundError: No module named 'noema_orin.official
 
 ## Interfaces and Dependencies
 
-`OfficialLoopbackClient(server: str, config_home: pathlib.Path, policy: object = None)` implements `prepare() -> None`, `submit(proposal: Mapping[str, object]) -> object`, `model_context() -> dict` and `close() -> None`. Only `submit` is used by the existing `CommandClient` interface. It is an optional local proof, not a general-purpose live client facade. The official client dependency is installed separately only for Python >=3.11 tests, not imported by the synthetic package's `__init__` or CLI. The fake HTTP fixture is loaded from the client source checkout's tests directory, never copied into the Orin wheel.
+`OfficialLoopbackClient(server: str, policy: object = None)` creates and owns a private temporary config directory, and implements `prepare() -> None`, `submit(proposal: Mapping[str, object]) -> object`, `model_context() -> dict` and `close() -> None`. Only `submit` is used by the existing `CommandClient` interface. It is an optional local proof, not a general-purpose live client facade. The official client dependency is installed separately only for Python >=3.11 tests, not imported by the synthetic package's `__init__` or CLI. The fake HTTP fixture is loaded from the client source checkout's tests directory, never copied into the Orin wheel.
 
 ## Change note
 
