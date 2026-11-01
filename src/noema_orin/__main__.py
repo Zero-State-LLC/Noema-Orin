@@ -4,19 +4,40 @@ import argparse
 import json
 from pathlib import Path
 
+from typing import NoReturn
+
+from .profiles import select
 from .runner import FakeClient, ScriptedAdapter, run
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="NOEMA Orin synthetic Controller dry-run")
-    parser.add_argument("--profile", required=True)
-    parser.add_argument("--fixture", type=Path, required=True)
-    parser.add_argument("--dry-run", action="store_true", required=True)
-    args = parser.parse_args()
-    fixture = json.loads(args.fixture.read_text(encoding="utf-8"))
-    outcome = run(profile=args.profile, fixture=fixture, client=FakeClient(), adapter=ScriptedAdapter())
+class SafeParser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        raise ValueError("invalid invocation")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = SafeParser(description="NOEMA Orin synthetic Controller dry-run", add_help=False)
+    parser.add_argument("--profile")
+    parser.add_argument("--fixture", type=Path)
+    parser.add_argument("--dry-run", action="store_true")
+    try:
+        args = parser.parse_args(argv)
+    except (ValueError, SystemExit):
+        outcome: dict[str, object] = {"status": "REFUSED", "result": "INVALID_INVOCATION"}
+    else:
+        refusal = select(args.profile)
+        if refusal is not None:
+            outcome = {"status": "REFUSED", "result": refusal}
+        elif not args.dry_run:
+            outcome = {"status": "REFUSED", "result": "DRY_RUN_REQUIRED", "profile": "hosted"}
+        else:
+            try:
+                fixture = json.loads(args.fixture.read_text(encoding="utf-8")) if args.fixture else None
+            except (OSError, ValueError, UnicodeError):
+                fixture = None
+            outcome = run(profile="hosted", fixture=fixture, client=FakeClient(), adapter=ScriptedAdapter())
     print(json.dumps(outcome, sort_keys=True, separators=(",", ":")))
-    return 0
+    return 0 if outcome["status"] == "ATTEMPTED" else 1
 
 
 if __name__ == "__main__":
