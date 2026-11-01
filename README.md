@@ -15,6 +15,7 @@ The paths must have distinct endpoints, credentials, world identities, configura
 - [execplan/01-foundation.md](execplan/01-foundation.md): dependency-ordered implementation milestones and gates. Nothing here grants deployment authority.
 - [AGENTS.md](AGENTS.md): operating boundaries; [docs/agents/](docs/agents/domain.md): Pocock engineering-skills configuration.
 - [DECISIONS.md](DECISIONS.md): unresolved gates and decisions, not silent assumptions.
+- [GLOSSARY.md](GLOSSARY.md): local synthetic-run terms; [output-boundary ADR](docs/adr/0001-synthetic-runner-output-boundary.md): why refusals and failed submissions are distinct. Neither supersedes the canonical NOEMA glossary or world authority.
 
 The `mattpocock/skills` workflow is **grill-with-docs → to-spec → to-tickets → implement-spec → code-review** when those skills are available. This repository's initial spec follows the actual `to-spec` sections. Pocock does not require a `skill.yaml`, NVIDIA runtime manifest, or a mandatory `/runtime/` folder; none is invented here. Runtime work belongs in separate vertical-slice issues with explicit blocking edges and behavioral tests. The operator approved the T1–T6 graph; the first `implement-spec` integration branch is **T1–T3 only** (local synthetic foundation). T4–T6 remain gated follow-ons, not `ready-for-agent`. An optional agent-facing SKILL.md should be added only after a working, verified workflow exists; it cannot define world strategy or carry credentials.
 
