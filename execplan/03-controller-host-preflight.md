@@ -13,13 +13,16 @@ From the returned Orin host, an operator can run `python -m noema_orin.preflight
 - [x] (2026-10-31) Installed the package into isolated Python 3.10–3.13 environments outside the checkout; confirmed site-packages import and one safe CLI record on the macOS host. This is package portability, not Jetson evidence.
 - [x] (2026-10-31) Added poisoned model/L4T-tail and bounded-read regressions; the full 36-test suite passed locally on Python 3.10–3.13. Added installed-package preflight checks to each existing synthetic CI cell, including Ubuntu arm64; hosted CI remains pending.
 - [x] (2026-10-31) Initial PR #18 head `70fe157bea26a6355946c4a8b05c21c43c243cb9` passed ten hosted jobs, but independent Standards and Spec reviews BLOCKED it: injected attribute access happened outside the fail-safe guard, and multiple trailing NULs were accepted as an exact device-label match. Added public-entry regression tests that reproduced both failures before repairing them. That initial CI and those reviews are historical, not clearance for the repaired head.
-- [ ] Obtain hosted x86/arm64 installed-package CI and fresh independent exact-head reviews for the repaired head.
+- [x] (2026-10-31) Second PR #18 head `12585390290c20b53141ce1520da9ba1dfc2bf96` passed ten hosted jobs and Standards review, but Spec review BLOCKED it: `MemTotal` with a newline between the key and value was accepted as valid RAM. Added a public-entry regression and observed RED on split-line and carriage-return cases before tightening the parser to horizontal whitespace. The second-head CI and Standards PASS are historical, not clearance for this repair.
+- [x] (2026-10-31) Tightened the split-line `MemTotal` parser after a public-entry RED, and independently tested L4T whitespace/control-boundary near-matches RED before replacing broad `strip()` with at-most-one trailing LF. These repairs require fresh exact-head CI and reviews.
+- [ ] Obtain hosted x86/arm64 installed-package CI and fresh independent exact-head Standards and Spec reviews for the new head.
 - [ ] Merge and record post-merge evidence without closing #4–#6.
 
 ## Surprises & Discoveries
 
 - A method *lookup* can raise before a guarded call begins; the existing raising-method test covered invocation only. Guard the lookup and invocation together.
 - `rstrip("\\x00")` removes arbitrarily many NULs; the candidate label must accept at most one file terminator.
+- In regexes over multiline host files, `\\s*` can consume newline and carriage-return separators; match only horizontal whitespace for one-line `MemTotal` observations.
 
 ## Decision Log
 

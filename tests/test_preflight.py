@@ -154,6 +154,22 @@ class PreflightTests(unittest.TestCase):
                 record = run_preflight(FakeProbe({"/proc/device-tree/model": model}))
                 self.assertEqual(record["device_family"], "NOT_COMPUTABLE")
 
+    def test_l4t_malformed_boundary_is_not_an_observation(self):
+        release = "# R39 (release), REVISION: 2.1, GCID: 0"
+        for malformed in ("\n" + release + "\n", release + "\n\n",
+                          " " + release + "\n", release + " \n", release + "\r\n"):
+            with self.subTest(malformed=malformed):
+                record = run_preflight(FakeProbe({"/etc/nv_tegra_release": malformed}))
+                self.assertEqual(record["l4t_release"], "NOT_COMPUTABLE")
+
+    def test_split_line_memtotal_is_not_a_ram_observation(self):
+        for malformed in ("MemTotal:\n7733248 kB\n",
+                          "MemTotal: 7733248\nkB\n",
+                          "MemTotal:\r7733248 kB\n"):
+            with self.subTest(malformed=malformed):
+                record = run_preflight(FakeProbe({"/proc/meminfo": malformed}))
+                self.assertEqual(record["ram_gib_bucket"], "NOT_COMPUTABLE")
+
     def test_unavailable_probes_are_not_computable(self):
         record = run_preflight(FakeProbe(failures=(
             "/etc/os-release", "/etc/nv_tegra_release", "/proc/device-tree/model",

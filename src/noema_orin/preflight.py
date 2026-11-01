@@ -85,7 +85,8 @@ def _os_release(raw):
 def _l4t(raw):
     if type(raw) is not str or len(raw) > _LIMIT:
         return _UNKNOWN
-    match = _L4T.fullmatch(raw.strip())
+    # A local text file may end with one LF; never normalize other controls.
+    match = _L4T.fullmatch(raw.removesuffix("\n"))
     if not match:
         return _UNKNOWN
     release, major, minor = match.groups()
@@ -107,7 +108,7 @@ def _bucket(value):
 def _ram(raw):
     if type(raw) is not str or len(raw) > _LIMIT:
         return _UNKNOWN
-    values = re.findall(r"^MemTotal:\s*(\d{1,12}) kB\s*$", raw, re.MULTILINE)
+    values = re.findall(r"^MemTotal:[ \t]*(\d{1,12})[ \t]+kB[ \t]*$", raw, re.MULTILINE)
     if len(values) != 1:
         return _UNKNOWN
     return _bucket(int(values[0]) * 1024)
