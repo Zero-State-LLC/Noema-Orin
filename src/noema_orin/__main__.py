@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from .profiles import select
+from .receipts import receipt
 from .runner import FakeClient, ScriptedAdapter, run
 
 
@@ -23,13 +24,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
     except (ValueError, SystemExit):
-        outcome: dict[str, object] = {"status": "REFUSED", "result": "INVALID_INVOCATION"}
+        outcome: dict[str, object] = receipt("REFUSED", "INVALID_INVOCATION")
     else:
         refusal = select(args.profile)
         if refusal is not None:
-            outcome = {"status": "REFUSED", "result": refusal}
+            outcome = receipt("REFUSED", refusal)
         elif not args.dry_run:
-            outcome = {"status": "REFUSED", "result": "DRY_RUN_REQUIRED", "profile": "hosted"}
+            outcome = receipt("REFUSED", "DRY_RUN_REQUIRED", hosted=True)
         else:
             try:
                 fixture = json.loads(args.fixture.read_text(encoding="utf-8")) if args.fixture else None
