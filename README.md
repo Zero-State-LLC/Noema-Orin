@@ -12,7 +12,8 @@ The paths must have distinct endpoints, credentials, world identities, configura
 ## Start here
 
 - [SPEC-FOUNDATION.md](SPEC-FOUNDATION.md): completed synthetic foundation contract for [#1–#3 and #7](https://github.com/Zero-State-LLC/Noema-Orin/issues/7), merged in PR #9 at `b6bb91c1d0be1ee48c009c746fb0767bb631bf79`. [SPEC.md](SPEC.md) is the broader Controller-host roadmap, not authorization for #4–#6.
-- [execplan/01-foundation.md](execplan/01-foundation.md): dependency-ordered implementation milestones and gates. Nothing here grants deployment authority.
+- [SPEC-T4A.md](SPEC-T4A.md) and [execplan/02-official-client-loopback.md](execplan/02-official-client-loopback.md): approved credential-free [T4a](https://github.com/Zero-State-LLC/Noema-Orin/issues/13) local proof against the real pinned client and its loopback fake server. It is not issue #4's authorized isolated-world attach.
+- [execplan/01-foundation.md](execplan/01-foundation.md): dependency-ordered foundation milestones and gates. Nothing here grants deployment authority.
 - [AGENTS.md](AGENTS.md): operating boundaries; [docs/agents/](docs/agents/domain.md): Pocock engineering-skills configuration.
 - [DECISIONS.md](DECISIONS.md): unresolved gates and decisions, not silent assumptions.
 - [docs/ORIN-8GB-PORT.md](docs/ORIN-8GB-PORT.md): portable install and day-one acceptance packet for the Jetson Orin Nano 8GB Developer Kit. Hermes stays on its existing host; only NOEMA Controller processes are in scope. No device run has been observed.
