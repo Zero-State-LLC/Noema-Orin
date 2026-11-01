@@ -77,6 +77,57 @@ jobs:
               record = json.loads(result.stdout)
               assert record == expected_record, (args[0], "unexpected receipt shape or value")
           PY
+      - name: Verify installed preflight outside source tree
+        run: |
+          cd "$RUNNER_TEMP"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          import sysconfig
+
+          import noema_orin
+          from noema_orin.receipts import SOURCE_SHA
+
+          roots = [Path(sysconfig.get_path(name)).resolve() for name in ("purelib", "platlib")]
+          origin = Path(noema_orin.__file__).resolve()
+          assert any(origin.is_relative_to(root) for root in roots), "source import instead of installed package"
+          env = dict(os.environ)
+          env.pop("PYTHONPATH", None)
+          env.pop("PYTHONHOME", None)
+          result = subprocess.run([sys.executable, "-m", "noema_orin.preflight"],
+                                  env=env, capture_output=True, text=True, check=False)
+          assert result.returncode == 0 and result.stderr == "", "preflight failed"
+          assert len(result.stdout.splitlines()) == 1, "unexpected record count"
+          record = json.loads(result.stdout)
+          fixed = {
+              "source_sha": SOURCE_SHA,
+              "claim_label": "SPECULATIVE",
+              "evidence_scope": "LOCAL_PREFLIGHT_ONLY",
+              "machine": "aarch64" if os.uname().machine == "aarch64" else "x86_64",
+              "l4t_release": "NOT_COMPUTABLE",
+              "device_family": "NOT_COMPUTABLE",
+              "python_version": ".".join(map(str, sys.version_info[:3])),
+              "client_version": "NOT_COMPUTABLE",
+              "jetpack_version": "NOT_COMPUTABLE",
+              "device_metrics": "NOT_COMPUTABLE",
+              "model_load": "NOT_COMPUTABLE",
+              "tokens_per_second": "NOT_COMPUTABLE",
+              "power": "NOT_COMPUTABLE",
+              "command_latency": "NOT_COMPUTABLE",
+          }
+          for field in ("os_id", "os_version", "ram_gib_bucket", "storage_free_gib_bucket"):
+              assert field in record, field
+          assert {k: v for k, v in record.items() if k not in
+                  ("os_id", "os_version", "ram_gib_bucket", "storage_free_gib_bucket")} == fixed
+          assert record["os_id"] == "ubuntu"
+          assert record["os_version"] in ("22.04", "24.04", "NOT_COMPUTABLE")
+          for field in ("ram_gib_bucket", "storage_free_gib_bucket"):
+              assert record[field] in ("NOT_COMPUTABLE", "0-4", "4-8", "8-16", "16-32", "32-64", "64-128", "128+")
+          assert "noema_client" not in sys.modules
+          PY
       - name: Verify patch hygiene
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
