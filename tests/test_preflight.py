@@ -5,10 +5,11 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from typing import cast
 import unittest
 from unittest.mock import patch
 
-from noema_orin.preflight import run_preflight
+from noema_orin.preflight import HostProbe, run_preflight
 from noema_orin.receipts import SOURCE_SHA
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -118,6 +119,40 @@ class PreflightTests(unittest.TestCase):
         from unittest.mock import mock_open
         with patch("pathlib.Path.open", mock_open(read_data="X" * 5000)):
             self.assertEqual(LocalHostProbe().read_text("/etc/os-release"), "")
+
+    def test_raising_probe_attribute_access_is_sanitized(self):
+        class RaisingAttributes:
+            @property
+            def machine(self):
+                raise RuntimeError(SECRET)
+
+            @property
+            def python_version(self):
+                raise RuntimeError(SECRET)
+
+            @property
+            def client_version(self):
+                raise RuntimeError(SECRET)
+
+            @property
+            def free_bytes(self):
+                raise RuntimeError(SECRET)
+
+            @property
+            def read_text(self):
+                raise RuntimeError(SECRET)
+
+        record = run_preflight(cast(HostProbe, RaisingAttributes()))
+        self.assertEqual(set(record.values()) - {SOURCE_SHA, "SPECULATIVE", "LOCAL_PREFLIGHT_ONLY"},
+                         {"NOT_COMPUTABLE"})
+        self.assertNotIn(SECRET, json.dumps(record))
+
+    def test_multiple_nul_suffixes_do_not_claim_device_family(self):
+        for model in ("NVIDIA Jetson Orin Nano Developer Kit\x00\x00",
+                      "NVIDIA Jetson Orin Nano Developer Kit\x00\x00\x00"):
+            with self.subTest(model=model):
+                record = run_preflight(FakeProbe({"/proc/device-tree/model": model}))
+                self.assertEqual(record["device_family"], "NOT_COMPUTABLE")
 
     def test_unavailable_probes_are_not_computable(self):
         record = run_preflight(FakeProbe(failures=(

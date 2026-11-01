@@ -9,15 +9,17 @@ From the returned Orin host, an operator can run `python -m noema_orin.preflight
 ## Progress
 
 - [x] (2026-10-31) Operator approved narrow T5a scope and one vertical-slice implementation ticket; spec #16 and ticket #17 published.
-- [x] (2026-10-31) Wrote failing public-seam tests: `ModuleNotFoundError` for absent `noema_orin.preflight` on Python 3.14; then implemented probe protocol and exact receipt. The first eight preflight tests and full 34-test suite passed locally on Python 3.10–3.13; further poisoned-input regressions were added before final verification.
+- [x] (2026-10-31) Wrote failing public-seam tests: `ModuleNotFoundError` for absent `noema_orin.preflight` on Python 3.14; then implemented probe protocol and exact receipt. The initial 36-test core suite passed locally on Python 3.10–3.13. After review-found RED regressions for raising attribute lookups and extra NUL terminators, the repaired 38-test core suite passed on each of Python 3.10–3.13.
 - [x] (2026-10-31) Installed the package into isolated Python 3.10–3.13 environments outside the checkout; confirmed site-packages import and one safe CLI record on the macOS host. This is package portability, not Jetson evidence.
 - [x] (2026-10-31) Added poisoned model/L4T-tail and bounded-read regressions; the full 36-test suite passed locally on Python 3.10–3.13. Added installed-package preflight checks to each existing synthetic CI cell, including Ubuntu arm64; hosted CI remains pending.
-- [ ] Obtain hosted x86/arm64 installed-package CI and independent exact-head reviews.
+- [x] (2026-10-31) Initial PR #18 head `70fe157bea26a6355946c4a8b05c21c43c243cb9` passed ten hosted jobs, but independent Standards and Spec reviews BLOCKED it: injected attribute access happened outside the fail-safe guard, and multiple trailing NULs were accepted as an exact device-label match. Added public-entry regression tests that reproduced both failures before repairing them. That initial CI and those reviews are historical, not clearance for the repaired head.
+- [ ] Obtain hosted x86/arm64 installed-package CI and fresh independent exact-head reviews for the repaired head.
 - [ ] Merge and record post-merge evidence without closing #4–#6.
 
 ## Surprises & Discoveries
 
-None yet.
+- A method *lookup* can raise before a guarded call begins; the existing raising-method test covered invocation only. Guard the lookup and invocation together.
+- `rstrip("\\x00")` removes arbitrarily many NULs; the candidate label must accept at most one file terminator.
 
 ## Decision Log
 

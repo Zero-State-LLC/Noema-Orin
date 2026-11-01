@@ -116,7 +116,7 @@ def _ram(raw):
 def _family(raw, machine):
     if machine not in ("aarch64", "arm64") or type(raw) is not str:
         return _UNKNOWN
-    return "JETSON_ORIN_NANO_CANDIDATE" if raw.rstrip("\x00") == _MODEL else _UNKNOWN
+    return "JETSON_ORIN_NANO_CANDIDATE" if raw in (_MODEL, _MODEL + "\x00") else _UNKNOWN
 
 
 def run_preflight(probe: Optional[HostProbe] = None) -> dict[str, str]:
@@ -124,7 +124,7 @@ def run_preflight(probe: Optional[HostProbe] = None) -> dict[str, str]:
     source = probe if probe is not None else LocalHostProbe()
     read = lambda path: _observe(lambda: source.read_text(path))
     os_id, os_version = _os_release(read("/etc/os-release"))
-    machine = _choice(_observe(source.machine), {"aarch64", "arm64", "x86_64"})
+    machine = _choice(_observe(lambda: source.machine()), {"aarch64", "arm64", "x86_64"})
     return {
         "source_sha": SOURCE_SHA,
         "claim_label": "SPECULATIVE",
@@ -134,10 +134,10 @@ def run_preflight(probe: Optional[HostProbe] = None) -> dict[str, str]:
         "os_version": os_version,
         "l4t_release": _l4t(read("/etc/nv_tegra_release")),
         "device_family": _family(read("/proc/device-tree/model"), machine),
-        "python_version": _version(_observe(source.python_version)),
-        "client_version": _version(_observe(source.client_version)),
+        "python_version": _version(_observe(lambda: source.python_version())),
+        "client_version": _version(_observe(lambda: source.client_version())),
         "ram_gib_bucket": _ram(read("/proc/meminfo")),
-        "storage_free_gib_bucket": _bucket(_observe(source.free_bytes)),
+        "storage_free_gib_bucket": _bucket(_observe(lambda: source.free_bytes())),
         "jetpack_version": _UNKNOWN,
         "device_metrics": _UNKNOWN,
         "model_load": _UNKNOWN,
