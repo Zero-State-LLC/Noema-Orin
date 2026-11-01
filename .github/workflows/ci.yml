@@ -54,9 +54,18 @@ jobs:
           env = dict(os.environ)
           env.pop("PYTHONPATH", None)
           env.pop("PYTHONHOME", None)
-          for args, expected_exit, expected_status, expected_result in (
-              (["hosted", "--fixture", os.path.join(os.environ["GITHUB_WORKSPACE"], "fixtures/hosted-look.json")], 0, "ATTEMPTED", "FAKE_HANDOFF"),
-              (["offline-spark"], 1, "REFUSED", "BLOCKED_SPEC_DEFECT"),
+          common = {
+              "source_sha": "619d0674518761aa08462d3f5d5966a917259aa1",
+              "claim_label": "SPECULATIVE",
+              "client_version": "UNVERIFIED",
+              "device_metrics": "NOT_COMPUTABLE",
+          }
+          for args, expected_exit, expected_record in (
+              (["hosted", "--fixture", os.path.join(os.environ["GITHUB_WORKSPACE"], "fixtures/hosted-look.json")],
+               0, {**common, "status": "ATTEMPTED", "result": "FAKE_HANDOFF",
+                   "profile": "hosted", "transport": "fake", "action": "LOOK"}),
+              (["offline-spark"], 1,
+               {**common, "status": "REFUSED", "result": "BLOCKED_SPEC_DEFECT"}),
           ):
               result = subprocess.run(
                   [sys.executable, "-m", "noema_orin", "--profile", *args, "--dry-run"],
@@ -66,7 +75,7 @@ jobs:
               assert result.stderr == "", (args[0], "unexpected stderr")
               assert len(result.stdout.splitlines()) == 1, (args[0], "record count")
               record = json.loads(result.stdout)
-              assert (record["status"], record["result"]) == (expected_status, expected_result)
+              assert record == expected_record, (args[0], "unexpected receipt shape or value")
           PY
       - name: Verify patch hygiene
         run: |
