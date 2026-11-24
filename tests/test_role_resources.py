@@ -1,6 +1,6 @@
 import unittest
 
-from noema_orin.orin_adapter import _hold_empty, _starved_for_attention
+from noema_orin.orin_adapter import _can_afford_move, _hold_empty, _starved_for_attention
 from noema_orin.roles import role_for
 
 
@@ -28,6 +28,21 @@ class AttentionTests(unittest.TestCase):
         other = {**self.AFF, "reason": "You do not have materials in hold."}
         self.assertFalse(_starved_for_attention({"resources": {"attention": 0}, "affordances": [other]}, {"RECONSTRUCT"}))
         self.assertFalse(_starved_for_attention({"resources": {"attention": 4}, "affordances": [self.AFF]}, {"RECONSTRUCT"}))
+
+    def test_starved_for_energy_too(self):
+        aff = {"operation": "HARVEST", "available": False, "requires": {"energy": 2, "compute": 1},
+               "reason": "You do not have enough energy or compute."}
+        self.assertTrue(_starved_for_attention({"resources": {"energy": 0, "compute": 5}, "affordances": [aff]}, {"HARVEST"}))
+
+
+class EnergyTests(unittest.TestCase):
+    def test_move_cost_matches_engine_transport(self):
+        # engine transport.ts: 1 energy, +1 when carrying (storage < 16)
+        self.assertFalse(_can_afford_move({"resources": {"energy": 0, "storage": 16}}))
+        self.assertTrue(_can_afford_move({"resources": {"energy": 1, "storage": 16}}))
+        self.assertFalse(_can_afford_move({"resources": {"energy": 1, "storage": 10}}))
+        self.assertTrue(_can_afford_move({"resources": {"energy": 2, "storage": 10}}))
+        self.assertTrue(_can_afford_move({}))
 
 
 if __name__ == "__main__":

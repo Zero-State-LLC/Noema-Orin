@@ -187,6 +187,8 @@ class OrinAdapter:
         if self.world_map is None or here or self.dwell < 2 or (self.allowed and "MOVE" not in self.allowed):
             self.dwell = self.dwell + 1 if not here else 0
             return None
+        if not _can_afford_move(canonical):
+            return ActionProposal(action="WAIT")  # WAIT burns cargo for energy; a refused MOVE wastes a turn
         direction = route(canonical, self.world_map, goal_verbs, explorer=self.explorer)
         if not direction:
             return None
@@ -241,18 +243,34 @@ class OrinAdapter:
 
 
 def _starved_for_attention(canonical: dict, verbs: set[str]) -> bool:
-    """A role verb is offered here but unaffordable only for lack of attention."""
-    have = (canonical.get("resources") or {}).get("attention")
-    if not isinstance(have, (int, float)):
-        return False
+    """A role verb is offered here but unaffordable for lack of a budget WAIT restores.
+
+    Engine: WAIT restores attention (+2, cap 8) and burns 1 cargo for +2 energy (cargo.ts applyCargoFuel).
+    """
+    res = canonical.get("resources") or {}
     for aff in canonical.get("affordances") or []:
         if not isinstance(aff, dict) or aff.get("available") is not False:
             continue
         op = str(aff.get("operation") or aff.get("action") or "").upper()
-        need = (aff.get("requires") or {}).get("attention")
-        if op in verbs and isinstance(need, (int, float)) and have < need and "attention" in str(aff.get("reason") or ""):
-            return True
+        if op not in verbs:
+            continue
+        reason = str(aff.get("reason") or "")
+        for budget in ("attention", "energy"):
+            need = (aff.get("requires") or {}).get(budget)
+            have = res.get(budget)
+            if isinstance(need, (int, float)) and isinstance(have, (int, float)) and have < need and budget in reason:
+                return True
     return False
+
+
+def _can_afford_move(canonical: dict) -> bool:
+    """Engine transport.ts: MOVE costs 1 energy, +1 while carrying anything (storage < 16)."""
+    res = canonical.get("resources") or {}
+    energy, storage = res.get("energy"), res.get("storage")
+    if not isinstance(energy, (int, float)):
+        return True
+    cost = 1 + (1 if isinstance(storage, (int, float)) and storage < 16 else 0)
+    return energy >= cost
 
 
 def _hold_ready(canonical: dict, need: int = 6) -> bool:
