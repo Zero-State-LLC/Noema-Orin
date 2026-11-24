@@ -26,6 +26,7 @@ class OrinAdapter:
         self.allowed: frozenset = frozenset()
         self.default_args: dict[str, dict] = {}
         self.verbs: set[str] = set()
+        self.supply: set[str] = set()
         self.cohort_ids: set[str] = set()
         self.explorer = False
         self.memory = None
@@ -116,10 +117,17 @@ class OrinAdapter:
             self.memory.mark_stale(kind="offer", room=room, keep={t for k, t in facts if k == "offer"})
             self.memories = self.memory.recall(" ".join([str(loc.get("name") or "")] + sorted(self.verbs)))
             self.stats_mem += len(self.memories)
-        if self.world_map is None or has_role_verb(options, self.verbs) or self.dwell < 2:
-            self.dwell = self.dwell + 1 if not has_role_verb(options, self.verbs) else 0
+        goal_verbs = self.verbs
+        if self.supply and _hold_empty(canonical):
+            goal_verbs = self.supply  # gather materials before repair/construct (engine cargo rule)
+        if _starved_for_attention(canonical, goal_verbs):
+            self.dwell = 0
+            return ActionProposal(action="WAIT")  # engine: WAIT restores attention +2 (cap 8)
+        here = has_role_verb(options, goal_verbs)
+        if self.world_map is None or here or self.dwell < 2:
+            self.dwell = self.dwell + 1 if not here else 0
             return None
-        direction = route(canonical, self.world_map, self.verbs, explorer=self.explorer)
+        direction = route(canonical, self.world_map, goal_verbs, explorer=self.explorer)
         if not direction:
             return None
         self.dwell = 0
@@ -165,6 +173,27 @@ class OrinAdapter:
                           "action": getattr(proposal, "action", None),
                           "memories_used": len(self.memories)}), flush=True)
         return proposal
+
+
+def _starved_for_attention(canonical: dict, verbs: set[str]) -> bool:
+    """A role verb is offered here but unaffordable only for lack of attention."""
+    have = (canonical.get("resources") or {}).get("attention")
+    if not isinstance(have, (int, float)):
+        return False
+    for aff in canonical.get("affordances") or []:
+        if not isinstance(aff, dict) or aff.get("available") is not False:
+            continue
+        op = str(aff.get("operation") or aff.get("action") or "").upper()
+        need = (aff.get("requires") or {}).get("attention")
+        if op in verbs and isinstance(need, (int, float)) and have < need and "attention" in str(aff.get("reason") or ""):
+            return True
+    return False
+
+
+def _hold_empty(canonical: dict) -> bool:
+    """Engine: hold occupied = STORAGE_CAPACITY(16) - free storage. Empty hold blocks REPAIR/CONSTRUCT."""
+    storage = (canonical.get("resources") or {}).get("storage")
+    return isinstance(storage, (int, float)) and storage >= 16
 
 
 def _options(canonical: dict, allowed: frozenset) -> list[dict]:

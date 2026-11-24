@@ -109,3 +109,13 @@ that). Ollama `KEEP_ALIVE` lowered 30m to 1m so the 3B model unloads when idle. 
 model resident, 0 tracebacks after restart; agents acting in role (Founder ORG_MEMBER_ADD + ORG_SUCCESSION_RULE, Archivist
 RECONSTRUCT_PUBLISH, Speaker ORG_OFFICE_ACT). Reach Compact members: Aphelia, Cantor, reach-maint3, Vellum. Validation,
 role policy and the planner stay on the Orin; only option-index choice is remote. Requires network to play well.
+
+## D-017: Role resource loops for Custodian and Archivist (2026-11-24, operator-instructed)
+
+Operator: the two agents missing their spaces need what they need to perform their function. Diagnosis against the
+engine (Noema `workers/noema/src/actions.ts`, `cargo.ts`, `world-actions.ts`), not missing rooms: REPAIR/CONSTRUCT were
+advertised but unavailable because they consume materials in hold (hold = 16 - free storage) and Rivet's hold was empty;
+RECONSTRUCT was advertised in 7 rooms but unavailable because Vellum's attention was 0 (cost 2; WAIT restores +2, cap 8).
+Fix uses existing verbs only: the Custodian gains `supply` verbs HARVEST/COMMIT.HARVEST (allowed, not role-defining) and
+the planner routes to harvestable rooms while the hold is empty; any role whose own verb is blocked only by attention
+WAITs to recover instead of wandering. No new rooms or server changes.
