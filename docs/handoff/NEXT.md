@@ -31,3 +31,9 @@ Verified this turn: 47 unit tests pass (py3.14, macOS arm64); hosted dry run emi
 - Headless reboot done 2026-11-23: default.target=multi-user.target, gnome-shell not running, RAM available 1.5Gi -> 4.9Gi (2.4Gi used).
 - T9 (PR pending): `ProposerAdapter` wraps any `propose(context)->str` such as `noema_llm_agent.llm.make_llm("ollama", model="qwen2.5:7b")`. OBSERVED on the Mac: 6-member group against local Ollama = ATTEMPTED 6/6 in 29.9s (~5s/decision, sequential). Orin->Mac LAN path not yet exercised (Ollama still bound to localhost).
 - Upstream nit: noema-llm-agent protocol.py:457 has `return` in `finally` (SyntaxWarning on py3.14).
+
+## 2026-11-24 memory/planner/stagger (D-013, PR #37)
+- Live: 5/6 roles act in role (Founder office/agreement, QM harvest, Archivist reconstruct, Speaker message, Surveyor focus). Custodian still mostly inspect: no REPAIR offered nearby yet.
+- Memory: per-agent `mind/memory.db`, shared `shared/map.db`, `shared/cohort.tsv` on Orin.
+- OpenClaw gateway user unit stopped and disabled (operator-approved); free RAM 0.3 -> 1.2 GiB.
+- Next: #34 confirm seating once agents co-locate with founder; #36 D1 replication; T15 metrics; clean up 12 duplicate Reach Compact orgs (founder can't dissolve; needs Admin decision).
