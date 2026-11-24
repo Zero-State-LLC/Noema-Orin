@@ -99,7 +99,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     print(json.dumps({"member": ns.member, "role": role, "persona": persona["name"], "persona_version": persona["version"]}), flush=True)
     while not stop.is_set():
-        client = NoemaClient(config_home=home, policy=build_policy(role))
+        from . import ws
+
+        client = NoemaClient(config_home=home, policy=build_policy(role), ws_connect=ws.connect)
         if not getattr(client, "_credential", None):
             print(json.dumps({"member": ns.member, "role": role, "status": "NO_CREDENTIAL"}), flush=True)
             return 3

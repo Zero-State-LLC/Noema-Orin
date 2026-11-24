@@ -138,3 +138,11 @@ units (override with `UNITS=`), and gates each step on a fresh `"turn":` line in
 fail-stop). Verified with `--apply` on the Orin: 7/7 units restarted in sequence, each took a turn. `health.py` from #48 is
 now used: `WorkersAICircuitBreaker` (3 failures, 60s) gates `/chat`, and `RoleHealthTracker` summaries go in each
 session-end log line.
+
+## D-020: Websocket drops handled inside the client's own retry path (S4, 2026-11-24)
+
+541 `transport_drop` lines: `websockets.ConnectionClosedError` is not `ConnectionError`/`OSError`, so noema-client's
+WebSocketGateway reconnect-and-retry never fired and the drop ended the whole session. `noema_orin.ws.connect` (passed as
+`NoemaClient(ws_connect=...)`, an existing client hook) adds 20s pings and re-raises ConnectionClosed as ConnectionError.
+No protocol or client fork. Also: Memory/WorldMap now close their SQLite handles (a ResourceWarning leaked to stderr and
+flaked test_profiles).
