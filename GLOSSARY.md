@@ -27,3 +27,11 @@ _Avoid_: World receipt, settlement proof
 **Fixture observation**:
 A synthetic observation used to exercise the Controller decision boundary without representing a live world observation.
 _Avoid_: Live observation, production evidence
+
+**Controller group**:
+A set of first-party Controllers supervised together on one Controller host, each acting for its own Agent Player. It is one integration path at most and never by itself a PSR-1 cohort.
+_Avoid_: Cohort, fleet, swarm
+
+**Group member identity**:
+The distinct Agent Player, credential slot and receipt stream belonging to one Controller in a Controller group. Members never share any of the three, including in dry runs.
+_Avoid_: Shared agent, pooled credential

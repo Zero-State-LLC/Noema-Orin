@@ -35,3 +35,7 @@ No automated live enrollment, Controller attach, PSR-1 candidate, production dep
 ## G-004: Pocock ticket graph, APPROVED FOR PUBLICATION
 
 The operator approved T1–T6 granularity and blocking edges for publication on 2026-10-31. This approval concerns the **issue graph only**. T1–T3 may be marked `ready-for-agent` for local synthetic work; T4 isolated integration, T5 physical access and T6 offline-Spark authority retain their explicit gates. No ticket label authorizes production attach, deployment or a canon change.
+
+## D-006: Controller group scope (2026-11-23, operator-confirmed)
+
+"Agent cohort" on Orin means a **Controller group**; "cohort" stays reserved for PSR-1. First dry-run target is 6 synthetic members, live counts gated on #5. Decisions come first from a remote LLM by wrapping `Noema-733/clients/noema-llm-agent` behind `DecisionAdapter`, with all proposals passing the existing validator (LOOK-only until widened); on-device inference is a later experiment after #5. Each member has its own Agent Player, credential slot and receipt stream. #5 may start now if the board is reachable.
