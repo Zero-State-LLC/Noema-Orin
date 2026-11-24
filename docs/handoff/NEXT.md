@@ -37,3 +37,11 @@ Verified this turn: 47 unit tests pass (py3.14, macOS arm64); hosted dry run emi
 - Memory: per-agent `mind/memory.db`, shared `shared/map.db`, `shared/cohort.tsv` on Orin.
 - OpenClaw gateway user unit stopped and disabled (operator-approved); free RAM 0.3 -> 1.2 GiB.
 - Next: #34 confirm seating once agents co-locate with founder; #36 D1 replication; T15 metrics; clean up 12 duplicate Reach Compact orgs (founder can't dissolve; needs Admin decision).
+
+## 2026-11-24 (later) seating + D1 mirror (D-014, PRs #39-#42)
+- Agents now play as themed handles (stale resume tokens cleared).
+- Reach Compact `org.reach-compact.34df3bb5`: founder Aphelia, member Cantor-Speaker, who holds office Notice (PUBLISH_NOTICE).
+- Org commands needed ids from LOOK `target_id`/`cmd` (`_cmd_args`); founder no longer offers AGREEMENT_* (client gates it behind allow_contest).
+- D1 mirror live: Worker `noema-orin-memory`, `noema-memory-sync.timer` every 5 min.
+- RAM is tight again (~130-230 MiB free; llama-server ~5.8 GB). If OOM appears, raise turn-gap or move reflection to the Mac.
+- Next: seat the remaining four (more office profiles), T15 metrics, Custodian/Archivist still mostly MOVE (routing finds no REPAIR/RECONSTRUCT rooms; inspect map.db offers).
