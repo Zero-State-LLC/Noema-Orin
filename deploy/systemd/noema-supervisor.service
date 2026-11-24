@@ -1,0 +1,8 @@
+[Unit]
+Description=NOEMA maint-evolve supervisor pulse (public /ready only; never inhabits)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/noema-ops
+Environment=PYTHONPATH=%h/noema-ops
+ExecStart=/usr/bin/python3 -m maint_evolve.supervisor --root %h/noema-ops/maint_evolve

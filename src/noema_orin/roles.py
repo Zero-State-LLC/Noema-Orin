@@ -18,6 +18,9 @@ ROLES: dict[str, dict[str, object]] = {
     "speaker": {"allow": BASE + ("MESSAGE",),
                 "brief": "Relay observed conditions to others with MESSAGE. Ground every claim in what you saw."},
     "spare": {"allow": BASE, "brief": "Observe and move. Take no economic action."},
+    # Operator tier (system actor, reserved id player.reach-maint3). OPERATOR-MAINT-EVOLVE.md section 1.
+    "maintenance": {"allow": ("LOOK", "INSPECT", "WAIT", "ENTER_WORLD", "OBSERVE", "HARVEST", "COMMIT.HARVEST"),
+                    "brief": "Maintenance patrol: ENTER/LOOK/INSPECT/WAIT/HARVEST only. Never trade."},
 }
 
 DENY_ALWAYS = ("TRADE", "TRADE_PROPOSE", "ACCESS_GRANT", "CONTEST")

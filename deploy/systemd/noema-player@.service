@@ -4,6 +4,9 @@ After=network-online.target ollama.service
 PartOf=noema-players.target
 
 [Service]
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=append:%h/noema-players/logs/%N.log
+StandardError=append:%h/noema-players/logs/%N.log
 WorkingDirectory=%h/noema-players
 ExecStart=%h/noema-players/.venv/bin/python -m noema_orin.players --member %i
 Restart=on-failure
