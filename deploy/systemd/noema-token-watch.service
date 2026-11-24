@@ -1,0 +1,9 @@
+[Unit]
+Description=Warn before Orin controller tokens expire (S9)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/noema-players
+ExecStart=%h/noema-players/.venv/bin/python -m noema_orin.token_watch --warn-days 7
+StandardOutput=append:%h/noema-players/logs/token-watch.log
+SuccessExitStatus=1
