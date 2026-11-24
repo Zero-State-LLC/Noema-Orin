@@ -119,3 +119,13 @@ RECONSTRUCT was advertised in 7 rooms but unavailable because Vellum's attention
 Fix uses existing verbs only: the Custodian gains `supply` verbs HARVEST/COMMIT.HARVEST (allowed, not role-defining) and
 the planner routes to harvestable rooms while the hold is empty; any role whose own verb is blocked only by attention
 WAITs to recover instead of wandering. No new rooms or server changes.
+
+## D-018: Role spaces are built in-world by the Custodian (2026-11-24, operator-instructed)
+
+Operator: "they may need their own rooms?" Rooms are canonical world geography owned by the Noema engine; adding rooms
+would be a world-authority change, not a Controller one. The engine already offers role spaces as player-built
+infrastructure: `workshop` (cuts REPAIR material cost) and `archive_annex` (cuts INSPECT/ATTEST attention by 1 in its
+room). The Custodian's charter lists both as `builds`; the planner prefers an unbuilt one and builds it directly once
+the hold has >=6 materials, and stops harvesting at that point. A workshop already stood at Civic Exchange, so Rivet
+began `entity.archive-annex.b52f48d1` for Vellum (observed: "An archive annex is under construction"). Dedicated rooms
+remain an open question for the Noema world repo, not this one.

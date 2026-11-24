@@ -26,6 +26,9 @@ ROLES: dict[str, dict[str, object]] = {
         "verbs": ("REPAIR", "COMMIT.REPAIR", "RESTORE", "UPGRADE", "CONSTRUCT", "REPURPOSE"),
         # REPAIR/CONSTRUCT consume materials in hold (engine cargo.ts); the custodian gathers its own.
         "supply": ("HARVEST", "COMMIT.HARVEST"),
+        # Role spaces (D-018): existing CONSTRUCT classes. Workshop cuts repair material cost; the archive annex
+        # cuts the Archivist's INSPECT/ATTEST attention cost by 1 in its room.
+        "builds": ("workshop", "archive_annex"),
         "mission": "Keep the Reach standing: gather materials, go to the worst-condition infrastructure, REPAIR or "
                    "RESTORE it, and UPGRADE or CONSTRUCT once it is stable. Do not repeat a repair that keeps failing.",
     },

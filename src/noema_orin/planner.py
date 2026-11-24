@@ -83,6 +83,23 @@ def has_role_verb(options: list[dict], verbs: set[str]) -> bool:
 IDLE = {"LOOK", "INSPECT", "WAIT", "OBSERVE"}
 
 
+def prefer_builds(options: list[dict], builds: tuple, built: set[str]) -> list[dict]:
+    """Role spaces first: CONSTRUCT of a class this role builds and nobody has built yet; drop other CONSTRUCTs."""
+    if not builds:
+        return options
+    want = [b for b in builds if b not in built]
+    first, rest = [], []
+    for o in options:
+        cls = str((o.get("raw") or {}).get("class") or "")
+        if o["action"] == "CONSTRUCT":
+            if cls in want:
+                first.append((want.index(cls), o))
+            continue
+        rest.append(o)
+    ordered = [o for _, o in sorted(first, key=lambda t: t[0])] + rest
+    return [{**o, "i": i} for i, o in enumerate(ordered)]
+
+
 def focus(options: list[dict], verbs: set[str]) -> list[dict]:
     """When the role's own verbs are on offer, hide idle perception so the model acts in role."""
     if not has_role_verb(options, verbs):
