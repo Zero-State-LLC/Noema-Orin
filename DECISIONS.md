@@ -43,3 +43,7 @@ The operator approved T1–T6 granularity and blocking edges for publication on 
 ## D-007: Group operation rules (2026-11-23, operator-confirmed)
 
 Board reached via a key-only `orin` SSH alias (address pending from operator). First remote decision backend is a LAN Ollama server over the OpenAI-compatible API; paid APIs are opt-in with keys from the secret store. Member failures are isolated: no retry, others continue, group exits nonzero. One SIGTERM to the supervisor is the group stop and is tested in dry runs. Foreground only; any systemd unit is a separate ticket after #4/#5.
+
+## D-008: LAN decision backend (2026-11-23, operator-confirmed)
+
+Ollama on the operator Mac serves `qwen2.5:7b` to the LAN over the OpenAI-compatible API. The endpoint lives only in local hosted-profile config, never in fixtures, receipts or Git.
