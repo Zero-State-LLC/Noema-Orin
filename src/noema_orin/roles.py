@@ -9,7 +9,7 @@ BASE = ("LOOK", "MOVE", "INSPECT", "WAIT", "OBSERVE", "ENTER_WORLD", "LEAVE_WORL
 
 ROLES: dict[str, dict[str, object]] = {
     "founder": {
-        "verbs": ("ORG_CREATE", "ORG_MEMBER_ADD", "ORG_OFFICE_CREATE", "ORG_OFFICE_ASSIGN", "ORG_OFFICE_VACATE",
+        "verbs": ("ORG_CREATE", "ORG_MEMBER_ADD", "ORG_OFFICE_CREATE", "ORG_OFFICE_ASSIGN", "ORG_OFFICE_VACATE", "ORG_OFFICE_RETIRE",
                   "ORG_SUCCESSION_RULE", "ORG_SUCCESSION_DESIGNATE", "JOIN"),
         # AGREEMENT_* is gated by noema-client allow_contest, which role agents keep off (DENY_ALWAYS).
         "mission": "Found and govern the Reach Compact: create the organization, open named offices, seat the other "

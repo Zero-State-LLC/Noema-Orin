@@ -42,6 +42,7 @@ class OrinAdapter:
         self.dwell = 0
         self.on_turn = None
         self.self_id = None
+        self.role_handles: dict[str, str] = {}
 
     def set_brief(self, brief: str) -> None:
         from noema_client.adapters.openai_compatible import SYSTEM_PROMPT
@@ -87,6 +88,14 @@ class OrinAdapter:
         from .planner import prefer_builds
 
         menu = refine(_options(canonical, self.allowed), canonical, self.cohort_ids)
+        if self.role_handles:
+            from .offices import refine_offices, retarget_create
+            from .planner import home_org
+
+            home = home_org(canonical)
+            menu = [m for m in (retarget_create(o, canonical, home) if o["action"] == "ORG_OFFICE_CREATE" else o
+                                for o in menu) if m is not None]
+            menu = refine_offices(menu, canonical, home, self.role_handles, self.role_handles.get("founder"))
         if self.builds:
             menu = prefer_builds(menu, self.builds, self._built_classes())
         if self.supply and _hold_ready(canonical):
