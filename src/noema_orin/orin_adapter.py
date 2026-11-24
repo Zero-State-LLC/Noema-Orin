@@ -189,8 +189,46 @@ def _proposal(opt: dict, default_args: dict):
     base = proposal_from_affordance(opt["raw"]) if opt.get("raw") else None
     if base is None:
         return ActionProposal(action=opt["action"], target_id=opt.get("target_id"), arguments=dict(default_args.get(opt["action"], {})))
-    return ActionProposal(action=base.action, target_id=base.target_id,
-                          arguments={**default_args.get(base.action, {}), **dict(base.arguments or {})})
+    args = {**default_args.get(base.action, {}), **_cmd_args(opt["raw"]), **dict(base.arguments or {})}
+    return ActionProposal(action=base.action, target_id=base.target_id, arguments=args)
+
+
+def _cmd_args(raw: dict) -> dict:
+    """Ids and fields some LOOK affordances only carry in target_id/target_label/cmd.
+
+    The server wants org_id / office_id / agent_id plus profile/display_name/role, while
+    LOOK may only show them as `target_id`, `target_label` and `name=`/`profile=`/`role=` in cmd.
+    """
+    import shlex
+
+    op = str(raw.get("operation") or raw.get("action") or "").upper()
+    if not op.startswith("ORG_"):
+        return {}
+    try:
+        parts = shlex.split(str(raw.get("cmd") or ""))
+    except ValueError:
+        parts = []
+    kv = dict(p.split("=", 1) for p in parts if "=" in p)
+    out: dict = {}
+    for ref in [raw.get("target_id")] + parts:
+        ref = str(ref or "")
+        if ref.startswith("org.") and "org_id" not in out:
+            out["org_id"] = ref
+        elif ref.startswith("office.") and "office_id" not in out:
+            out["office_id"] = ref
+            out.setdefault("org_id", "org." + ref.split(".")[1] + "." + ref.split(".")[2] if ref.count(".") >= 3 else None)
+    label = raw.get("player_id") or raw.get("agent_id") or raw.get("target_label")
+    if label and op in AGENT_OPS:
+        out["agent_id"] = label if str(label).startswith("player.") else f"player.{label}"
+    if "name" in kv:
+        out["display_name"] = kv["name"]
+    for key in ("profile", "role"):
+        if key in kv:
+            out[key] = kv[key]
+    return {k: v for k, v in out.items() if v}
+
+
+AGENT_OPS = {"ORG_MEMBER_ADD", "ORG_OFFICE_ASSIGN", "ORG_SUCCESSION_DESIGNATE", "ORG_SUCCESSION_CONSENT"}
 
 
 def _compact(canonical):
