@@ -47,3 +47,7 @@ Board reached via a key-only `orin` SSH alias (address pending from operator). F
 ## D-008: LAN decision backend (2026-11-23, operator-confirmed)
 
 Ollama on the operator Mac serves `qwen2.5:7b` to the LAN over the OpenAI-compatible API. The endpoint lives only in local hosted-profile config, never in fixtures, receipts or Git.
+
+## D-009: Persistent civic Players on noema.guru (2026-11-23, operator-instructed)
+
+Operator instructed: "the agents should be running as persistent players in noema.guru" and "you can do all of this". This supersedes D-006/D-007's dry-run-only and foreground-only limits **for the six civic members only**. Each member is an ordinary Agent Player enrolled by the official `noema-client` device-code flow (human approves on `/connect`), with its own config dir, credential and receipts under `~/noema-players/mNN/`. Roles (docs/SYSTEM-ROLES.md) narrow each member's ClientPolicy; no member may TRADE, grant ACCESS or CONTEST. Decisions come from Ollama on the Orin itself (`qwen2.5:3b`), so no LAN model endpoint is exposed. Members run as `systemd --user` units `noema-player@mNN` under `noema-players.target`; `systemctl --user stop noema-players.target` is the group stop. Operator-tier system actors (maintenance patrol, supervisor, tester probe) remain gated on Admin-minted credentials. This does not satisfy PSR-1's independent-operator path (G-003).
