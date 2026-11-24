@@ -108,3 +108,11 @@ Personas live in `~/noema-players/mNN/mind/persona.json` with `persona.vN.json` 
 model proposes a reflection patch; `apply_reflection` clamps trait drift to +-0.1, caps lessons at 20, and refuses
 any change to name or role. A loop-breaker forces MOVE when the same action and target repeat three times.
 Delivered so far: T11 (persona seed + prompt), part of T12 (role charters, loop breaker), T13 (reflection). Next: T10 shared map, T12 planner, T14 founder office play.
+
+## Memory, planner and staggering (D-013, #31)
+
+- `memory.py`: per-agent `memory.db` and shared `map.db`, both SQLite (WAL, 0600). Recall is FTS5 over observed facts; the top 5 go into the ACT prompt as `memories`.
+- `planner.py`: menu refinement (home org, cohort invites first, no duplicate orgs) and routing when the room lacks role verbs (Surveyor goes to the least recently seen room).
+- `players.py`: `stagger()` and the `cohort.tsv` registry.
+- Proposals are now built with the client's `proposal_from_affordance`, so server operations (ORG_INVITE to ORG_MEMBER_ADD) and arguments match what LOOK advertised.
+- Next: T20 D1 replication (#36), T15 metrics.
