@@ -69,3 +69,15 @@ Cantor-Speaker, Perigee-Surveyor). The earlier `system-*` tokens (D-011) are unu
 Admin issuance keeps them system actors (`ops.ts` actorKindFromPrincipal: `issued_by=admin`). Spare is replaced by
 Surveyor. Role verb sets are drawn only from existing Gateway commands; no new verbs. Persona state is private Controller-local
 cognition and never goes on the wire.
+
+## D-013: Controller-local SQLite memory, Cloudflare as backup only (2026-11-24, operator-approved)
+
+Issue #31. Agent memory lives on the Orin: one `mind/memory.db` per agent (facts with `source_sequence`, FTS5 recall,
+stale marking when observation contradicts, relation evidence never collapsed) plus a shared `shared/map.db` (rooms,
+exits, offered actions) and `shared/cohort.tsv` (Orin player ids). Grounds: AGENT-HARNESS §21 says harness memory is
+Controller-local, not world authority; v0.7 requires no vector DB; the Orin has ~0.5 GiB free, ruling out ChromaDB (~380 MB
+RSS). sqlite-vec can be added to the same file later. Cloud: a private Worker + D1 (never the game Worker) receives
+background replication (T20, #36) for durability; turns never wait on the network. A deterministic planner sits in front
+of the 3B model: no ORG_CREATE once a home org exists, org acts only on the oldest founded org, invites limited to the
+Orin cohort, routing toward rooms offering role verbs. Turns are staggered: cooldown = max(cooldown, 8s x cohort) with
+per-member start offsets.
