@@ -40,7 +40,7 @@ class LoopbackProof(unittest.TestCase):
                 origin = Path(module.__file__).resolve()
                 if not any(origin.is_relative_to(root) for root in roots):
                     raise AssertionError(f"{module.__name__} did not import from installed site-packages")
-            if noema_client.__version__ != "0.1.23":
+            if noema_client.__version__ not in {"0.1.23", "0.1.24"}:
                 raise AssertionError("unexpected official client version")
 
     def setUp(self):
