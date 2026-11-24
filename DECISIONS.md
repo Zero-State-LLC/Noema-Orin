@@ -169,3 +169,10 @@ the placeholder `"posted"` inside `cmd`) and `MOVE:INVALID_PROPOSAL` (the loop-b
 office act now carries `notice` built only from the newest non-stale observed fact, cited as `(observed at seq N)`, ≤280
 chars; with nothing observed it is skipped rather than posting filler. The loop-breaker MOVEs through the least recently
 seen real exit, or WAITs when there is none.
+
+## D-024: Operator tier never proposes MOVE (2026-11-24)
+
+Live S2 measurement (102 sessions, all full length) left one top rejection: `MOVE:POLICY_DENIED` (147, all from the
+maintenance patrol). OPERATOR-MAINT-EVOLVE §1 restricts the operator tier to ENTER/LOOK/INSPECT/WAIT/HARVEST, so the role
+allow list correctly omits MOVE. The planner's routing and the loop-breaker now check the allow list and stay in place
+(WAIT) instead of proposing a move the client policy will refuse.
