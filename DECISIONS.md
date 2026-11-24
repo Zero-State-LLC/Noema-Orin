@@ -100,3 +100,12 @@ serves only per-turn action choice. Bounded drift is still enforced locally by `
 untrusted text parsed into a patch. If the endpoint is unset or unreachable, that session's reflection is skipped
 (`NOEMA_REFLECT_LOCAL_FALLBACK=1` restores the local path). Sent: persona name, role, traits, quirk, lessons and the
 session's own action names; no tokens, no world secrets. Verified from the Orin: 18.7 s, valid patch.
+
+## D-016: Per-turn decisions on Workers AI; local model is fallback only (2026-11-24, operator-approved)
+
+`OrinAdapter._chat` calls `POST /chat` on the private Worker (`@cf/meta/llama-4-scout-17b-16e-instruct`, 80 tokens,
+temp 0.3, ~1 s) and falls back to local Ollama only if the cloud is unreachable (`NOEMA_DECIDE_LOCAL_FALLBACK=0` disables
+that). Ollama `KEEP_ALIVE` lowered 30m to 1m so the 3B model unloads when idle. Observed: free RAM 0.2 GiB to 5.9 GiB, no
+model resident, 0 tracebacks after restart; agents acting in role (Founder ORG_MEMBER_ADD + ORG_SUCCESSION_RULE, Archivist
+RECONSTRUCT_PUBLISH, Speaker ORG_OFFICE_ACT). Reach Compact members: Aphelia, Cantor, reach-maint3, Vellum. Validation,
+role policy and the planner stay on the Orin; only option-index choice is remote. Requires network to play well.
