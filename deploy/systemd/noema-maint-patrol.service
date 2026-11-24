@@ -9,6 +9,8 @@ StandardOutput=append:%h/noema-players/logs/%N.log
 StandardError=append:%h/noema-players/logs/%N.log
 WorkingDirectory=%h/noema-players
 EnvironmentFile=%h/.config/noema-orin/maint.env
+# Cloud reflection endpoint (D-015); optional so players still start without it.
+EnvironmentFile=-%h/.config/noema-orin/memory-sync.env
 ExecStart=%h/noema-players/.venv/bin/python -m noema_orin.players --member maint --session-seconds 1800 --cooldown 30
 Restart=on-failure
 RestartPreventExitStatus=3
