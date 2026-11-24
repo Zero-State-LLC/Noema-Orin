@@ -81,3 +81,12 @@ background replication (T20, #36) for durability; turns never wait on the networ
 of the 3B model: no ORG_CREATE once a home org exists, org acts only on the oldest founded org, invites limited to the
 Orin cohort, routing toward rooms offering role verbs. Turns are staggered: cooldown = max(cooldown, 8s x cohort) with
 per-member start offsets.
+
+## D-014: Private D1 memory mirror live; agents play as themed handles (2026-11-24)
+
+T20 (#36): Worker `noema-orin-memory` (workers.dev, bearer `SYNC_TOKEN`, keychain `noema-orin-memory-sync`, Orin
+`~/.config/noema-orin/memory-sync.env` 0600) with D1 `noema-orin-memory`. `noema-memory-sync.timer` pushes changed rows every
+5 min from read-only local opens; marks advance only after 2xx. Not bound to the game Worker. Stale `resume_token`s were
+reconnecting agents as `player.system-*`; they were cleared so agents now play as `player.<Name>-<Role>`. The
+system-founder's 13 Reach Compacts are orphaned history; Aphelia founds one fresh org. Agreements are limited to the Orin cohort
+and never trade/access. OpenClaw gateway user unit disabled at operator request.
