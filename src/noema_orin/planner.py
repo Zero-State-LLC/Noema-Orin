@@ -28,6 +28,19 @@ def _org_of(opt: dict) -> str | None:
     return None
 
 
+def _office_named(canonical: dict, home: str, opt: dict) -> bool:
+    """True when the home org already has an office of the name this option would create."""
+    import re
+
+    m = re.search(r'name="?([^"]+)"?', str((opt.get("raw") or {}).get("cmd") or ""))
+    if not m:
+        return False
+    for org in canonical.get("organizations") or []:
+        if isinstance(org, dict) and org.get("org_id") == home:
+            return any(o.get("display_name") == m.group(1) for o in org.get("offices") or [] if isinstance(o, dict))
+    return False
+
+
 def refine(options: list[dict], canonical: dict, cohort_ids: set[str]) -> list[dict]:
     """Drop duplicate org creation and acts on non-home orgs; put cohort invites first."""
     home = home_org(canonical)
@@ -40,6 +53,8 @@ def refine(options: list[dict], canonical: dict, cohort_ids: set[str]) -> list[d
     for opt in options:
         action = opt["action"]
         if action == "ORG_CREATE" and home:
+            continue
+        if action == "ORG_OFFICE_CREATE" and home and _office_named(canonical, home, opt):
             continue
         if action in ORG_VERBS and home and _org_of(opt) not in (None, home):
             continue

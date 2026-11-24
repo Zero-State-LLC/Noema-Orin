@@ -41,6 +41,11 @@ class PlannerTests(unittest.TestCase):
         out = refine(opts, CANON, {"player.q"})
         self.assertEqual([(o["raw"]["agreement_type"], o["target_id"]) for o in out], [("defense", "player.q")])
 
+    def test_no_duplicate_office(self):
+        canon = {**CANON, "organizations": [{**org("org.a", 10), "offices": [{"display_name": "Notice"}]}]}
+        opt = {"action": "ORG_OFFICE_CREATE", "target_id": "org.a", "raw": {"cmd": 'office create org.a name="Notice" profile=P'}}
+        self.assertEqual(refine([opt], canon, set()), [])
+
     def test_without_home_org_only_founding_is_offered(self):
         canon = {**CANON, "organizations": []}
         out = refine([{"action": "LOOK"}, {"action": "ORG_CREATE"}, {"action": "ORG_CREATE"}], canon, set())
