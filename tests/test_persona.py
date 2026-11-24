@@ -76,4 +76,13 @@ class OptionMenuTests(unittest.TestCase):
         opts = _options(canonical, frozenset(role_for("custodian")["allow"]))
         self.assertEqual([o["action"] for o in opts], ["REPAIR", "MOVE"])
         self.assertEqual(opts[0]["target_id"], "entity.relay-7")
-        self.assertEqual(opts[1]["arguments"], {"dest": "room.archive"})
+        self.assertEqual(opts[1]["raw"]["dest"], "room.archive")
+
+    def test_invite_maps_to_server_operation_with_client_arguments(self):
+        from noema_orin.orin_adapter import _options, _proposal
+        aff = {"action": "ORG_INVITE", "operation": "ORG_MEMBER_ADD", "target_id": "org.a", "target_label": "q",
+               "available": True}
+        opts = _options({"affordances": [aff]}, frozenset(role_for("founder")["allow"]))
+        self.assertEqual(opts[0]["target_label"], "q")
+        prop = _proposal(opts[0], {})
+        self.assertEqual((prop.action, prop.target_id, prop.arguments.get("operation")), ("ORG_MEMBER_ADD", "org.a", "ORG_MEMBER_ADD"))
