@@ -14,6 +14,7 @@ import threading
 from pathlib import Path
 
 from .roles import DENY_ALWAYS, role_for
+from .telemetry import rejection_summary, stop_detail
 
 
 def build_policy(role: str):
@@ -120,7 +121,8 @@ def main(argv: list[str] | None = None) -> int:
         persona, accepted = apply_reflection(mind, persona, patch)
         adapter.set_brief(system_brief())
         print(json.dumps({"member": ns.member, "role": role, "actions": len(report),
-                          "stop_reason": line.get("stop_reason"), "decisions": dict(adapter.stats),
+                          "stop_reason": line.get("stop_reason"), "stop_detail": stop_detail(report),
+                          "rejections": rejection_summary(report), "decisions": dict(adapter.stats),
                           "persona_version": persona["version"], "memories_recalled": adapter.stats_mem,
                           "health": adapter.health.summary(), "reflection": "accepted" if accepted else "rejected"},
                          default=str), flush=True)
