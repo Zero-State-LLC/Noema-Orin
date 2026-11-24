@@ -183,3 +183,14 @@ The digest flagged the custodian (m03) at 92% idle. Its memory showed a cycle: c
 engine transport.ts), hit `You do not have enough energy`, WAIT, repeat. The engine never re-grants energy over time; WAIT
 burns 1 cargo for +2 energy (cargo.ts applyCargoFuel). So the planner now WAITs instead of routing when it cannot pay the move,
 and the starvation check covers energy as well as attention. Both rules use the engine's own numbers, so no guessing.
+
+## D-026: Office catalog, seating, duplicate retire, succession (S10-S12, S14, 2026-11-24)
+
+`noema_orin.offices.CATALOG` maps roles to one named office whose engine authority profile matches the charter:
+Speaker → Notice (PUBLISH_NOTICE), Custodian → Steward (OPERATE_NAMED_ASSET: org repair + VEST), Archivist →
+Archive Keeper (ACCESS_RESTRICTED_ARCHIVE). Quartermaster and Surveyor get no seat because their only fitting profiles
+(OPERATE_RESOURCE_ACCOUNT = treasury trade, GRANT_ACCESS) are authorities role agents keep off. The engine only
+advertises a Notice create, but its parser takes any profile, so the founder's create is retargeted to the next
+missing catalog office. Seating offers only the catalog's intended holder. The founder gains ORG_OFFICE_RETIRE, used only on
+duplicates (keep the occupied one, else the oldest). Succession designates a cohort heir other than the holder, and the
+rule is published only while no successor is named. Role handles come from roles.tsv + shared/cohort.tsv.

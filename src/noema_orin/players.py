@@ -42,6 +42,15 @@ def cohort_ids(root: Path) -> set[str]:
     return {line.split("\t")[1] for line in path.read_text().splitlines() if "\t" in line}
 
 
+def role_handles(root: Path, roles: dict[str, str]) -> dict[str, str]:
+    """role -> engine handle, from roles.tsv (member->role) and shared/cohort.tsv (member->player id)."""
+    path = root / "shared" / "cohort.tsv"
+    if not path.exists():
+        return {}
+    ids = dict(line.split("\t", 1) for line in path.read_text().splitlines() if "\t" in line)
+    return {roles[m]: pid.strip().replace("player.", "", 1) for m, pid in ids.items() if m in roles}
+
+
 def record_self(root: Path, member: str, player_id: str | None) -> None:
     if not player_id:
         return
@@ -91,7 +100,12 @@ def main(argv: list[str] | None = None) -> int:
     from .memory import Memory, WorldMap
 
     adapter.memory, adapter.world_map = Memory(mind), WorldMap(ns.root)
-    adapter.on_turn = lambda pid: (record_self(ns.root, ns.member, pid), cohort_ids(ns.root))[1]
+    def on_turn(pid):
+        record_self(ns.root, ns.member, pid)
+        adapter.role_handles = role_handles(ns.root, roles)
+        return cohort_ids(ns.root)
+
+    adapter.on_turn = on_turn
     members = sorted(roles)
     cooldown, offset = stagger(members, ns.member, ns.cooldown, ns.turn_gap)
     print(json.dumps({"member": ns.member, "stagger_offset_s": offset, "cooldown_s": cooldown}), flush=True)
