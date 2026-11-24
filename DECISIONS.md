@@ -129,3 +129,12 @@ room). The Custodian's charter lists both as `builds`; the planner prefers an un
 the hold has >=6 materials, and stops harvesting at that point. A workshop already stood at Civic Exchange, so Rivet
 began `entity.archive-annex.b52f48d1` for Vellum (observed: "An archive annex is under construction"). Dedicated rooms
 remain an open question for the Noema world repo, not this one.
+
+## D-019: Rolling restart targets real user units; Workers AI circuit breaker wired (2026-11-24)
+
+#48/#49 shipped `deploy/rolling-restart.sh` with role-named units (`noema-player@founder`) under `sudo systemctl`; the
+live units are user units `noema-player@m01..m06` plus `noema-maint-patrol`. The script now uses `systemctl --user`, those
+units (override with `UNITS=`), and gates each step on a fresh `"turn":` line in that unit's log (TURN_TIMEOUT 180s,
+fail-stop). Verified with `--apply` on the Orin: 7/7 units restarted in sequence, each took a turn. `health.py` from #48 is
+now used: `WorkersAICircuitBreaker` (3 failures, 60s) gates `/chat`, and `RoleHealthTracker` summaries go in each
+session-end log line.
