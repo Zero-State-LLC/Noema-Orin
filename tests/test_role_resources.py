@@ -32,3 +32,21 @@ class AttentionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RoleSpaceTests(unittest.TestCase):
+    def test_custodian_prefers_unbuilt_role_spaces(self):
+        from noema_orin.planner import prefer_builds
+        mk = lambda c: {"action": "CONSTRUCT", "raw": {"class": c}}
+        opts = [mk("relay"), {"action": "HARVEST"}, mk("archive_annex"), mk("workshop")]
+        out = prefer_builds(opts, ("workshop", "archive_annex"), set())
+        self.assertEqual([o.get("raw", {}).get("class") or o["action"] for o in out], ["workshop", "archive_annex", "HARVEST"])
+        out = prefer_builds(opts, ("workshop", "archive_annex"), {"workshop"})
+        self.assertEqual([o.get("raw", {}).get("class") or o["action"] for o in out], ["archive_annex", "HARVEST"])
+
+
+class HoldTests(unittest.TestCase):
+    def test_hold_ready_at_six_materials(self):
+        from noema_orin.orin_adapter import _hold_ready
+        self.assertTrue(_hold_ready({"resources": {"storage": 5}}))
+        self.assertFalse(_hold_ready({"resources": {"storage": 12}}))

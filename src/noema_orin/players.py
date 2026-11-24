@@ -84,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
     adapter.default_args = dict(spec.get("args") or {})
     adapter.verbs = set(spec["verbs"])
     adapter.supply = set(spec.get("supply") or ())
+    adapter.builds = tuple(spec.get("builds") or ())
     adapter.explorer = role == "surveyor"
     from .memory import Memory, WorldMap
 

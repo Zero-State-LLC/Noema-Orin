@@ -27,6 +27,7 @@ class OrinAdapter:
         self.default_args: dict[str, dict] = {}
         self.verbs: set[str] = set()
         self.supply: set[str] = set()
+        self.builds: tuple = ()
         self.cohort_ids: set[str] = set()
         self.explorer = False
         self.memory = None
@@ -64,7 +65,21 @@ class OrinAdapter:
         from .planner import focus, refine
 
         canonical = context.get("canonical") or {}
-        return focus(refine(_options(canonical, self.allowed), canonical, self.cohort_ids), self.verbs)
+        from .planner import prefer_builds
+
+        menu = refine(_options(canonical, self.allowed), canonical, self.cohort_ids)
+        if self.builds:
+            menu = prefer_builds(menu, self.builds, self._built_classes())
+        if self.supply and _hold_ready(canonical):
+            # Hold has enough materials for a build or repair: stop gathering, spend them.
+            menu = [{**o, "i": i} for i, o in enumerate(o for o in menu if o["action"] not in self.supply)]
+        return focus(menu, self.verbs)
+
+    def _built_classes(self) -> set[str]:
+        if self.memory is None:
+            return set()
+        rows = self.memory.db.execute("SELECT text FROM facts WHERE kind='built' AND stale=0").fetchall()
+        return {t for (t,) in rows}
 
     def _ask(self, context, options):
         canonical = context.get("canonical") or {}
@@ -115,6 +130,11 @@ class OrinAdapter:
             for kind, text in facts:
                 self.memory.remember(text, kind=kind, room=room, sequence=seq)
             self.memory.mark_stale(kind="offer", room=room, keep={t for k, t in facts if k == "offer"})
+            for ent in loc.get("entities") or canonical.get("entities") or []:
+                cls = isinstance(ent, dict) and ent.get("entity_type") == "INFRASTRUCTURE" and (
+                    ent.get("infra_type") or str(ent.get("label") or "").replace("-", "_"))
+                if cls and not ent.get("in_progress"):
+                    self.memory.remember(str(cls), kind="built", room=room, sequence=seq)
             self.memories = self.memory.recall(" ".join([str(loc.get("name") or "")] + sorted(self.verbs)))
             self.stats_mem += len(self.memories)
         goal_verbs = self.verbs
@@ -124,6 +144,11 @@ class OrinAdapter:
             self.dwell = 0
             return ActionProposal(action="WAIT")  # engine: WAIT restores attention +2 (cap 8)
         here = has_role_verb(options, goal_verbs)
+        if self.builds and _hold_ready(canonical):
+            pick = next((o for o in options if o["action"] == "CONSTRUCT"
+                         and str((o.get("raw") or {}).get("class") or "") in self.builds), None)
+            if pick is not None:
+                return _proposal(pick, self.default_args)  # build the role's own space (D-018)
         if self.world_map is None or here or self.dwell < 2:
             self.dwell = self.dwell + 1 if not here else 0
             return None
@@ -188,6 +213,12 @@ def _starved_for_attention(canonical: dict, verbs: set[str]) -> bool:
         if op in verbs and isinstance(need, (int, float)) and have < need and "attention" in str(aff.get("reason") or ""):
             return True
     return False
+
+
+def _hold_ready(canonical: dict, need: int = 6) -> bool:
+    """Engine hold = 16 - free storage; most builds take 4-6 storage, repair takes 1."""
+    storage = (canonical.get("resources") or {}).get("storage")
+    return isinstance(storage, (int, float)) and 16 - storage >= need
 
 
 def _hold_empty(canonical: dict) -> bool:
