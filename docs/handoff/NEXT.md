@@ -17,3 +17,14 @@ Verified this turn: 47 unit tests pass (py3.14, macOS arm64); hosted dry run emi
 - T10 Refactor runner validation into deep parsers (no behavior change, existing tests are the guard).
 - T11 Packaging/CI: entry point, packaged fixture, ruff + pyright job.
 - Human gates unchanged: #5 needs the board, #4 needs an authorized isolated world, #6 needs Noema-Specs decision.
+
+## Board session 2026-11-23 (OBSERVED via ssh orin)
+- Device-tree: "NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super"; L4T R39.2.2; Ubuntu 24.04; Python 3.12.3; NV power mode MAXN_SUPER; NVMe 467G (316G free).
+- RAM 7.3Gi total, 5.8Gi used, ~1.5Gi available: GNOME desktop, Firefox and a node process hold ~3.4GB. On-device inference is not viable until the board runs headless.
+- On board: 59 tests pass; `--group 6` dry run gives ATTEMPTED 6/6; preflight now reports R39.2.2 / JETSON_ORIN_NANO_CANDIDATE after PR #23.
+- Merged: #22 (T7 group dry run), #23 (preflight real-board labels).
+
+## Next
+1. Operator: decide whether to boot the Orin headless (`systemctl set-default multi-user.target`) to free ~3GB.
+2. T9: wrap noema-llm-agent behind DecisionAdapter against LAN Ollama (qwen2.5:7b on the Mac), LOOK-only validation.
+3. Expose Mac Ollama on LAN (OLLAMA_HOST=0.0.0.0) only when T9 needs it.
