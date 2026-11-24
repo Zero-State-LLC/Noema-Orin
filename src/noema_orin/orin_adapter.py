@@ -117,7 +117,18 @@ class OrinAdapter:
         idx = data.get("choice")
         if type(idx) is not int or not 0 <= idx < len(menu):
             return None
-        return _proposal(options[idx], self.default_args)
+        return _proposal(options[idx], self.default_args, self.memory)
+
+    def _loop_break_move(self, context):
+        """MOVE needs a direction (bare MOVE is INVALID_PROPOSAL); take the least recently seen exit."""
+        from noema_client.types import ActionProposal
+
+        loc = (context.get("canonical") or {}).get("location") or {}
+        exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict) and e.get("direction")}
+        if not exits:
+            return ActionProposal(action="WAIT")
+        goal = self.world_map.least_recent(sorted(r for r in exits if r)) if self.world_map is not None else None
+        return ActionProposal(action="MOVE", target_id=exits.get(goal) or sorted(exits.values())[0])
 
     def _role_fallback(self, context, options):
         """Scripted choice that still honours the role: unique verbs first, then MOVE, then anything allowed."""
@@ -127,7 +138,9 @@ class OrinAdapter:
         for tier in (lambda o: o["action"] not in SHARED, lambda o: o["action"] == "MOVE", lambda o: True):
             for opt in options:
                 if tier(opt) and (opt["action"], opt.get("target_id")) not in tried:
-                    return _proposal(opt, self.default_args)
+                    prop = _proposal(opt, self.default_args, self.memory)
+                    if prop is not None:
+                        return prop
         return self.fallback.decide(context)
 
     def _plan(self, context, options):
@@ -167,7 +180,7 @@ class OrinAdapter:
             pick = next((o for o in options if o["action"] == "CONSTRUCT"
                          and str((o.get("raw") or {}).get("class") or "") in self.builds), None)
             if pick is not None:
-                return _proposal(pick, self.default_args)  # build the role's own space (D-018)
+                return _proposal(pick, self.default_args, self.memory)  # build the role's own space (D-018)
         if self.world_map is None or here or self.dwell < 2:
             self.dwell = self.dwell + 1 if not here else 0
             return None
@@ -210,7 +223,7 @@ class OrinAdapter:
 
             source = "loop_break"
             self.stats["loop_break"] += 1
-            proposal = ActionProposal(action="MOVE" if key[0] != "MOVE" else "LOOK")
+            proposal = self._loop_break_move(context) if key[0] != "MOVE" else ActionProposal(action="LOOK")
         self.recent = (self.recent + [{"action": getattr(proposal, "action", None),
                                        "target": getattr(proposal, "target_id", None)}])[-40:]
         canonical = (context.get("canonical") or {})
@@ -273,7 +286,7 @@ def _options(canonical: dict, allowed: frozenset) -> list[dict]:
     return out
 
 
-def _proposal(opt: dict, default_args: dict):
+def _proposal(opt: dict, default_args: dict, memory=None):
     from noema_client.affordances import proposal_from_affordance
     from noema_client.types import ActionProposal
 
@@ -281,6 +294,11 @@ def _proposal(opt: dict, default_args: dict):
     if base is None:
         return ActionProposal(action=opt["action"], target_id=opt.get("target_id"), arguments=dict(default_args.get(opt["action"], {})))
     args = {**default_args.get(base.action, {}), **_cmd_args(opt["raw"]), **dict(base.arguments or {})}
+    if base.action == "ORG_OFFICE_ACT" and not args.get("notice") and not args.get("governance_rule"):
+        notice = grounded_notice(memory)
+        if not notice:
+            return None  # nothing observed worth publishing; never post filler (S13)
+        args["notice"] = notice
     return ActionProposal(action=base.action, target_id=base.target_id, arguments=args)
 
 
@@ -317,6 +335,20 @@ def _cmd_args(raw: dict) -> dict:
         if key in kv:
             out[key] = kv[key]
     return {k: v for k, v in out.items() if v}
+
+
+def grounded_notice(memory, org_name: str = "the Compact") -> str | None:
+    """A public notice built only from observed, non-stale facts, citing the source sequence (S13)."""
+    if memory is None:
+        return None
+    row = memory.db.execute(
+        "SELECT text, source_sequence FROM facts WHERE stale=0 AND kind IN ('consequence','room') "
+        "AND text NOT LIKE 'You take in%' AND text NOT LIKE 'You arrive%' AND text NOT LIKE 'Enter the world%' "
+        "ORDER BY sequence DESC LIMIT 1").fetchone()
+    if not row:
+        return None
+    text, seq = row
+    return f"{org_name} notice: {text} (observed at seq {seq})"[:280]
 
 
 AGENT_OPS = {"ORG_MEMBER_ADD", "ORG_OFFICE_ASSIGN", "ORG_SUCCESSION_DESIGNATE", "ORG_SUCCESSION_CONSENT"}

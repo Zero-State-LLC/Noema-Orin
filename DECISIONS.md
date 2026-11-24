@@ -161,3 +161,11 @@ role-verb rate, idle rate, drops and rejections per session. `noema-metrics.time
 `shared/digest.json` with alerts: idle rate >60% over >=20 turns, or <50% of sessions running full length. memory_sync
 pushes sessions and the digest to D1 as member `_metrics`; the private Worker serves authenticated `GET /metrics?hours=N`.
 Alerts are log/D1 only for now (no email), pending the operator's answer on the alert channel.
+
+## D-023: Speaker notices are grounded; directional loop-break (S2/S13, 2026-11-24)
+
+S1 telemetry named the top rejections: `ORG_OFFICE_ACT:INVALID_REQUEST` (engine requires `notice` text; LOOK only carries
+the placeholder `"posted"` inside `cmd`) and `MOVE:INVALID_PROPOSAL` (the loop-breaker sent MOVE with no direction). The
+office act now carries `notice` built only from the newest non-stale observed fact, cited as `(observed at seq N)`, ≤280
+chars; with nothing observed it is skipped rather than posting filler. The loop-breaker MOVEs through the least recently
+seen real exit, or WAITs when there is none.
