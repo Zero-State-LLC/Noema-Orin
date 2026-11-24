@@ -2,10 +2,14 @@
 
 import argparse
 import json
+import os
+import signal
+import threading
 from pathlib import Path
 
 from typing import NoReturn
 
+from .group import run_group
 from .profiles import select
 from .receipts import receipt
 from .runner import FakeClient, ScriptedAdapter, run
@@ -31,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--profile")
     parser.add_argument("--fixture", type=Path)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--group")
     try:
         args = parser.parse_args(argv)
     except (ValueError, SystemExit):
@@ -47,9 +52,34 @@ def main(argv: list[str] | None = None) -> int:
             except Exception:
                 # Fixture input is untrusted; never echo parser or filesystem errors.
                 fixture = None
+            if args.group is not None:
+                return _group(args.group, fixture)
             outcome = run(profile="hosted", fixture=fixture, client=FakeClient(), adapter=ScriptedAdapter())
     print(json.dumps(outcome, sort_keys=True, separators=(",", ":")))
     return 0 if outcome["status"] == "ATTEMPTED" else 1
+
+
+def _emit(record: dict[str, object]) -> None:
+    print(json.dumps(record, sort_keys=True, separators=(",", ":")), flush=True)
+
+
+def _group(raw_size: str, fixture: object) -> int:
+    """Group dry run: one line per member, then one GROUP_SUMMARY line."""
+    size: object = int(raw_size) if raw_size.isascii() and raw_size.isdigit() else raw_size
+    stop = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    # Test-only pacing so the group-stop path can be exercised; not a tuning knob.
+    delay_raw = os.environ.get("NOEMA_ORIN_TEST_MEMBER_DELAY", "")
+    delay = float(delay_raw) if delay_raw.replace(".", "", 1).isdigit() else 0.0
+    pace = (lambda: stop.wait(delay)) if delay else None
+    members, summary = run_group(profile="hosted", fixture=fixture, size=size,  # type: ignore[arg-type]
+                                 client_factory=lambda m: FakeClient(),
+                                 adapter_factory=lambda m: ScriptedAdapter(),
+                                 stop=stop, before_member=pace)
+    for member in members:
+        _emit(member)
+    _emit(summary)
+    return 0 if summary["group_status"] == "ATTEMPTED" else 1
 
 
 if __name__ == "__main__":
