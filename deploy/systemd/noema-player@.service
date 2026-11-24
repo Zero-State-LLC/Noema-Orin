@@ -5,6 +5,8 @@ PartOf=noema-players.target
 
 [Service]
 EnvironmentFile=%h/.config/noema-orin/%i.env
+# Cloud reflection endpoint (D-015); optional so players still start without it.
+EnvironmentFile=-%h/.config/noema-orin/memory-sync.env
 Environment=PYTHONUNBUFFERED=1
 StandardOutput=append:%h/noema-players/logs/%N.log
 StandardError=append:%h/noema-players/logs/%N.log

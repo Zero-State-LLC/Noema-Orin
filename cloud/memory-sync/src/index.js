@@ -34,6 +34,26 @@ export default {
       return Response.json(out);
     }
 
+    if (request.method === "POST" && url.pathname === "/reflect") {
+      const body = await request.json().catch(() => null);
+      if (!body || typeof body.user !== "string" || typeof body.system !== "string") {
+        return new Response("bad request", { status: 400 });
+      }
+      const model = env.REFLECT_MODEL || "@cf/google/gemma-4-26b-a4b-it";
+      const out = await env.AI.run(model, {
+        messages: [
+          { role: "system", content: body.system.slice(0, 2000) },
+          { role: "user", content: body.user.slice(0, 6000) },
+        ],
+        max_tokens: 1024,
+        temperature: 0.4,
+      });
+      const text =
+        typeof out?.response === "string" && out.response ? out.response
+          : out?.choices?.[0]?.message?.content ?? (typeof out?.response === "object" ? JSON.stringify(out.response) : "");
+      return Response.json({ model, text: String(text || ""), shape: Object.keys(out || {}) });
+    }
+
     if (request.method !== "POST" || url.pathname !== "/sync") return new Response("not found", { status: 404 });
     const body = await request.json().catch(() => null);
     if (!body || typeof body.member !== "string" || !/^(_map|[a-z0-9]{1,16})$/.test(body.member)) {

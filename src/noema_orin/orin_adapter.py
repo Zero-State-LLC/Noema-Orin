@@ -246,10 +246,36 @@ def reflect(adapter: OrinAdapter, persona: dict, recent: list[dict]) -> object:
               "sociability, thrift. Do not change name or role.")
     user = json.dumps({"persona": {k: persona[k] for k in ("name", "role", "traits", "quirk", "lessons")},
                        "session_actions": recent[-40:]})[:6000]
+    cloud = _cloud_reflect(system, user)
+    if cloud is not None:
+        return cloud
+    if os.environ.get("NOEMA_REFLECT_LOCAL_FALLBACK", "0") != "1":
+        return None  # skip this session's drift rather than load the Orin's model (D-015)
     try:
         return adapter._chat(system, user, num_predict=200)
     except Exception:
         return None
+
+
+def _cloud_reflect(system: str, user: str) -> dict | None:
+    """Reflection on Workers AI via the private memory Worker (D-015). None when unset or unreachable."""
+    url, token = os.environ.get("MEMORY_SYNC_URL"), os.environ.get("MEMORY_SYNC_TOKEN")
+    if not url or not token:
+        return None
+    req = urllib.request.Request(url.rstrip("/") + "/reflect", method="POST",
+                                 data=json.dumps({"system": system, "user": user}).encode(),
+                                 headers={"authorization": f"Bearer {token}", "content-type": "application/json",
+                                          "user-agent": "noema-orin-reflect/1"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            text = str(json.loads(resp.read().decode()).get("text") or "")
+    except Exception:
+        return None
+    try:
+        data = json.loads(text[text.find("{"): text.rfind("}") + 1] or "{}")
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) and data else None
 
 
 def from_env(brief: str) -> OrinAdapter:

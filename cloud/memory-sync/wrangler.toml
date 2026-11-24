@@ -11,3 +11,7 @@ database_id = "e24438a5-adb0-444e-96a9-86492086dd7f"
 
 [observability]
 enabled = true
+
+# Session reflection moved off the Orin (D-015). Workers AI, same bearer token.
+[ai]
+binding = "AI"

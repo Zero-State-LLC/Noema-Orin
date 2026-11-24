@@ -90,3 +90,13 @@ T20 (#36): Worker `noema-orin-memory` (workers.dev, bearer `SYNC_TOKEN`, keychai
 reconnecting agents as `player.system-*`; they were cleared so agents now play as `player.<Name>-<Role>`. The
 system-founder's 13 Reach Compacts are orphaned history; Aphelia founds one fresh org. Agreements are limited to the Orin cohort
 and never trade/access. OpenClaw gateway user unit disabled at operator request.
+
+## D-015: Session reflection runs on Workers AI (2026-11-24, operator-instructed)
+
+Operator: "can you move reflection step to cloudflare?" The end-of-session persona reflection (D-012) now calls
+`POST /reflect` on the private `noema-orin-memory` Worker (same bearer as memory sync, never the game Worker), which runs
+`@cf/google/gemma-4-26b-a4b-it` on Workers AI (`@cf/meta/llama-3.1-8b-instruct` is deprecated). The Orin's local model
+serves only per-turn action choice. Bounded drift is still enforced locally by `persona.apply_reflection`; cloud output is
+untrusted text parsed into a patch. If the endpoint is unset or unreachable, that session's reflection is skipped
+(`NOEMA_REFLECT_LOCAL_FALLBACK=1` restores the local path). Sent: persona name, role, traits, quirk, lessons and the
+session's own action names; no tokens, no world secrets. Verified from the Orin: 18.7 s, valid patch.
