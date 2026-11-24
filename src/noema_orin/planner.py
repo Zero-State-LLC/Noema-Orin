@@ -56,6 +56,17 @@ def has_role_verb(options: list[dict], verbs: set[str]) -> bool:
     return any(o["action"] in verbs for o in options)
 
 
+IDLE = {"LOOK", "INSPECT", "WAIT", "OBSERVE"}
+
+
+def focus(options: list[dict], verbs: set[str]) -> list[dict]:
+    """When the role's own verbs are on offer, hide idle perception so the model acts in role."""
+    if not has_role_verb(options, verbs):
+        return options
+    kept = [o for o in options if o["action"] not in IDLE]
+    return [{**o, "i": i} for i, o in enumerate(kept)]
+
+
 def route(canonical: dict, world_map, verbs: set[str], *, explorer: bool) -> str | None:
     """Exit direction to take, or None to decide in place."""
     loc = canonical.get("location") or {}

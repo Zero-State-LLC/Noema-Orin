@@ -53,10 +53,10 @@ class OrinAdapter:
         return data if isinstance(data, dict) else {}
 
     def _menu(self, context) -> list[dict]:
-        from .planner import refine
+        from .planner import focus, refine
 
         canonical = context.get("canonical") or {}
-        return refine(_options(canonical, self.allowed), canonical, self.cohort_ids)
+        return focus(refine(_options(canonical, self.allowed), canonical, self.cohort_ids), self.verbs)
 
     def _ask(self, context, options):
         canonical = context.get("canonical") or {}

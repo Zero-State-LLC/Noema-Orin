@@ -43,6 +43,12 @@ class PlannerTests(unittest.TestCase):
             self.assertEqual(route(CANON, m, {"REPAIR"}, explorer=False), "north")
             self.assertEqual(route(CANON, m, {"FOCUS"}, explorer=True), "east")
 
+    def test_focus_hides_idle_when_role_verbs_offered(self):
+        from noema_orin.planner import focus
+        opts = [{"action": "LOOK"}, {"action": "REPAIR"}, {"action": "MOVE"}]
+        self.assertEqual([o["action"] for o in focus(opts, {"REPAIR"})], ["REPAIR", "MOVE"])
+        self.assertEqual(len(focus(opts, {"HARVEST"})), 3)
+
     def test_facts_are_observed_only(self):
         self.assertEqual(facts_from(CANON), [("room", "Civic: damaged"), ("offer", "Civic offers HARVEST")])
 
