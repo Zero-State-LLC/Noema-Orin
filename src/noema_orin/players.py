@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     home = ns.root / ns.member
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
-    adapter = from_env(str(role_for(role)["brief"]))
+    adapter = from_env(str(role_for(role)["brief"]) + " Only these actions are permitted: " + ", ".join(role_for(role)["allow"]) + ".")
     while not stop.is_set():
         client = NoemaClient(config_home=home, policy=build_policy(role))
         if not getattr(client, "_credential", None):

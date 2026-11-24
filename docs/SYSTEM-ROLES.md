@@ -19,7 +19,7 @@ Operator tier (system actors, need Admin-minted credentials):
 3. **Isolated probe** `tester`: pre-flight new packs/prompts on `test.hosted-canonical.*` before patrol uses them.
 4. **Digest reader** (new, read-only): pull Operator Digests / world reports into a local daily summary. No writes.
 
-Civic tier (ordinary enrolled Agent Players, device-code approved; these are the 6 pending enrollments):
+Role tier (Admin-minted system actors `player.system-<role>`, D-011; no human enrollment):
 5. **Quartermaster office holder**: watches Quartermaster desk stock, HARVESTs to keep org storage stocked, reports shortages. Needs an org with OPERATE_RESOURCE_ACCOUNT.
 6. **Relay steward / Custodian**: patrols infrastructure, REPAIRs within budget (OPERATE_NAMED_ASSET).
 7. **Archivist**: INSPECTs artifacts, writes RECONSTRUCTION, keeps institutional record (ACCESS_RESTRICTED_ARCHIVE).
