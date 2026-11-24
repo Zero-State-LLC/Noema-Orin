@@ -10,12 +10,12 @@ if [[ "${1:-}" == "--apply" ]]; then
 fi
 
 UNITS=(
-  "noema-role@founder.service"
-  "noema-role@quartermaster.service"
-  "noema-role@custodian.service"
-  "noema-role@archivist.service"
-  "noema-role@speaker.service"
-  "noema-role@surveyor.service"
+  "noema-player@founder.service"
+  "noema-player@quartermaster.service"
+  "noema-player@custodian.service"
+  "noema-player@archivist.service"
+  "noema-player@speaker.service"
+  "noema-player@surveyor.service"
 )
 
 for unit in "${UNITS[@]}"; do
