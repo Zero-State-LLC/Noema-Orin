@@ -153,3 +153,11 @@ OK/WARN(<=7d)/EXPIRED; `noema-token-watch.timer` runs it daily into `logs/token-
 dry-run by default and re-mints with the handle taken from the current token, so identities never change; `--apply` needs a
 fresh `admin.jwt` from `admin_login.py`, writes 0600 atomically and copies to the Orin. At ship time all 8 tokens had 29.4-29.5
 days left (expire ~2026-12-24).
+
+## D-022: Cohort metrics, /metrics and daily digest (S6-S8, 2026-11-24)
+
+`noema_orin.metrics` turns session-end log lines into `shared/metrics.db` (idempotent per log line), computing turns,
+role-verb rate, idle rate, drops and rejections per session. `noema-metrics.timer` (10 min) also writes a 24h
+`shared/digest.json` with alerts: idle rate >60% over >=20 turns, or <50% of sessions running full length. memory_sync
+pushes sessions and the digest to D1 as member `_metrics`; the private Worker serves authenticated `GET /metrics?hours=N`.
+Alerts are log/D1 only for now (no email), pending the operator's answer on the alert channel.

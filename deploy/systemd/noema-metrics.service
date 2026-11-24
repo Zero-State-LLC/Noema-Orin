@@ -1,0 +1,9 @@
+[Unit]
+Description=Collect cohort session metrics and digest (S6/S8)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/noema-players
+ExecStart=%h/noema-players/.venv/bin/python -m noema_orin.metrics --digest --hours 24
+StandardOutput=append:%h/noema-players/logs/metrics.log
+Nice=10

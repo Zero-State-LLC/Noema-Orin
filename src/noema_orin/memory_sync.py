@@ -40,6 +40,18 @@ def collect(root: Path, member: str, marks: dict) -> dict:
         body = json.loads(persona.read_text())
         if body.get("version") != mark.get("persona_version"):
             out["persona"] = body
+    if member == "_metrics":
+        mdb = _ro(root / "shared" / "metrics.db")
+        if mdb is not None:
+            out["sessions"] = [dict(r) for r in mdb.execute(
+                "SELECT * FROM sessions WHERE rowid > ? ORDER BY rowid LIMIT 2000", (mark.get("sess_rowid", 0),))]
+            out["_rowids"] = [r[0] for r in mdb.execute(
+                "SELECT rowid FROM sessions WHERE rowid > ? ORDER BY rowid LIMIT 2000", (mark.get("sess_rowid", 0),))]
+            mdb.close()
+        digest = root / "shared" / "digest.json"
+        if digest.exists() and digest.stat().st_mtime > mark.get("digest_mtime", 0):
+            out["digest"] = json.loads(digest.read_text())
+            out["_digest_mtime"] = digest.stat().st_mtime
     shared = _ro(root / "shared" / "map.db")
     if shared is not None and member == "_map":
         out["rooms"] = [dict(r) for r in shared.execute("SELECT * FROM rooms WHERE last_seen_seq > ?", (mark.get("map_seq", -1),))]
@@ -57,13 +69,18 @@ def advance(marks: dict, payload: dict) -> dict:
         m["rel_rowid"] = max(r["rowid"] for r in payload["relations"])
     if payload.get("persona"):
         m["persona_version"] = payload["persona"].get("version")
+    if payload.get("_rowids"):
+        m["sess_rowid"] = max(payload["_rowids"])
+    if payload.get("_digest_mtime"):
+        m["digest_mtime"] = payload["_digest_mtime"]
     if payload["rooms"] or payload["offers"]:
         m["map_seq"] = max([r["last_seen_seq"] for r in payload["rooms"]] + [o["seen_seq"] for o in payload["offers"]])
     return {**marks, payload["member"]: m}
 
 
 def empty(payload: dict) -> bool:
-    return not any(payload[k] for k in ("facts", "relations", "rooms", "offers")) and not payload.get("persona")
+    return (not any(payload.get(k) for k in ("facts", "relations", "rooms", "offers", "sessions"))
+            and not payload.get("persona") and not payload.get("digest"))
 
 
 def post(url: str, token: str, payload: dict) -> dict:
@@ -84,14 +101,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     state = ns.root / "shared" / "sync-marks.json"
     marks = json.loads(state.read_text()) if state.exists() else {}
-    members = sorted(p.name for p in ns.root.iterdir() if (p / "mind").is_dir()) + ["_map"]
+    members = sorted(p.name for p in ns.root.iterdir() if (p / "mind").is_dir()) + ["_map", "_metrics"]
     sent = {}
     for member in members:
         payload = collect(ns.root, member, marks)
         if empty(payload):
             continue
+        wire = {k: v for k, v in payload.items() if not k.startswith("_")}
         try:
-            result = post(url, token, payload)
+            result = post(url, token, wire)
         except Exception as exc:
             print(json.dumps({"member": member, "status": "RETRY_LATER", "error": type(exc).__name__}))
             continue
