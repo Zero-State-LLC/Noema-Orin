@@ -37,9 +37,14 @@ class PlannerTests(unittest.TestCase):
 
     def test_agreements_only_with_cohort_and_never_trade_or_access(self):
         mk = lambda t, p: {"action": "AGREEMENT_FORM", "target_id": p, "raw": {"agreement_type": t, "player_id": p}}
-        opts = [mk("trade", "player.q"), mk("access", "player.q"), mk("defense", "player.stranger"), mk("defense", "player.q")]
+        opts = [mk("TRADE", "player.q"), mk("access", "player.q"), mk("defense", "player.stranger"), mk("defense", "player.q")]
         out = refine(opts, CANON, {"player.q"})
         self.assertEqual([(o["raw"]["agreement_type"], o["target_id"]) for o in out], [("defense", "player.q")])
+
+    def test_without_home_org_only_founding_is_offered(self):
+        canon = {**CANON, "organizations": []}
+        out = refine([{"action": "LOOK"}, {"action": "ORG_CREATE"}, {"action": "ORG_CREATE"}], canon, set())
+        self.assertEqual([o["action"] for o in out], ["ORG_CREATE"])
 
     def test_route_toward_room_offering_role_verb(self):
         with tempfile.TemporaryDirectory() as d:
