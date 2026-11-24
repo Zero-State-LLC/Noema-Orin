@@ -16,6 +16,8 @@ _LIMIT = 4096
 _GIB = 1024 ** 3
 _BUCKETS = (4, 8, 16, 32, 64, 128)
 _MODEL = "NVIDIA Jetson Orin Nano Developer Kit"
+_MODELS = (_MODEL, "NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super")
+_L4T_TAIL = re.compile(r"# [A-Z_]{1,32}: [A-Za-z0-9_./-]{1,64}|[A-Z_]{1,40}=[A-Za-z0-9_./-]{1,80}")
 _L4T = re.compile(
     r"# R([0-9]{2}) \(release\), REVISION: ([0-9]{1,2})\.([0-9]{1,2})"
     r"(?:, GCID: [0-9]{1,12})?(?:, BOARD: [a-z0-9_-]{1,24})?"
@@ -96,7 +98,11 @@ def _l4t(raw):
     if not _plain_host_text(raw):
         return _UNKNOWN
     # A local text file may end with one LF; never normalize other controls.
-    match = _L4T.fullmatch(raw.removesuffix("\n"))
+    # Real L4T files carry a few strict KEY=value / "# KEY: value" lines after the release line.
+    first, *tail = raw.removesuffix("\n").split("\n")
+    if len(tail) > 8 or not all(_L4T_TAIL.fullmatch(line) for line in tail):
+        return _UNKNOWN
+    match = _L4T.fullmatch(first)
     if not match:
         return _UNKNOWN
     release, major, minor = match.groups()
@@ -129,7 +135,7 @@ def _ram(raw):
 def _family(raw, machine):
     if machine not in ("aarch64", "arm64") or type(raw) is not str:
         return _UNKNOWN
-    return "JETSON_ORIN_NANO_CANDIDATE" if raw in (_MODEL, _MODEL + "\x00") else _UNKNOWN
+    return "JETSON_ORIN_NANO_CANDIDATE" if raw in _MODELS + tuple(m + "\x00" for m in _MODELS) else _UNKNOWN
 
 
 def run_preflight(probe: Optional[HostProbe] = None) -> dict[str, str]:
