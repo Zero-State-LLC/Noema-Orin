@@ -62,7 +62,7 @@ class OfficialLoopbackClient:
         if any(os.environ.get(key) for key in _SELECTORS):
             raise ValueError("inherited NOEMA configuration is forbidden in loopback proof")
         from noema_client import NoemaClient, __version__
-        if __version__ != "0.1.23":
+        if __version__ not in {"0.1.23", "0.1.24"}:
             raise ValueError("unexpected official client version")
         self.server = server
         # Own the directory: accepting even an empty caller path could redirect
