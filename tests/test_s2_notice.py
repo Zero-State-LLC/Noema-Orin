@@ -45,6 +45,14 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual(a._loop_break_move(ctx).target_id, "north")
         self.assertEqual(a._loop_break_move({"canonical": {}}).action, "WAIT")
 
+    def test_loop_break_respects_role_without_move(self):
+        from noema_orin.orin_adapter import OrinAdapter
+        a = OrinAdapter.__new__(OrinAdapter)
+        a.world_map = None
+        a.allowed = frozenset({"LOOK", "INSPECT", "WAIT", "HARVEST"})
+        ctx = {"canonical": {"location": {"exits": [{"direction": "north", "to_room_id": "room.r"}]}}}
+        self.assertEqual(a._loop_break_move(ctx).action, "WAIT")
+
 
 if __name__ == "__main__":
     unittest.main()

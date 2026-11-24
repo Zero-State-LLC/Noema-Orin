@@ -124,6 +124,9 @@ class OrinAdapter:
         from noema_client.types import ActionProposal
 
         loc = (context.get("canonical") or {}).get("location") or {}
+        allowed = getattr(self, "allowed", frozenset())
+        if allowed and "MOVE" not in allowed:  # operator tier may not move (OPERATOR-MAINT-EVOLVE §1)
+            return ActionProposal(action="WAIT")
         exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict) and e.get("direction")}
         if not exits:
             return ActionProposal(action="WAIT")
@@ -181,7 +184,7 @@ class OrinAdapter:
                          and str((o.get("raw") or {}).get("class") or "") in self.builds), None)
             if pick is not None:
                 return _proposal(pick, self.default_args, self.memory)  # build the role's own space (D-018)
-        if self.world_map is None or here or self.dwell < 2:
+        if self.world_map is None or here or self.dwell < 2 or (self.allowed and "MOVE" not in self.allowed):
             self.dwell = self.dwell + 1 if not here else 0
             return None
         direction = route(canonical, self.world_map, goal_verbs, explorer=self.explorer)
