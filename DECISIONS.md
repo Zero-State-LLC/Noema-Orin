@@ -146,3 +146,10 @@ WebSocketGateway reconnect-and-retry never fired and the drop ended the whole se
 `NoemaClient(ws_connect=...)`, an existing client hook) adds 20s pings and re-raises ConnectionClosed as ConnectionError.
 No protocol or client fork. Also: Memory/WorldMap now close their SQLite handles (a ResourceWarning leaked to stderr and
 flaked test_profiles).
+## D-021: Token expiry watchdog and scripted re-mint (S9, 2026-11-24)
+
+`noema_orin.token_watch` reads only `exp`/`player_id` claims from each `~/.config/noema-orin/*.env` and reports
+OK/WARN(<=7d)/EXPIRED; `noema-token-watch.timer` runs it daily into `logs/token-watch.log`. `deploy/remint-tokens.py` is
+dry-run by default and re-mints with the handle taken from the current token, so identities never change; `--apply` needs a
+fresh `admin.jwt` from `admin_login.py`, writes 0600 atomically and copies to the Orin. At ship time all 8 tokens had 29.4-29.5
+days left (expire ~2026-12-24).

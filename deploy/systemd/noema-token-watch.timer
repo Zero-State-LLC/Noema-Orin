@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily controller token expiry check
+
+[Timer]
+OnBootSec=10min
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
