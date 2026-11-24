@@ -27,6 +27,11 @@ class OrinAdapter:
         self.default_args: dict[str, dict] = {}
         self.verbs: set[str] = set()
         self.supply: set[str] = set()
+        from .health import RoleHealthTracker, WorkersAICircuitBreaker
+
+        self.breaker = WorkersAICircuitBreaker()
+        self.health = RoleHealthTracker(role="")
+        self._last_remote = False
         self.builds: tuple = ()
         self.cohort_ids: set[str] = set()
         self.explorer = False
@@ -44,8 +49,22 @@ class OrinAdapter:
         self.system = SYSTEM_PROMPT + " Role: " + brief
 
     def _chat(self, system: str, user: str, num_predict: int = 400) -> dict:
-        """Cloud decision model when configured (D-016), local Ollama only as fallback."""
-        cloud = _cloud_call("/chat", system, user, max_tokens=max(num_predict, 80), timeout=20)
+        """Cloud decision model when configured (D-016), local Ollama only as fallback.
+
+        The circuit breaker skips Workers AI for its cooldown after repeated failures, so a
+        cloud outage costs one 20s timeout per threshold, not one per turn.
+        """
+        import time
+
+        now = time.time()
+        cloud = None
+        if self.breaker.allow_remote(now):
+            cloud = _cloud_call("/chat", system, user, max_tokens=max(num_predict, 80), timeout=20)
+            if cloud is not None:
+                self.breaker.record_success()
+            elif os.environ.get("MEMORY_SYNC_URL") and self.breaker.record_failure(now):
+                print(json.dumps({"workers_ai": "circuit_open", "cooldown_s": self.breaker.cooldown_seconds}), flush=True)
+        self._last_remote = cloud is not None
         if cloud is not None:
             self.stats_cloud = getattr(self, "stats_cloud", 0) + 1
             return cloud
@@ -194,6 +213,11 @@ class OrinAdapter:
             proposal = ActionProposal(action="MOVE" if key[0] != "MOVE" else "LOOK")
         self.recent = (self.recent + [{"action": getattr(proposal, "action", None),
                                        "target": getattr(proposal, "target_id", None)}])[-40:]
+        canonical = (context.get("canonical") or {})
+        self.health.record_turn(verb=str(getattr(proposal, "action", "") or ""),
+                                used_workers_ai=bool(getattr(self, "_last_remote", False)) or source == "planner",
+                                source_sequence=int(canonical.get("sequence") or 0))
+        self._last_remote = False
         print(json.dumps({"turn": sum(self.stats.values()), "source": source,
                           "action": getattr(proposal, "action", None),
                           "memories_used": len(self.memories)}), flush=True)

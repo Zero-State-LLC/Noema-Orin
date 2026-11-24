@@ -40,9 +40,19 @@ class CloudDecideTests(unittest.TestCase):
     ENV = {"MEMORY_SYNC_URL": "https://w", "MEMORY_SYNC_TOKEN": "t"}
 
     def _adapter(self):
+        from noema_orin.health import WorkersAICircuitBreaker
         a = orin_adapter.OrinAdapter.__new__(orin_adapter.OrinAdapter)
         a.model, a.num_ctx, a.timeout, a.base_url = "m", 4096, 1, "http://127.0.0.1:9/v1"
+        a.breaker = WorkersAICircuitBreaker(failure_threshold=2, cooldown_seconds=60)
         return a
+
+    def test_breaker_opens_and_skips_remote(self):
+        a = self._adapter()
+        with mock.patch.dict("os.environ", {**self.ENV, "NOEMA_DECIDE_LOCAL_FALLBACK": "0"}), \
+                mock.patch("urllib.request.urlopen", side_effect=OSError) as u:
+            for _ in range(4):
+                a._chat("s", "u")
+        self.assertEqual(u.call_count, 2)  # two failures open the breaker; later turns skip the network
 
     def test_chat_uses_cloud_route(self):
         body = json.dumps({"text": '{"choice": 1, "why": "role verb"}'}).encode()

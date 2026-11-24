@@ -85,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     adapter.verbs = set(spec["verbs"])
     adapter.supply = set(spec.get("supply") or ())
     adapter.builds = tuple(spec.get("builds") or ())
+    adapter.health.role = f"{persona['name']}-{role}"
     adapter.explorer = role == "surveyor"
     from .memory import Memory, WorldMap
 
@@ -120,7 +121,8 @@ def main(argv: list[str] | None = None) -> int:
         adapter.set_brief(system_brief())
         print(json.dumps({"member": ns.member, "role": role, "actions": len(report),
                           "stop_reason": line.get("stop_reason"), "decisions": dict(adapter.stats),
-                          "persona_version": persona["version"], "memories_recalled": adapter.stats_mem, "reflection": "accepted" if accepted else "rejected"},
+                          "persona_version": persona["version"], "memories_recalled": adapter.stats_mem,
+                          "health": adapter.health.summary(), "reflection": "accepted" if accepted else "rejected"},
                          default=str), flush=True)
         stop.wait(ns.cooldown)
     return 0
