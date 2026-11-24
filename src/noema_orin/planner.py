@@ -8,6 +8,8 @@ current room offers none of the role's own verbs, routes toward a room that does
 SHARED = {"LOOK", "INSPECT", "WAIT", "OBSERVE", "ENTER_WORLD", "LEAVE_WORLD", "MOVE"}
 ORG_VERBS = {"ORG_INVITE", "ORG_MEMBER_ADD", "ORG_OFFICE_CREATE", "ORG_OFFICE_ASSIGN", "ORG_OFFICE_VACATE",
              "ORG_SUCCESSION_RULE", "ORG_SUCCESSION_DESIGNATE", "ORG_OFFICE_ACT"}
+# Trade and access stay out of role agents' reach (DENY_ALWAYS); agreements of those types are filtered too.
+BLOCKED_AGREEMENTS = {"trade", "access"}
 
 
 def home_org(canonical: dict) -> str | None:
@@ -47,6 +49,10 @@ def refine(options: list[dict], canonical: dict, cohort_ids: set[str]) -> list[d
                 continue
             invites.append(opt)
             continue
+        if action == "AGREEMENT_FORM":
+            raw = opt.get("raw") or {}
+            if raw.get("agreement_type") in BLOCKED_AGREEMENTS or (raw.get("player_id") or opt.get("target_id")) not in cohort_ids:
+                continue
         out.append(opt)
     merged = invites + out
     return [{**o, "i": i} for i, o in enumerate(merged)]
