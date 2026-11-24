@@ -28,3 +28,4 @@ Verified this turn: 47 unit tests pass (py3.14, macOS arm64); hosted dry run emi
 1. Operator: decide whether to boot the Orin headless (`systemctl set-default multi-user.target`) to free ~3GB.
 2. T9: wrap noema-llm-agent behind DecisionAdapter against LAN Ollama (qwen2.5:7b on the Mac), LOOK-only validation.
 3. Expose Mac Ollama on LAN (OLLAMA_HOST=0.0.0.0) only when T9 needs it.
+- Headless reboot done 2026-11-23: default.target=multi-user.target, gnome-shell not running, RAM available 1.5Gi -> 4.9Gi (2.4Gi used).
