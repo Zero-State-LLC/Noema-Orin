@@ -176,3 +176,10 @@ Live S2 measurement (102 sessions, all full length) left one top rejection: `MOV
 maintenance patrol). OPERATOR-MAINT-EVOLVE §1 restricts the operator tier to ENTER/LOOK/INSPECT/WAIT/HARVEST, so the role
 allow list correctly omits MOVE. The planner's routing and the loop-breaker now check the allow list and stay in place
 (WAIT) instead of proposing a move the client policy will refuse.
+
+## D-025: Energy-aware routing and waiting (2026-11-24)
+
+The digest flagged the custodian (m03) at 92% idle. Its memory showed a cycle: carry materials, MOVE (2 energy while carrying,
+engine transport.ts), hit `You do not have enough energy`, WAIT, repeat. The engine never re-grants energy over time; WAIT
+burns 1 cargo for +2 energy (cargo.ts applyCargoFuel). So the planner now WAITs instead of routing when it cannot pay the move,
+and the starvation check covers energy as well as attention. Both rules use the engine's own numbers, so no guessing.
