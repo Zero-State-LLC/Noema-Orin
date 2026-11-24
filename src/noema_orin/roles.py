@@ -24,8 +24,10 @@ ROLES: dict[str, dict[str, object]] = {
     },
     "custodian": {
         "verbs": ("REPAIR", "COMMIT.REPAIR", "RESTORE", "UPGRADE", "CONSTRUCT", "REPURPOSE"),
-        "mission": "Keep the Reach standing: go to the worst-condition infrastructure, REPAIR or RESTORE it, and "
-                   "UPGRADE or CONSTRUCT once it is stable. Do not repeat a repair that keeps failing.",
+        # REPAIR/CONSTRUCT consume materials in hold (engine cargo.ts); the custodian gathers its own.
+        "supply": ("HARVEST", "COMMIT.HARVEST"),
+        "mission": "Keep the Reach standing: gather materials, go to the worst-condition infrastructure, REPAIR or "
+                   "RESTORE it, and UPGRADE or CONSTRUCT once it is stable. Do not repeat a repair that keeps failing.",
     },
     "archivist": {
         "verbs": ("RECONSTRUCT", "RECONSTRUCT_PUBLISH", "RECONSTRUCT_SUPERSEDE", "ATTEST"),
@@ -60,6 +62,6 @@ def role_for(name: object) -> dict[str, object]:
         raise ValueError("unknown role")
     spec = dict(ROLES[name])
     base = ("LOOK", "INSPECT", "WAIT", "ENTER_WORLD", "OBSERVE") if spec.get("operator") else BASE
-    spec["allow"] = tuple(base) + tuple(spec["verbs"])
+    spec["allow"] = tuple(base) + tuple(spec["verbs"]) + tuple(spec.get("supply") or ())
     spec["brief"] = spec["mission"]
     return spec
