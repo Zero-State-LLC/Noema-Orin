@@ -52,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
                 " Only these actions are permitted: " + ", ".join(spec["allow"]) + ".")
 
     adapter = from_env(system_brief())
+    adapter.allowed = frozenset(spec["allow"])
+    adapter.default_args = dict(spec.get("args") or {})
     print(json.dumps({"member": ns.member, "role": role, "persona": persona["name"], "persona_version": persona["version"]}), flush=True)
     while not stop.is_set():
         client = NoemaClient(config_home=home, policy=build_policy(role))

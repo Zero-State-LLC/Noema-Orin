@@ -13,6 +13,8 @@ ROLES: dict[str, dict[str, object]] = {
                   "ORG_SUCCESSION_RULE", "ORG_SUCCESSION_DESIGNATE", "AGREEMENT_FORM", "AGREEMENT_TERMINATE", "JOIN"),
         "mission": "Found and govern the Reach Compact: create the organization, open named offices, seat the other "
                    "Orin agents in them, set a succession rule, and form agreements with other institutions.",
+        "args": {"ORG_CREATE": {"name": "Reach Compact",
+                                "charter": "Keep Perihelion Reach standing, supplied and remembered"}},
     },
     "quartermaster": {
         "verbs": ("HARVEST", "COMMIT.HARVEST", "SHARE", "VEST"),

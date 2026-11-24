@@ -65,3 +65,15 @@ class RoleVerbTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OptionMenuTests(unittest.TestCase):
+    def test_menu_filters_to_role_and_available(self):
+        from noema_orin.orin_adapter import _options
+        canonical = {"affordances": [
+            {"action": "TRADE", "available": True}, {"action": "REPAIR", "available": True, "target_id": "entity.relay-7"},
+            {"action": "HARVEST", "available": False}, {"action": "MOVE", "dest": "room.archive", "available": True}]}
+        opts = _options(canonical, frozenset(role_for("custodian")["allow"]))
+        self.assertEqual([o["action"] for o in opts], ["REPAIR", "MOVE"])
+        self.assertEqual(opts[0]["target_id"], "entity.relay-7")
+        self.assertEqual(opts[1]["arguments"], {"dest": "room.archive"})
