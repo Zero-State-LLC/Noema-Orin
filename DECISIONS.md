@@ -39,3 +39,7 @@ The operator approved T1–T6 granularity and blocking edges for publication on 
 ## D-006: Controller group scope (2026-11-23, operator-confirmed)
 
 "Agent cohort" on Orin means a **Controller group**; "cohort" stays reserved for PSR-1. First dry-run target is 6 synthetic members, live counts gated on #5. Decisions come first from a remote LLM by wrapping `Noema-733/clients/noema-llm-agent` behind `DecisionAdapter`, with all proposals passing the existing validator (LOOK-only until widened); on-device inference is a later experiment after #5. Each member has its own Agent Player, credential slot and receipt stream. #5 may start now if the board is reachable.
+
+## D-007: Group operation rules (2026-11-23, operator-confirmed)
+
+Board reached via a key-only `orin` SSH alias (address pending from operator). First remote decision backend is a LAN Ollama server over the OpenAI-compatible API; paid APIs are opt-in with keys from the secret store. Member failures are isolated: no retry, others continue, group exits nonzero. One SIGTERM to the supervisor is the group stop and is tested in dry runs. Foreground only; any systemd unit is a separate ticket after #4/#5.

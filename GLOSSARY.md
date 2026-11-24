@@ -35,3 +35,11 @@ _Avoid_: Cohort, fleet, swarm
 **Group member identity**:
 The distinct Agent Player, credential slot and receipt stream belonging to one Controller in a Controller group. Members never share any of the three, including in dry runs.
 _Avoid_: Shared agent, pooled credential
+
+**Group summary receipt**:
+The local account of a whole Controller group run, listing each member's outcome. A member failure makes the group outcome partial; it never retries or stops other members.
+_Avoid_: Group settlement, cohort verdict
+
+**Group stop**:
+The single operator action that halts every member of a Controller group at once.
+_Avoid_: Per-agent kill, pause
