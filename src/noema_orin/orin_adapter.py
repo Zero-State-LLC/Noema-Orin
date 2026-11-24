@@ -42,6 +42,13 @@ class OrinAdapter:
         self.system = SYSTEM_PROMPT + " Role: " + brief
 
     def _chat(self, system: str, user: str, num_predict: int = 400) -> dict:
+        """Cloud decision model when configured (D-016), local Ollama only as fallback."""
+        cloud = _cloud_call("/chat", system, user, max_tokens=max(num_predict, 80), timeout=20)
+        if cloud is not None:
+            self.stats_cloud = getattr(self, "stats_cloud", 0) + 1
+            return cloud
+        if os.environ.get("NOEMA_DECIDE_LOCAL_FALLBACK", "1") != "1":
+            return {}
         payload = {"model": self.model, "stream": False, "format": "json",
                    "options": {"temperature": 0.4, "num_ctx": self.num_ctx, "num_predict": num_predict},
                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
@@ -259,15 +266,23 @@ def reflect(adapter: OrinAdapter, persona: dict, recent: list[dict]) -> object:
 
 def _cloud_reflect(system: str, user: str) -> dict | None:
     """Reflection on Workers AI via the private memory Worker (D-015). None when unset or unreachable."""
+    return _cloud_call("/reflect", system, user, timeout=60)
+
+
+def _cloud_call(path: str, system: str, user: str, *, max_tokens: int | None = None, timeout: float = 60) -> dict | None:
+    """POST to the private Worker; parse the first JSON object from the model text."""
     url, token = os.environ.get("MEMORY_SYNC_URL"), os.environ.get("MEMORY_SYNC_TOKEN")
     if not url or not token:
         return None
-    req = urllib.request.Request(url.rstrip("/") + "/reflect", method="POST",
-                                 data=json.dumps({"system": system, "user": user}).encode(),
+    body = {"system": system, "user": user}
+    if max_tokens:
+        body["max_tokens"] = max_tokens
+    req = urllib.request.Request(url.rstrip("/") + path, method="POST",
+                                 data=json.dumps(body).encode(),
                                  headers={"authorization": f"Bearer {token}", "content-type": "application/json",
-                                          "user-agent": "noema-orin-reflect/1"})
+                                          "user-agent": "noema-orin/1"})
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             text = str(json.loads(resp.read().decode()).get("text") or "")
     except Exception:
         return None

@@ -34,19 +34,23 @@ export default {
       return Response.json(out);
     }
 
-    if (request.method === "POST" && url.pathname === "/reflect") {
+    if (request.method === "POST" && (url.pathname === "/reflect" || url.pathname === "/chat")) {
       const body = await request.json().catch(() => null);
       if (!body || typeof body.user !== "string" || typeof body.system !== "string") {
         return new Response("bad request", { status: 400 });
       }
-      const model = env.REFLECT_MODEL || "@cf/google/gemma-4-26b-a4b-it";
+      // /reflect: end-of-session persona drift. /chat: per-turn action choice (D-016), short and fast.
+      const decide = url.pathname === "/chat";
+      const model = decide ? env.DECIDE_MODEL || "@cf/meta/llama-4-scout-17b-16e-instruct"
+        : env.REFLECT_MODEL || "@cf/google/gemma-4-26b-a4b-it";
+      const maxTokens = Math.min(Math.max(Number(body.max_tokens) || (decide ? 80 : 1024), 16), 1024);
       const out = await env.AI.run(model, {
         messages: [
-          { role: "system", content: body.system.slice(0, 2000) },
+          { role: "system", content: body.system.slice(0, 4000) },
           { role: "user", content: body.user.slice(0, 6000) },
         ],
-        max_tokens: 1024,
-        temperature: 0.4,
+        max_tokens: maxTokens,
+        temperature: decide ? 0.3 : 0.4,
       });
       const text =
         typeof out?.response === "string" && out.response ? out.response
