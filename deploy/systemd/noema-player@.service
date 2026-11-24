@@ -1,0 +1,16 @@
+[Unit]
+Description=NOEMA Orin civic Player %i
+After=network-online.target ollama.service
+PartOf=noema-players.target
+
+[Service]
+WorkingDirectory=%h/noema-players
+ExecStart=%h/noema-players/.venv/bin/python -m noema_orin.players --member %i
+Restart=on-failure
+RestartPreventExitStatus=3
+RestartSec=30
+KillSignal=SIGTERM
+TimeoutStopSec=60
+
+[Install]
+WantedBy=noema-players.target

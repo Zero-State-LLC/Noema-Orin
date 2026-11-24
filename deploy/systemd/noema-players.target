@@ -1,0 +1,5 @@
+[Unit]
+Description=All NOEMA Orin civic Players (group stop: systemctl --user stop noema-players.target)
+
+[Install]
+WantedBy=default.target
