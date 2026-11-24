@@ -28,10 +28,22 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/stats") {
       const out = {};
-      for (const t of ["facts", "relations", "rooms", "exits", "offers", "personas"]) {
+      for (const t of ["facts", "relations", "rooms", "exits", "offers", "personas", "sessions", "digests"]) {
         out[t] = (await env.DB.prepare(`SELECT count(*) AS n FROM ${t}`).first()).n;
       }
       return Response.json(out);
+    }
+
+    if (request.method === "GET" && url.pathname === "/metrics") {
+      const hours = Math.min(Math.max(Number(url.searchParams.get("hours")) || 24, 1), 24 * 14);
+      const since = Date.now() / 1000 - hours * 3600;
+      const { results } = await env.DB.prepare(
+        "SELECT member, role, count(*) AS sessions, sum(stop_reason = 'duration_elapsed') AS full_sessions, " +
+        "sum(turns) AS turns, sum(role_actions) AS role_actions, sum(idle_actions) AS idle_actions, sum(drops) AS drops " +
+        "FROM sessions WHERE ts >= ? GROUP BY member ORDER BY member",
+      ).bind(since).all();
+      const digest = await env.DB.prepare("SELECT day, body FROM digests ORDER BY day DESC LIMIT 1").first();
+      return Response.json({ window_hours: hours, members: results, latest_digest: digest ? JSON.parse(digest.body) : null });
     }
 
     if (request.method === "POST" && (url.pathname === "/reflect" || url.pathname === "/chat")) {
@@ -60,7 +72,7 @@ export default {
 
     if (request.method !== "POST" || url.pathname !== "/sync") return new Response("not found", { status: 404 });
     const body = await request.json().catch(() => null);
-    if (!body || typeof body.member !== "string" || !/^(_map|[a-z0-9]{1,16})$/.test(body.member)) {
+    if (!body || typeof body.member !== "string" || !/^(_map|_metrics|[a-z0-9]{1,16})$/.test(body.member)) {
       return new Response("bad request", { status: 400 });
     }
     const m = body.member;
@@ -85,6 +97,17 @@ export default {
     for (const o of rows(body.offers)) {
       stmts.push(env.DB.prepare("INSERT INTO offers VALUES (?,?,?) ON CONFLICT(room_id,action) DO UPDATE SET " +
         "seen_seq=max(seen_seq, excluded.seen_seq)").bind(o.room_id, o.action, o.seen_seq ?? 0));
+    }
+    for (const r of rows(body.sessions)) {
+      stmts.push(env.DB.prepare("INSERT OR IGNORE INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(
+        String(r.src), r.line, r.ts ?? null, r.member ?? null, r.role ?? null, r.actions ?? null, r.stop_reason ?? null,
+        r.stop_detail ?? null, r.role_actions ?? 0, r.idle_actions ?? 0, r.turns ?? 0, r.drops ?? 0,
+        String(r.rejections || "{}").slice(0, 2000)));
+    }
+    if (body.digest && typeof body.digest === "object") {
+      stmts.push(env.DB.prepare("INSERT INTO digests VALUES (?,?,?) ON CONFLICT(day) DO UPDATE SET body=excluded.body, " +
+        "updated_at=excluded.updated_at").bind(new Date().toISOString().slice(0, 10), JSON.stringify(body.digest).slice(0, 20000),
+        new Date().toISOString()));
     }
     if (body.persona && typeof body.persona === "object") {
       stmts.push(env.DB.prepare("INSERT INTO personas VALUES (?,?,?,?) ON CONFLICT(member) DO UPDATE SET version=excluded.version, " +

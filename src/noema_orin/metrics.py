@@ -1,0 +1,117 @@
+"""Cohort metrics from session-end log lines (slices S6/S8). Local SQLite, mirrored to D1 by memory_sync.
+
+Each line players.py prints at session end becomes one `sessions` row. Turn lines give the
+role-verb rate. Re-running is idempotent: rows are keyed by (log file, line number).
+"""
+
+import argparse
+import json
+import os
+import sqlite3
+import sys
+import time
+from pathlib import Path
+
+from .roles import ROLES
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS sessions(src TEXT, line INTEGER, ts REAL, member TEXT, role TEXT, actions INTEGER,
+  stop_reason TEXT, stop_detail TEXT, role_actions INTEGER, idle_actions INTEGER, turns INTEGER,
+  drops INTEGER, rejections TEXT, PRIMARY KEY(src, line));
+CREATE TABLE IF NOT EXISTS marks(src TEXT PRIMARY KEY, offset INTEGER);
+"""
+IDLE = {"LOOK", "WAIT", "INSPECT", "MOVE"}
+
+
+def _role_verbs(role: str) -> set[str]:
+    spec = ROLES.get(role) or {}
+    return set(spec.get("verbs") or ()) | {"BUILD", "ORG_INVITE"}
+
+
+def open_db(root: Path) -> sqlite3.Connection:
+    path = root / "shared" / "metrics.db"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(path, timeout=10)
+    db.executescript(_SCHEMA)
+    return db
+
+
+def collect(root: Path, db: sqlite3.Connection) -> int:
+    """Ingest new lines from every agent log. Returns sessions added."""
+    added = 0
+    for log in sorted((root / "logs").glob("noema-*.log")):
+        src = log.name
+        row = db.execute("SELECT offset FROM marks WHERE src=?", (src,)).fetchone()
+        start = row[0] if row else 0
+        lines = log.read_text(errors="replace").splitlines()
+        if start > len(lines):  # log rotated or truncated
+            start = 0
+        role, turns, role_n, idle_n, drops = None, 0, 0, 0, 0
+        for n, raw in enumerate(lines[start:], start=start):
+            if not raw.startswith("{"):
+                continue
+            try:
+                d = json.loads(raw)
+            except ValueError:
+                continue
+            if "turn" in d and "action" in d:
+                turns += 1
+                act = str(d.get("action") or "").upper()
+                if role and act in _role_verbs(role):
+                    role_n += 1
+                elif act in IDLE:
+                    idle_n += 1
+            elif "transport_drop" in d:
+                drops += 1
+            elif "role" in d and "stop_reason" not in d:
+                role = d.get("role")
+            elif "stop_reason" in d:
+                role = d.get("role") or role
+                db.execute("INSERT OR IGNORE INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                           (src, n, time.time(), d.get("member"), role, d.get("actions"), d.get("stop_reason"),
+                            d.get("stop_detail"), role_n, idle_n, turns, drops,
+                            json.dumps((d.get("rejections") or {}).get("by_verb_code") or {})))
+                added += 1
+                turns, role_n, idle_n, drops = 0, 0, 0, 0
+        db.execute("INSERT INTO marks VALUES (?,?) ON CONFLICT(src) DO UPDATE SET offset=excluded.offset", (src, len(lines)))
+    db.commit()
+    return added
+
+
+def digest(db: sqlite3.Connection, hours: float = 24) -> dict:
+    since = time.time() - hours * 3600
+    rows = db.execute("SELECT member, role, count(*), sum(stop_reason='duration_elapsed'), sum(turns), sum(role_actions), "
+                      "sum(idle_actions), sum(drops) FROM sessions WHERE ts >= ? GROUP BY member ORDER BY member", (since,)).fetchall()
+    out = {}
+    for member, role, n, full, turns, role_n, idle_n, drops in rows:
+        turns = turns or 0
+        out[member] = {"role": role, "sessions": n, "full_sessions": full or 0, "turns": turns,
+                       "role_action_rate": round((role_n or 0) / turns, 3) if turns else 0.0,
+                       "idle_rate": round((idle_n or 0) / turns, 3) if turns else 0.0, "drops": drops or 0}
+    alerts = [f"{m}: idle_rate {v['idle_rate']}" for m, v in out.items() if v["turns"] >= 20 and v["idle_rate"] > 0.6]
+    alerts += [f"{m}: {v['sessions'] - v['full_sessions']}/{v['sessions']} sessions ended early" for m, v in out.items()
+               if v["sessions"] >= 4 and v["full_sessions"] / v["sessions"] < 0.5]
+    return {"window_hours": hours, "members": out, "alerts": alerts}
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--root", type=Path, default=Path.home() / "noema-players")
+    ap.add_argument("--digest", action="store_true", help="print a 24h digest after collecting")
+    ap.add_argument("--hours", type=float, default=24)
+    ns = ap.parse_args(argv)
+    db = open_db(ns.root)
+    added = collect(ns.root, db)
+    if ns.digest:
+        d = digest(db, ns.hours)
+        print(json.dumps({"digest": d}, sort_keys=True))
+        os.makedirs(ns.root / "shared", exist_ok=True)
+        (ns.root / "shared" / "digest.json").write_text(json.dumps(d, indent=1, sort_keys=True))
+    else:
+        print(json.dumps({"metrics_added": added}))
+    db.close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
