@@ -59,3 +59,13 @@ Admin session obtained by magic link to locked mailbox `boof@agentmail.to`, read
 ## D-011: Role agents are Admin-minted system actors (2026-11-23, operator-instructed)
 
 Operator: "for the system agents, since they will be exclusively handled by the orin, we can bypass the human enrollment step." The six role agents are re-scoped from device-enrolled live agents (D-009) to **system actors** with reserved ids `player.system-{founder,quartermaster,custodian,archivist,speaker,spare}`, minted by Admin `/v1/admin/controller-token` (30-day TTL) and loaded via `EnvironmentFile=~/.config/noema-orin/mNN.env` (0600). Server classifies `system-*` as system actors (`ops.ts` isReservedSystemActorId), so they are excluded from the live-agent census and never count toward PSR-1. Pending device-code enrollments were cancelled. Token rotation requires a fresh Admin session; run `~/.config/noema-orin/admin_login.py` then re-mint before day 30.
+
+## D-012: Themed personas, role-unique verbs, Surveyor (2026-11-23, operator-instructed)
+
+Operator: personas need names fitting the game's theme; the game should show name and role; roles may have verbs
+unique to their function; spare needs a unique role. Each role agent now has a Perihelion-Reach-themed persona and an
+Admin-minted handle `<Name>-<Role>` (Aphelia-Founder, Tallow-Quartermaster, Rivet-Custodian, Vellum-Archivist,
+Cantor-Speaker, Perigee-Surveyor). The earlier `system-*` tokens (D-011) are unused and expire on their own.
+Admin issuance keeps them system actors (`ops.ts` actorKindFromPrincipal: `issued_by=admin`). Spare is replaced by
+Surveyor. Role verb sets are drawn only from existing Gateway commands; no new verbs. Persona state is private Controller-local
+cognition and never goes on the wire.
