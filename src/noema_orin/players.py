@@ -99,7 +99,19 @@ def main(argv: list[str] | None = None) -> int:
         if not getattr(client, "_credential", None):
             print(json.dumps({"member": ns.member, "role": role, "status": "NO_CREDENTIAL"}), flush=True)
             return 3
-        report = client.play(duration=ns.session_seconds, cooldown=cooldown, adapter=adapter)
+        try:
+            report = client.play(duration=ns.session_seconds, cooldown=cooldown, adapter=adapter)
+        except (ConnectionError, EOFError, OSError) as exc:
+            print(json.dumps({"member": ns.member, "transport_drop": type(exc).__name__, "retry_in_s": cooldown}), flush=True)
+            client.close() if hasattr(client, "close") else None
+            stop.wait(cooldown)
+            continue
+        except Exception as exc:  # websockets.ConnectionClosed* are not OSError subclasses
+            if "ConnectionClosed" not in type(exc).__name__:
+                raise
+            print(json.dumps({"member": ns.member, "transport_drop": type(exc).__name__, "retry_in_s": cooldown}), flush=True)
+            stop.wait(cooldown)
+            continue
         line = report.as_dict()
         patch = reflect(adapter, persona, adapter.recent)
         persona, accepted = apply_reflection(mind, persona, patch)
