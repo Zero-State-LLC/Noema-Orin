@@ -1,0 +1,18 @@
+[Unit]
+Description=NOEMA maintenance patrol (system actor player.reach-maint3)
+After=network-online.target ollama.service
+PartOf=noema-players.target
+
+[Service]
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=append:%h/noema-players/logs/%N.log
+StandardError=append:%h/noema-players/logs/%N.log
+WorkingDirectory=%h/noema-players
+EnvironmentFile=%h/.config/noema-orin/maint.env
+ExecStart=%h/noema-players/.venv/bin/python -m noema_orin.players --member maint --session-seconds 1800 --cooldown 30
+Restart=on-failure
+RestartPreventExitStatus=3
+RestartSec=60
+
+[Install]
+WantedBy=noema-players.target

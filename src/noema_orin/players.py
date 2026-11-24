@@ -35,14 +35,14 @@ def main(argv: list[str] | None = None) -> int:
     roles = dict(line.split("\t") for line in (ns.root / "roles.tsv").read_text().split("\n") if "\t" in line)
     role = roles.get(ns.member)
     role_for(role)
-    from noema_client.adapters.openai_compatible import OpenAICompatibleAdapter
     from noema_client.client import NoemaClient
+
+    from .orin_adapter import from_env
 
     home = ns.root / ns.member
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
-    adapter = OpenAICompatibleAdapter(base_url=os.environ.get("NOEMA_LLM_BASE", "http://127.0.0.1:11434/v1"),
-                                      model=os.environ.get("NOEMA_LLM_MODEL", "qwen2.5:3b"))
+    adapter = from_env(str(role_for(role)["brief"]))
     while not stop.is_set():
         client = NoemaClient(config_home=home, policy=build_policy(role))
         if not getattr(client, "_credential", None):
@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
         report = client.play(duration=ns.session_seconds, cooldown=ns.cooldown, adapter=adapter)
         line = report.as_dict()
         print(json.dumps({"member": ns.member, "role": role, "actions": len(report),
-                          "stop_reason": line.get("stop_reason")}, default=str), flush=True)
+                          "stop_reason": line.get("stop_reason"), "decisions": dict(adapter.stats)}, default=str), flush=True)
         stop.wait(ns.cooldown)
     return 0
 

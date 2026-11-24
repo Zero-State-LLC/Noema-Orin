@@ -1,0 +1,10 @@
+[Unit]
+Description=Pulse NOEMA supervisor every 5 minutes
+PartOf=noema-players.target
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=noema-players.target timers.target
