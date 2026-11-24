@@ -1,0 +1,13 @@
+name = "noema-orin-memory"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+# Private Controller-local memory backup (D-013, #36). Never bound to the game Worker.
+[[d1_databases]]
+binding = "DB"
+database_name = "noema-orin-memory"
+database_id = "e24438a5-adb0-444e-96a9-86492086dd7f"
+
+[observability]
+enabled = true

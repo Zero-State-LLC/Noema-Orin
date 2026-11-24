@@ -1,0 +1,10 @@
+[Unit]
+Description=Replicate Orin agent memory to private D1 (D-013)
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/noema-orin/memory-sync.env
+WorkingDirectory=%h/noema-players
+ExecStart=%h/noema-players/.venv/bin/python -m noema_orin.memory_sync
+Nice=10
