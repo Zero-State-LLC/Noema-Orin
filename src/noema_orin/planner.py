@@ -51,10 +51,13 @@ def refine(options: list[dict], canonical: dict, cohort_ids: set[str]) -> list[d
             continue
         if action == "AGREEMENT_FORM":
             raw = opt.get("raw") or {}
-            if raw.get("agreement_type") in BLOCKED_AGREEMENTS or (raw.get("player_id") or opt.get("target_id")) not in cohort_ids:
+            if str(raw.get("agreement_type") or "").lower() in BLOCKED_AGREEMENTS or (raw.get("player_id") or opt.get("target_id")) not in cohort_ids:
                 continue
         out.append(opt)
     merged = invites + out
+    if not home and any(o["action"] == "ORG_CREATE" for o in merged):
+        # Founding comes first: until a home org exists, the only org act is creating it.
+        merged = [o for o in merged if o["action"] == "ORG_CREATE"][:1]
     return [{**o, "i": i} for i, o in enumerate(merged)]
 
 
