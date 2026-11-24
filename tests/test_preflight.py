@@ -352,3 +352,28 @@ class PreflightTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RealBoardObservationTests(unittest.TestCase):
+    """Exact files observed on an Orin Nano Super (JetPack R39.2.2) on 2026-11-23."""
+
+    REAL_L4T = ("# R39 (release), REVISION: 2.2, GCID: 48648412, BOARD: generic, EABI: aarch64, "
+                "DATE: Fri Nov 13 07:17:33 AM UTC 2026\n# KERNEL_VARIANT: oot\n"
+                "TARGET_USERSPACE_LIB_DIR=nvidia\nTARGET_USERSPACE_LIB_DIR_PATH=usr/lib/aarch64-linux-gnu/nvidia\n")
+    SUPER_MODEL = "NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super\x00"
+
+    def test_multiline_release_file_reports_first_line_release(self):
+        record = run_preflight(FakeProbe({"/etc/nv_tegra_release": self.REAL_L4T}))
+        self.assertEqual(record["l4t_release"], "R39.2.2")
+
+    def test_super_reference_label_is_candidate(self):
+        record = run_preflight(FakeProbe({"/proc/device-tree/model": self.SUPER_MODEL}))
+        self.assertEqual(record["device_family"], "JETSON_ORIN_NANO_CANDIDATE")
+
+    def test_forged_tail_on_super_label_is_not_candidate(self):
+        record = run_preflight(FakeProbe({"/proc/device-tree/model": self.SUPER_MODEL + SECRET}))
+        self.assertEqual(record["device_family"], "NOT_COMPUTABLE")
+
+    def test_poisoned_trailing_line_still_fails_closed(self):
+        record = run_preflight(FakeProbe({"/etc/nv_tegra_release": self.REAL_L4T + "X\x07\n"}))
+        self.assertEqual(record["l4t_release"], "NOT_COMPUTABLE")
