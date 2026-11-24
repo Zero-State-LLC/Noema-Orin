@@ -39,7 +39,26 @@ def _open(path: Path, schema: str) -> sqlite3.Connection:
     return db
 
 
-class Memory:
+class _Closable:
+    db: sqlite3.Connection
+
+    def close(self) -> None:
+        try:
+            self.db.close()
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        self.close()
+
+
+class Memory(_Closable):
     def __init__(self, mind: Path) -> None:
         self.db = _open(mind / "memory.db", _SCHEMA)
 
@@ -82,7 +101,7 @@ class Memory:
         return {"supporting": pos, "opposing": neg, "contested": bool(pos and neg)}
 
 
-class WorldMap:
+class WorldMap(_Closable):
     """Shared across Orin agents. Records only what was observed."""
 
     def __init__(self, root: Path) -> None:
