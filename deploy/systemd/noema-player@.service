@@ -1,9 +1,10 @@
 [Unit]
-Description=NOEMA Orin civic Player %i
+Description=NOEMA Orin system role agent %i (Admin-minted, reserved system- id)
 After=network-online.target ollama.service
 PartOf=noema-players.target
 
 [Service]
+EnvironmentFile=%h/.config/noema-orin/%i.env
 Environment=PYTHONUNBUFFERED=1
 StandardOutput=append:%h/noema-players/logs/%N.log
 StandardError=append:%h/noema-players/logs/%N.log
