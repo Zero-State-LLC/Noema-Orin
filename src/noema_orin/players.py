@@ -37,12 +37,24 @@ def main(argv: list[str] | None = None) -> int:
     role_for(role)
     from noema_client.client import NoemaClient
 
-    from .orin_adapter import from_env
+    from .orin_adapter import from_env, reflect
+    from .persona import apply_reflection, load_or_seed, prompt_block
 
     home = ns.root / ns.member
+    mind = home / "mind"
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
-    adapter = from_env(str(role_for(role)["brief"]) + " Only these actions are permitted: " + ", ".join(role_for(role)["allow"]) + ".")
+    spec = role_for(role)
+    persona = load_or_seed(mind, role)
+
+    def system_brief() -> str:
+        return (prompt_block(persona) + " Mission: " + str(spec["mission"]) +
+                " Only these actions are permitted: " + ", ".join(spec["allow"]) + ".")
+
+    adapter = from_env(system_brief())
+    adapter.allowed = frozenset(spec["allow"])
+    adapter.default_args = dict(spec.get("args") or {})
+    print(json.dumps({"member": ns.member, "role": role, "persona": persona["name"], "persona_version": persona["version"]}), flush=True)
     while not stop.is_set():
         client = NoemaClient(config_home=home, policy=build_policy(role))
         if not getattr(client, "_credential", None):
@@ -50,8 +62,13 @@ def main(argv: list[str] | None = None) -> int:
             return 3
         report = client.play(duration=ns.session_seconds, cooldown=ns.cooldown, adapter=adapter)
         line = report.as_dict()
+        patch = reflect(adapter, persona, adapter.recent)
+        persona, accepted = apply_reflection(mind, persona, patch)
+        adapter.set_brief(system_brief())
         print(json.dumps({"member": ns.member, "role": role, "actions": len(report),
-                          "stop_reason": line.get("stop_reason"), "decisions": dict(adapter.stats)}, default=str), flush=True)
+                          "stop_reason": line.get("stop_reason"), "decisions": dict(adapter.stats),
+                          "persona_version": persona["version"], "reflection": "accepted" if accepted else "rejected"},
+                         default=str), flush=True)
         stop.wait(ns.cooldown)
     return 0
 
