@@ -78,6 +78,7 @@ class OptionMenuTests(unittest.TestCase):
         self.assertEqual(opts[0]["target_id"], "entity.relay-7")
         self.assertEqual(opts[1]["raw"]["dest"], "room.archive")
 
+    @unittest.skipUnless(__import__("importlib").util.find_spec("noema_client"), "needs noema-client")
     def test_invite_maps_to_server_operation_with_client_arguments(self):
         from noema_orin.orin_adapter import _options, _proposal
         aff = {"action": "ORG_INVITE", "operation": "ORG_MEMBER_ADD", "target_id": "org.a", "target_label": "q",
