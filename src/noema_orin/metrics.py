@@ -47,6 +47,7 @@ def collect(root: Path, db: sqlite3.Connection) -> int:
         if start > len(lines):  # log rotated or truncated
             start = 0
         role, turns, role_n, idle_n, drops = None, 0, 0, 0, 0
+        done = start  # resume after the last complete session so partial sessions are re-read whole
         for n, raw in enumerate(lines[start:], start=start):
             if not raw.startswith("{"):
                 continue
@@ -72,8 +73,9 @@ def collect(root: Path, db: sqlite3.Connection) -> int:
                             d.get("stop_detail"), role_n, idle_n, turns, drops,
                             json.dumps((d.get("rejections") or {}).get("by_verb_code") or {})))
                 added += 1
+                done = n + 1
                 turns, role_n, idle_n, drops = 0, 0, 0, 0
-        db.execute("INSERT INTO marks VALUES (?,?) ON CONFLICT(src) DO UPDATE SET offset=excluded.offset", (src, len(lines)))
+        db.execute("INSERT INTO marks VALUES (?,?) ON CONFLICT(src) DO UPDATE SET offset=excluded.offset", (src, done))
     db.commit()
     return added
 

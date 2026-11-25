@@ -77,10 +77,11 @@ class CatalogTests(unittest.TestCase):
             ("ORG_OFFICE_ASSIGN", STEWARD["office_id"], "Rivet-Custodian"),
             ("ORG_OFFICE_RETIRE", DUP["office_id"], None),
             ("ORG_SUCCESSION_DESIGNATE", NOTICE["office_id"], "player.Aphelia-Founder"),
-            ("ORG_SUCCESSION_RULE", NOTICE["office_id"], None),
             ("LOOK", None, None)])
         designated = canon([{**NOTICE, "successor_handle": "Aphelia-Founder"}])
         self.assertEqual(refine_offices(opts[5:8], designated, HOME, HANDLES, "Aphelia-Founder"), [])
+        no_heir = refine_offices([opt("ORG_SUCCESSION_RULE", NOTICE["office_id"])], c, HOME, HANDLES, "Aphelia-Founder")
+        self.assertEqual([o["action"] for o in no_heir], ["ORG_SUCCESSION_RULE"])
 
     def test_role_handles_from_cohort(self):
         with tempfile.TemporaryDirectory() as d:

@@ -194,3 +194,11 @@ advertises a Notice create, but its parser takes any profile, so the founder's c
 missing catalog office. Seating offers only the catalog's intended holder. The founder gains ORG_OFFICE_RETIRE, used only on
 duplicates (keep the occupied one, else the oldest). Succession designates a cohort heir other than the holder, and the
 rule is published only while no successor is named. Role handles come from roles.tsv + shared/cohort.tsv.
+
+## D-027: Succession stops flip-flopping; metrics count whole sessions (2026-11-25)
+
+The founder alternated ORG_SUCCESSION_RULE and ORG_SUCCESSION_DESIGNATE every turn: the engine's RULE handler unsets
+`successors` (world-actions.ts), so each undid the other. The rule is now offered only when no cohort heir can be
+designated for that office. Separately, `metrics.collect` advanced its log offset to end of file mid-session, so a session
+split across two 10-minute runs lost its earlier turns (m01 sessions read 0-5 turns against ~30 real). The offset now
+stops after the last complete session; metrics.db was rebuilt from the logs.

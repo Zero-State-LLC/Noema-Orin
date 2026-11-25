@@ -100,7 +100,11 @@ def refine_offices(options: list[dict], canonical: dict, home: str | None, role_
                     or heir not in set(role_handles.values()) or heir == office.get("holder_handle")):
                 continue
         elif action == "ORG_SUCCESSION_RULE":
-            if office is None or office.get("successor_handle") or oid in dupes:
+            # Engine: publishing a rule unsets `successors`, so RULE and DESIGNATE undo each other.
+            # Prefer naming a cohort heir; publish member_order only when no heir can be designated here.
+            heirs = {str((o.get("raw") or {}).get("player_id") or "").replace("player.", "", 1) for o in options
+                     if o["action"] == "ORG_SUCCESSION_DESIGNATE" and o.get("target_id") == oid}
+            if office is None or office.get("successor_handle") or oid in dupes or heirs & set(role_handles.values()):
                 continue
         out.append(opt)
     return [{**o, "i": i} for i, o in enumerate(out)]
