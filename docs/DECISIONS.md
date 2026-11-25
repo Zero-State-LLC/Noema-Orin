@@ -138,3 +138,9 @@ Each agent writes the role work it sees in its own room to a map.db `work` table
 - **Routing (S10).** `route(me=...)` goes first to the nearest room where the agent itself saw role work, then falls back to `where_offered`. The custodian now heads for its own REPAIR/RESTORE targets rather than any room that once listed a matching verb.
 - **Need (S8).** The custodian counts as needing cargo whenever its own work is blocked on materials, not only when it has fewer than 6 aboard. Live example: RESTORE of the archive annex needs 4 storage and was "no materials in hold" while it carried 2. The quartermaster's station step (D-054) uses the same signal.
 All rows come from each agent's own observations. Nothing is inferred about other Players.
+
+## D-058 Cost alarm, map compaction, single-unit deploys (S15, S17, S18)
+
+- **Cost alarm (S15).** The metrics timer stores per-session deltas of `health.workers_ai_calls` and `ollama_fallbacks` (the counters are cumulative per process) in a `cost` table. The digest adds one alert line when calls in the window reach 70% of the 10k/day cap pro rata, or when fallbacks exceed 5% of calls (minimum 100 calls).
+- **Map compaction (S17).** Each memory-sync run also drops `work` rows more than 20,000 world sequences behind the newest and runs `wal_checkpoint(TRUNCATE)`. The WAL had reached 4 MB beside a 60 KB map. A busy map is skipped until the next run.
+- **Single-unit deploys (S18).** `deploy/rolling-restart.sh` already honours `UNITS`, for example `UNITS="noema-player@m01 noema-player@m04" deploy/rolling-restart.sh --apply`. Recorded in FACTS. No code change.
