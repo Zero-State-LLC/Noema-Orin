@@ -461,6 +461,12 @@ class OrinAdapter:
             self.stats["fallback"] += 1
             proposal = self._role_fallback(context, options)
         key = (getattr(proposal, "action", None), getattr(proposal, "target_id", None))
+        if key[0] == "ORG_OFFICE_CREATE" and not _create_allowed(context.get("canonical") or {}, proposal):
+            # D-066: hard gate. m01 created 30 Notice offices: each create named an office that already existed.
+            from noema_client.types import ActionProposal
+
+            source, proposal = "guard", ActionProposal(action="WAIT")
+            key = ("WAIT", None)
         refuel_wait = (source == "planner" and key[0] == "WAIT"
                        and _wait_refuels((context.get("canonical") or {}).get("resources") or {}))
         if (len(self.recent) >= 2 and not refuel_wait
@@ -506,6 +512,23 @@ class OrinAdapter:
         self._last_tier = None
         proposal = _harvest_amount(proposal, canonical)
         return proposal
+
+
+def _create_allowed(canonical: dict, proposal) -> bool:
+    """Only create an office the catalog lacks, by name, in the home org. Anything else is a duplicate."""
+    from .offices import _home, missing
+    from .planner import home_org
+
+    home = home_org(canonical)
+    args = getattr(proposal, "arguments", None) or {}
+    name = args.get("display_name") or args.get("name")
+    if not home or args.get("org_id") not in (None, home):
+        return False
+    offices = _home(canonical, home).get("offices")
+    if not offices:
+        return False  # observation without the home org's offices: everything would look missing
+    existing = {str(o.get("display_name")) for o in offices if isinstance(o, dict)}
+    return bool(name) and name not in existing and name in {n for n, _p in missing(canonical, home)}
 
 
 def _one_record_per_subject(menu: list[dict], published: set[str]) -> list[dict]:
