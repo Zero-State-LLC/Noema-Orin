@@ -123,3 +123,11 @@ Baseline (scripts/fleet.sh, 60 turns, 21:22Z): fleet MOVE 40%, energy <= 1 for 4
 ## D-054 The quartermaster goes to the custodian (S7)
 
 SUPPLY only works in the same room. m02 harvested into the treasury wherever it stood while m03 sat short of cargo two rooms away. When the vault holds at least one supply's worth (3) and the custodian's own recorded position shows fewer than 6 aboard in another room, the quartermaster takes one step toward it before harvesting more.
+
+## D-055 One public record per subject (S12)
+
+m04 made 78 RECONSTRUCT_PUBLISH out of 300 turns and no new reconstructions. The engine offered 50 PUBLISH affordances, all for private drafts of one subject (`entity.salvage-cache`), so each publish only made one more draft of the same story public. The menu now offers one PUBLISH per subject, none for a subject the archivist already published (memory kind `published`), and no new RECONSTRUCT of a published subject. That frees attention for INSPECT and reconstructing other subjects.
+
+## D-056 The founder welcomes newcomers (S11)
+
+m01 has had nothing to do since the Compact was seated (0 role actions per 60 turns at energy 45+). MESSAGE is now a founder verb. The planner sends one welcome naming the Compact to each non-cohort, non-operator Player it meets, recorded as memory kind `welcomed`. The model never sees the founder's MESSAGE options. No engine change.

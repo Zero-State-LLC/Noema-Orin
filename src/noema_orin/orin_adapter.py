@@ -105,10 +105,42 @@ class OrinAdapter:
             # Hold has enough materials for a build or repair: stop gathering, spend them.
             menu = [{**o, "i": i} for i, o in enumerate(o for o in menu if o["action"] not in self.supply)]
         # D-051: SUPPLY is planner-only (need-gated, D-048); _ask hides it from the model.
+        menu = _one_record_per_subject(menu, self._published_subjects())
         if any(o["action"] in self.verbs and o["action"] not in ("CONSTRUCT", "BUILD") for o in menu):
             # S4: role work is affordable here; the model still walked off (m04 MOVE 27/60 beside PUBLISH).
             menu = [{**o, "i": i} for i, o in enumerate(o for o in menu if o["action"] != "MOVE")]
         return focus(menu, self.verbs, getattr(self, "held_track", None))
+
+    def _welcome(self, canonical: dict, options: list[dict]):
+        """S11: the founder greets each non-cohort Player it meets, once, naming the Compact. Planner-only."""
+        from noema_client.types import ActionProposal
+
+        from .planner import home_org
+
+        org = home_org(canonical)
+        if not org or self.memory is None:
+            return None
+        greeted = {t for (t,) in self.memory.db.execute("SELECT text FROM facts WHERE kind='welcomed'").fetchall()}
+        for o in options:
+            pid = str(o.get("target_id") or "")
+            if o["action"] != "MESSAGE" or not pid or pid in greeted or pid in (self.cohort_ids or set()):
+                continue
+            if pid.startswith("player.reach-maint"):
+                continue  # operator tier, not a recruit
+            name = next((x.get("name") for x in canonical.get("organizations") or []
+                         if isinstance(x, dict) and x.get("org_id") == org), None) or "the Reach Compact"
+            self.memory.remember(pid, kind="welcomed", room=None, sequence=None)
+            return ActionProposal(action="MESSAGE", target_id=pid, arguments={
+                "recipient_id": pid,
+                "text": f"Welcome to Perihelion Reach. {name} keeps the Reach standing, supplied and remembered; "
+                        "ask any of us for a hand."})
+        return None
+
+    def _published_subjects(self) -> set[str]:
+        if getattr(self, "memory", None) is None:
+            return set()
+        rows = self.memory.db.execute("SELECT text FROM facts WHERE kind='published' AND stale=0").fetchall()
+        return {t for (t,) in rows}
 
     def _built_classes(self) -> set[str]:
         if self.memory is None:
@@ -120,7 +152,9 @@ class OrinAdapter:
         canonical = context.get("canonical") or {}
         recent = [f"{r['action']} {r.get('target') or ''}".strip() for r in self.recent[-5:]]
         # D-051: SUPPLY is planner-only (need-gated, D-048). The model spent 20/30 turns supplying blind.
-        options = [{**o, "i": i} for i, o in enumerate(o for o in options if o["action"] != "SUPPLY")]
+        # S11: the founder's MESSAGE is planner-only too (one welcome per non-cohort Player).
+        hidden = {"SUPPLY"} | ({"MESSAGE"} if "ORG_CREATE" in getattr(self, "verbs", ()) else set())
+        options = [{**o, "i": i} for i, o in enumerate(o for o in options if o["action"] not in hidden)]
         if not options:
             return None
         menu = [{k: o[k] for k in ("i", "action", "label")} for o in options[:24]]
@@ -205,6 +239,9 @@ class OrinAdapter:
         if _depleted(canonical):
             self.dwell = 0
             return ActionProposal(action="WAIT")  # engine #907/#910: WAIT at energy 0 rests +2 energy
+        welcome = self._welcome(canonical, options) if "ORG_CREATE" in self.verbs else None
+        if welcome is not None:
+            return welcome
         # D-047/D-048 (RFC-0133): the seated quartermaster serves before gathering: cargo to the custodian or to a
         # stuck peer (see _needs_supply), at most once per peer per 10 turns; then harvest into the treasury.
         custodian = self.role_handles.get("custodian")
@@ -370,6 +407,11 @@ class OrinAdapter:
         self.recent = (self.recent + [{"action": getattr(proposal, "action", None),
                                        "target": getattr(proposal, "target_id", None)}])[-40:]
         track = (getattr(proposal, "arguments", None) or {}).get("track")
+        subject = (getattr(proposal, "arguments", None) or {}).get("subject_ref")
+        if (str(getattr(proposal, "action", "") or "").upper() == "RECONSTRUCT_PUBLISH" and subject
+                and self.memory is not None):
+            # S12: one public record per subject; the other private drafts of it stay private.
+            self.memory.remember(str(subject), kind="published", room=None, sequence=None)
         if str(getattr(proposal, "action", "") or "").upper() == "FOCUS" and track:
             self.held_track = str(track)  # D-049: don't re-offer the same track
         canonical = (context.get("canonical") or {})
@@ -395,6 +437,24 @@ class OrinAdapter:
         self._last_tier = None
         proposal = _harvest_amount(proposal, canonical)
         return proposal
+
+
+def _one_record_per_subject(menu: list[dict], published: set[str]) -> list[dict]:
+    """S12: m04 held 50 private reconstructions of one subject (salvage-cache) and published them one by one
+    (78 publishes, 0 new subjects). Offer one PUBLISH per subject, none for a subject already published, and no
+    new RECONSTRUCT of a published subject."""
+    seen, kept = set(published), []
+    for o in menu:
+        raw = o.get("raw") or {}
+        subject = raw.get("subject_ref")
+        if o["action"] == "RECONSTRUCT_PUBLISH" and subject:
+            if subject in seen:
+                continue
+            seen.add(subject)
+        elif o["action"] == "RECONSTRUCT" and subject and subject in published:
+            continue
+        kept.append(o)
+    return kept if len(kept) == len(menu) else [{**o, "i": i} for i, o in enumerate(kept)]
 
 
 def _starved_for_attention(canonical: dict, verbs: set[str]) -> bool:
