@@ -29,3 +29,7 @@ D-034 live showed the custodian arriving at Civic Exchange (the only HARVEST roo
 ## D-036 (S20) Memory compaction at session end
 
 After each session, `Memory.compact()` keeps only the newest "<node> holds N <res> available to harvest" reading per (room, node, resource) and drops stale facts beyond the newest 50. Failures are logged as `memory_compacted: -1` and never end the loop. Dry run on a copy of live m02: 218 -> 103 facts, and recall still returns the latest stock reading.
+
+## D-037 Soft daily cap on decide calls, with real token accounting
+
+Operator-approved 2026-11-25 ("cap 10000"). The Worker counts `/chat` calls per UTC day in D1 `ai_usage`. Above `DECIDE_DAILY_CAP` (default 10,000) it returns 429. The Orin treats that as a cloud failure: the breaker opens and local Ollama decides (`NOEMA_DECIDE_LOCAL_FALLBACK=1`). The Worker also records real `usage` tokens and the cheap-call share. `GET /usage` shows 14 days. First live reading: ~650 input tokens/call (estimate was 1.5k), so tiered cost is ~$0.40/day.

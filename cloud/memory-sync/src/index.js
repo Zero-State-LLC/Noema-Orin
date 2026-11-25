@@ -46,6 +46,11 @@ export default {
       return Response.json({ window_hours: hours, members: results, latest_digest: digest ? JSON.parse(digest.body) : null });
     }
 
+    if (request.method === "GET" && url.pathname === "/usage") {
+      const { results } = await env.DB.prepare("SELECT * FROM ai_usage ORDER BY day DESC LIMIT 14").all();
+      return Response.json({ cap: Number(env.DECIDE_DAILY_CAP || 10000), days: results });
+    }
+
     if (request.method === "POST" && (url.pathname === "/reflect" || url.pathname === "/chat")) {
       const body = await request.json().catch(() => null);
       if (!body || typeof body.user !== "string" || typeof body.system !== "string") {
@@ -53,6 +58,17 @@ export default {
       }
       // /reflect: end-of-session persona drift. /chat: per-turn action choice (D-016), short and fast.
       const decide = url.pathname === "/chat";
+      if (decide) {
+        // D-037: soft daily cap on decide calls. Over cap -> 429, the Orin falls back to local Ollama.
+        const day = new Date().toISOString().slice(0, 10);
+        const cap = Number(env.DECIDE_DAILY_CAP || 10000);
+        const row = await env.DB.prepare(
+          "INSERT INTO ai_usage(day, calls) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET calls = calls + 1 RETURNING calls",
+        ).bind(day).first();
+        if (row && row.calls > cap) {
+          return Response.json({ error: "daily_cap", cap, calls: row.calls }, { status: 429 });
+        }
+      }
       // D-030: routine-only menus use the cheap decide model; anything social/org/build uses the strong one.
       const cheap = decide && body.tier === "cheap";
       const strong = decide ? env.DECIDE_MODEL || "@cf/meta/llama-4-scout-17b-16e-instruct"
@@ -79,7 +95,15 @@ export default {
       const text =
         typeof out?.response === "string" && out.response ? out.response
           : out?.choices?.[0]?.message?.content ?? (typeof out?.response === "object" ? JSON.stringify(out.response) : "");
-      return Response.json({ model, text: String(text || ""), shape: Object.keys(out || {}), cheap_error: cheapError });
+      const usage = out?.usage || null; // D-037: real token counts, for tuning the cap
+      if (decide && usage) {
+        const day = new Date().toISOString().slice(0, 10);
+        await env.DB.prepare(
+          "UPDATE ai_usage SET tokens_in = tokens_in + ?, tokens_out = tokens_out + ?, " +
+          "cheap_calls = cheap_calls + ? WHERE day = ?",
+        ).bind(Number(usage.prompt_tokens) || 0, Number(usage.completion_tokens) || 0, model === strong ? 0 : 1, day).run();
+      }
+      return Response.json({ model, text: String(text || ""), shape: Object.keys(out || {}), cheap_error: cheapError, usage });
     }
 
     if (request.method !== "POST" || url.pathname !== "/sync") return new Response("not found", { status: 404 });
