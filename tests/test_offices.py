@@ -201,6 +201,15 @@ class QuartermasterAndIdleTests(unittest.TestCase):
         p = a._plan({"canonical": c}, _options(c, a.allowed))
         self.assertEqual(p.action, "HARVEST")
 
+    def test_d062_waits_for_fuel_beside_treasury_build(self):
+        a, c = self._seated(storage=20, custodian_here=False)
+        c["resources"] = {"energy": 2, "attention": 8, "storage": 14}  # cargo aboard: WAIT refuels
+        c["affordances"] = [{"action": "BUILD", "verb": "BUILD", "operation": "CONSTRUCT", "class": "generator",
+                             "acting_for": "org.c", "office_id": "office.c.1", "available": False,
+                             "reason": "You do not have enough resources to construct."}]
+        p = a._plan({"canonical": c}, _options(c, a.allowed))
+        self.assertEqual(p.action, "WAIT")
+
     def test_d047_supplies_custodian_cargo_first(self):
         a, c = self._seated()
         p = a._plan({"canonical": c}, _options(c, a.allowed))

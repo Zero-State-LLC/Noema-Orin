@@ -161,3 +161,7 @@ Live check after D-059: the speaker noticed every room's "Open ground, routes le
 Approved by the user 2026-11-25 ("yes for both decisions"). Spec Noema-Specs#467, engine Noema#957. When the engine offers a treasury build (`BUILD CONSTRUCT` with `acting_for` + `office_id`) for a class in the role's builds (generator, storage_bay) and the vault holds at least 12 storage, the seated quartermaster builds it before harvesting more. The vault pays the cargo, the holder pays the fuel, and the Compact owns the result. The floor of 12 keeps two SUPPLYs (3 each) in reserve after a 5 to 6 cargo build.
 
 The second decision (custodian energy) is "no engine change yet". Re-measure with `fleet.sh 200` after 24h. Cargo fuel +3 stays as the fallback.
+
+## D-062 Wait beside a treasury build that lacks fuel
+
+Live after Worker b7ca6c7c (Noema#957, pin #958): in relay-quarter the quartermaster sees "Build a generator for Reach Compact" with vault 36, but the build is unavailable because it costs the holder 8 energy and m02 sat at energy 1 to 3. When a role-class treasury build is offered, the vault is at or above the floor, the build is blocked only on the holder's own resources, and WAIT refuels, the quartermaster WAITs in place instead of walking off.
