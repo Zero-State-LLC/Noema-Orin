@@ -202,7 +202,7 @@ class OrinAdapter:
             self.dwell = 0
             return ActionProposal(action="WAIT")  # engine: WAIT restores attention +2 (cap 8)
         att = (canonical.get("resources") or {}).get("attention")
-        if isinstance(att, (int, float)) and att < 2 and goal_verbs & ATTENTION_VERBS:
+        if isinstance(att, (int, float)) and att < 2 and set(goal_verbs) & ATTENTION_VERBS:
             # D-045: every archivist verb costs attention 2, and moving between rooms doesn't restore it.
             self.dwell = 0
             return ActionProposal(action="WAIT")
