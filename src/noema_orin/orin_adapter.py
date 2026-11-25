@@ -125,6 +125,7 @@ class OrinAdapter:
         from .model_tier import tier_for
 
         tier = tier_for(menu)
+        self._last_tier = tier
         self.stats_tier = getattr(self, "stats_tier", {})
         self.stats_tier[tier] = self.stats_tier.get(tier, 0) + 1
         data = self._chat(instruction, user, num_predict=60, tier=tier)
@@ -263,7 +264,9 @@ class OrinAdapter:
                           "memories_used": len(self.memories),
                           "budgets": {k: v for k, v in (canonical.get("resources") or {}).items()
                                       if k in ("energy", "attention", "compute", "storage")},
+                          "tier": getattr(self, "_last_tier", None) if source == "model" else None,
                           "offered_role": sorted({o["action"] for o in options} & self.verbs)}), flush=True)
+        self._last_tier = None
         return proposal
 
 
