@@ -9,3 +9,5 @@ Project facts that were learned the hard way. Read before deploying.
   (cargo.ts applyCargoFuel); the zero/zero lockout rest needs energy 0 and a full hold.
 - The Orin's IP is DHCP and changes (was .99, became .100 on 2026-11-25). `~/.ssh/config` uses `HostName linux.local` (mDNS). Host keys checked: ED25519 SHA256:1oUCQW2N…
 - `NOEMA_PIN_PR_TOKEN` (Zero-State-LLC/Noema Actions secret) was reset on 2026-11-25 to the scrimshawlife-ctrl gh OAuth token (scopes: repo, workflow). Pin PRs open as that account. If `gh auth` on the Mac is refreshed or revoked, re-run `gh auth token | gh secret set NOEMA_PIN_PR_TOKEN -R Zero-State-LLC/Noema`.
+- noema-client releases: bump `src/noema_client/_version.py` in a PR, then `gh release create vX.Y.Z --target main` (triggers the PyPI publish workflow). The Orin installs from PyPI: `~/noema-players/.venv/bin/pip install --no-cache-dir noema-client==X.Y.Z`.
+- Noema and Noema-Specs require code-owner review; merges run with `gh pr merge --admin` under the standing merge grant. Noema-Specs CI checks the committed graft index: rebuild with `GRAFT_NO_GITIGNORE=1 npx -y @nanonets/graft@0.26.0 --dir graft build` and `git add -f graft`.
