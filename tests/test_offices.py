@@ -210,6 +210,32 @@ class QuartermasterAndIdleTests(unittest.TestCase):
         p = a._plan({"canonical": c}, _options(c, a.allowed))
         self.assertEqual(p.action, "WAIT")
 
+    def test_d063_gathers_fuel_then_returns_to_build_room(self):
+        import tempfile
+        from pathlib import Path
+        from noema_orin.memory import WorldMap
+
+        a, c = self._seated(storage=30, custodian_here=False)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        a.world_map = WorldMap(Path(tmp.name))
+        a.world_map.observe("room.hall", "Hall", 1, ["room.x"], [])
+        a.world_map.observe("room.x", "X", 2, ["room.hall"], ["HARVEST"])
+        a.build_room = "room.hall"
+        # in room.x with an empty hold: personal HARVEST for fuel, not the treasury harvest
+        c["resources"] = {"energy": 4, "attention": 8, "storage": 16}
+        c["location"]["room_id"] = "room.x"
+        c["location"]["exits"] = [{"to_room_id": "room.hall", "direction": "north"}]
+        c["affordances"].append({"action": "HARVEST", "verb": "COMMIT", "operation": "HARVEST",
+                                 "target_id": "entity.node", "available": True})
+        p = a._plan({"canonical": c}, _options(c, a.allowed))
+        self.assertEqual(p.action, "HARVEST")
+        self.assertFalse((p.arguments or {}).get("acting_for"))
+        # loaded: head back to the build room
+        c["resources"] = {"energy": 4, "attention": 8, "storage": 8}
+        p = a._plan({"canonical": c}, _options(c, a.allowed))
+        self.assertEqual((p.action, p.target_id), ("MOVE", "north"))
+
     def test_d047_supplies_custodian_cargo_first(self):
         a, c = self._seated()
         p = a._plan({"canonical": c}, _options(c, a.allowed))

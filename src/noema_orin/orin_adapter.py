@@ -136,6 +136,37 @@ class OrinAdapter:
                         "ask any of us for a hand."})
         return None
 
+    def _fuel_for_build(self, canonical: dict, options: list[dict]):
+        """D-063: a treasury build costs the holder 8 energy, and an empty hold rests only to 2. Carry cargo as
+        WAIT fuel (+2 each): harvest into the pack, walk to the build room, then D-062 waits and D-061 builds."""
+        from noema_client.types import ActionProposal
+
+        from .planner import route
+
+        loc = canonical.get("location") or {}
+        here = loc.get("room_id")
+        if _treasury_build_waiting(canonical, self.builds) or any(
+                (o.get("raw") or {}).get("acting_for") and o["action"] in ("CONSTRUCT", "BUILD") for o in options):
+            self.build_room = here
+        goal = getattr(self, "build_room", None)
+        if not goal or _vault_storage(canonical) < TREASURY_BUILD_FLOOR or self.world_map is None:
+            return None
+        res = canonical.get("resources") or {}
+        aboard = 16 - res["storage"] if isinstance(res.get("storage"), (int, float)) else 0
+        if aboard >= BUILD_FUEL_CARGO:
+            if here == goal or not _can_afford_move(canonical):
+                return None if here == goal else ActionProposal(action="WAIT")
+            hop = self.world_map.next_hop(here, goal)
+            exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict)}
+            return ActionProposal(action="MOVE", target_id=exits[hop]) if hop in exits else None
+        pack = next((o for o in options if o["action"] == "HARVEST" and not (o.get("raw") or {}).get("acting_for")), None)
+        if pack is not None:
+            return _proposal(pack, self.default_args, self.memory)  # _harvest_amount sizes it (up to 8)
+        if not _can_afford_move(canonical):
+            return None
+        direction = route(canonical, self.world_map, {"HARVEST"}, explorer=False)
+        return ActionProposal(action="MOVE", target_id=direction) if direction else None
+
     def _published_subjects(self) -> set[str]:
         if getattr(self, "memory", None) is None:
             return set()
@@ -286,6 +317,10 @@ class OrinAdapter:
             # energy 1-3 and never saw it as available. WAIT here until it is; walking spends the energy it needs.
             self.dwell = 0
             return ActionProposal(action="WAIT")
+        fuel = self._fuel_for_build(canonical, options) if "SUPPLY" in self.verbs else None
+        if fuel is not None:
+            self.dwell = 0
+            return fuel
         step = _toward_needy_custodian(canonical, custodian, self.world_map) if "SUPPLY" in self.verbs else None
         if step is not None and _can_afford_move(canonical):
             # S7: the vault holds cargo and the custodian (by its own recorded position) is short and elsewhere.
@@ -547,6 +582,7 @@ def _needs_supply(opt: dict, custodian: str | None, world_map, cohort_ids) -> bo
     return energy is not None and energy <= LOW_ENERGY and aboard == 0
 TREASURY_CAP = 64  # engine TREASURY_STORAGE_CAP (RFC-0133)
 TREASURY_BUILD_FLOOR = 12  # D-061: build cost (5-6) + two SUPPLYs (3 each) stay in the vault
+BUILD_FUEL_CARGO = 4  # D-063: 4 cargo x WAIT +2 = 8 energy, a generator's holder share
 
 
 def _treasury_build_waiting(canonical: dict, builds) -> bool:
