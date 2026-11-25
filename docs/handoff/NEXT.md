@@ -39,3 +39,4 @@
   - Needs: the operator's pick, then an RFC-0117 amendment PR in Noema-Specs plus an engine PR. Reopen #907 or file a new issue.
 
 **#2 cost cap: data now in.** Since tier logging (02:24Z), 76% of model calls are cheap (427 cheap / 133 strong over 966 turns). ~66 turns/h/agent, 58% model-sourced, so ~6,400 calls/day. Prompt is ~1.5k input tokens (system ~650 chars + payload capped at 5k chars). Estimated $0.82/day (~$25/mo) tiered vs $2.82/day untiered. Recommend: a soft cap of 10,000 decide calls/day in the Worker (about 1.5x current, about $1.30/day worst case), falling back to strong-only refusal, so local Ollama takes over. Measure real token counts by logging `usage` from the Worker response before tuning.
+- 05:02Z operator approved 5A and cap 10000. D-037 cap is live (Worker 6456a239). Engine PR Zero-State-LLC/Noema#926 and spec PR Zero-State-LLC/Noema-Specs#456 are open. After #926 deploys, verify m03 HARVESTs (energy 1 + empty hold should rest to 2).
