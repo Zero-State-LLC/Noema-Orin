@@ -33,3 +33,8 @@
 - Re-measure after 24h. If m03 is still under 10% role actions, bring option B to the user.
 - When the first newcomer appears, confirm a founder welcome (memory kind `welcomed`).
 - The cost alarm (D-058) shows in `shared/digest.json`. Check it after a full day.
+
+## 2026-11-25 22:45Z: treasury construction live
+- Specs#467 merged, then engine Noema#957 deployed as Worker b7ca6c7c (pin #958 merged), then Orin #117 (D-061) and #118 (D-062) live.
+- Live: m02 sees "Build a generator for Reach Compact" with the vault at 36. The build hasn't happened yet: the generator costs the holder 8 energy and m02 runs at energy 1 to 3. With an empty hold WAIT rests only to 2, and cargo fuel gives +2 per cargo. This is the same energy ceiling as S19.
+- Check after 24h with `fleet.sh 200`, together with the custodian. If no treasury build has happened, the S19 fallback (cargo fuel +3) or a lower holder fuel share is the user's call.
