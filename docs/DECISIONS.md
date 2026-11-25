@@ -131,3 +131,16 @@ m04 made 78 RECONSTRUCT_PUBLISH out of 300 turns and no new reconstructions. The
 ## D-056 The founder welcomes newcomers (S11)
 
 m01 has had nothing to do since the Compact was seated (0 role actions per 60 turns at energy 45+). MESSAGE is now a founder verb. The planner sends one welcome naming the Compact to each non-cohort, non-operator Player it meets, recorded as memory kind `welcomed`. The model never sees the founder's MESSAGE options. No engine change.
+
+## D-057 A shared work queue drives custodian routing and supply (S8, S10)
+
+Each agent writes the role work it sees in its own room to a map.db `work` table as (action, target, need). need is `''` when affordable, else materials, energy, attention or other. CONSTRUCT/BUILD and depleted nodes are left out, and each new look replaces that agent's rows for the room. Two consumers:
+- **Routing (S10).** `route(me=...)` goes first to the nearest room where the agent itself saw role work, then falls back to `where_offered`. The custodian now heads for its own REPAIR/RESTORE targets rather than any room that once listed a matching verb.
+- **Need (S8).** The custodian counts as needing cargo whenever its own work is blocked on materials, not only when it has fewer than 6 aboard. Live example: RESTORE of the archive annex needs 4 storage and was "no materials in hold" while it carried 2. The quartermaster's station step (D-054) uses the same signal.
+All rows come from each agent's own observations. Nothing is inferred about other Players.
+
+## D-058 Cost alarm, map compaction, single-unit deploys (S15, S17, S18)
+
+- **Cost alarm (S15).** The metrics timer stores per-session deltas of `health.workers_ai_calls` and `ollama_fallbacks` (the counters are cumulative per process) in a `cost` table. The digest adds one alert line when calls in the window reach 70% of the 10k/day cap pro rata, or when fallbacks exceed 5% of calls (minimum 100 calls).
+- **Map compaction (S17).** Each memory-sync run also drops `work` rows more than 20,000 world sequences behind the newest and runs `wal_checkpoint(TRUNCATE)`. The WAL had reached 4 MB beside a 60 KB map. A busy map is skipped until the next run.
+- **Single-unit deploys (S18).** `deploy/rolling-restart.sh` already honours `UNITS`, for example `UNITS="noema-player@m01 noema-player@m04" deploy/rolling-restart.sh --apply`. Recorded in FACTS. No code change.

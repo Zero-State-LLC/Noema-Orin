@@ -97,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     ns = ap.parse_args(argv)
     url, token = os.environ.get("MEMORY_SYNC_URL"), os.environ.get("MEMORY_SYNC_TOKEN")
     if not url or not token:
-        print(json.dumps({"status": "NOT_CONFIGURED"}))
+        print(json.dumps({"status": "NOT_CONFIGURED", "map": compact_map(ns.root / "shared" / "map.db")}))
         return 0
     state = ns.root / "shared" / "sync-marks.json"
     marks = json.loads(state.read_text()) if state.exists() else {}
@@ -116,8 +116,33 @@ def main(argv: list[str] | None = None) -> int:
         marks = advance(marks, payload)
         sent[member] = result.get("written")
     state.write_text(json.dumps(marks))
-    print(json.dumps({"status": "OK", "written": sent}))
+    compacted = compact_map(ns.root / "shared" / "map.db")
+    print(json.dumps({"status": "OK", "written": sent, "map": compacted}))
     return 0
+
+
+WORK_TTL_SEQ = 20_000  # S17: ~a day of world sequence (about 13k/day in Nov 2026)
+
+
+def compact_map(path: Path) -> dict:
+    """S17: drop work rows far behind the newest sequence and checkpoint the WAL (it reached 4 MB beside a
+    60 KB map). TRUNCATE waits for readers; a busy map just returns busy and is retried next timer."""
+    import sqlite3
+
+    if not path.exists():
+        return {}
+    db = sqlite3.connect(path, timeout=5)
+    try:
+        dropped = 0
+        if db.execute("SELECT 1 FROM sqlite_master WHERE name='work'").fetchone():
+            top = db.execute("SELECT max(seen_seq) FROM work").fetchone()[0] or 0
+            with db:
+                dropped = db.execute("DELETE FROM work WHERE seen_seq < ?", (top - WORK_TTL_SEQ,)).rowcount
+        busy, _log, _ckpt = db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        wal = path.with_name(path.name + "-wal")
+        return {"work_dropped": dropped, "busy": busy, "wal_bytes": wal.stat().st_size if wal.exists() else 0}
+    finally:
+        db.close()
 
 
 if __name__ == "__main__":

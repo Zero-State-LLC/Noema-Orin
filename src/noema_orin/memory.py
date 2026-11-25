@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS exits(room_id TEXT, dest TEXT, PRIMARY KEY(room_id, d
 CREATE TABLE IF NOT EXISTS offers(room_id TEXT, action TEXT, seen_seq INTEGER, PRIMARY KEY(room_id, action));
 CREATE TABLE IF NOT EXISTS positions(player_id TEXT PRIMARY KEY, room_id TEXT, energy INTEGER, free_storage INTEGER,
                                      seen_seq INTEGER);
+CREATE TABLE IF NOT EXISTS work(player_id TEXT, room_id TEXT, action TEXT, target_id TEXT, need TEXT, seen_seq INTEGER,
+                                PRIMARY KEY(player_id, room_id, action, target_id));
 """
 
 
@@ -195,6 +197,24 @@ class WorldMap(_Closable):
         """(room_id, energy, free_storage, seen_seq) or None."""
         return self.db.execute("SELECT room_id, energy, free_storage, seen_seq FROM positions WHERE player_id=?",
                                (player_id,)).fetchone()
+
+    def record_work(self, player_id: str, room_id: str, items: list[tuple[str, str, str]], sequence) -> None:
+        """S8/S10: role work this agent saw in its own room, as (action, target_id, need). need is '' when
+        affordable, else 'materials' / 'energy' / 'attention' / 'other'. Replaces this agent's rows for the room."""
+        if not player_id or not room_id:
+            return
+        with self.db:
+            self.db.execute("DELETE FROM work WHERE player_id=? AND room_id=?", (player_id, room_id))
+            self.db.executemany("INSERT OR REPLACE INTO work VALUES (?,?,?,?,?,?)",
+                                [(player_id, room_id, a, t or "", n, sequence or 0) for a, t, n in items])
+
+    def work_for(self, player_id: str, need: str | None = None) -> list[tuple[str, str, str, str]]:
+        """(room_id, action, target_id, need) newest first, optionally filtered by need."""
+        q = "SELECT room_id, action, target_id, need FROM work WHERE player_id=?"
+        args: tuple = (player_id,)
+        if need is not None:
+            q, args = q + " AND need=?", (*args, need)
+        return self.db.execute(q + " ORDER BY seen_seq DESC", args).fetchall()
 
     def least_recent(self, candidates: list[str]) -> str | None:
         if not candidates:

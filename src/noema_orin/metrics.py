@@ -20,9 +20,14 @@ CREATE TABLE IF NOT EXISTS sessions(src TEXT, line INTEGER, ts REAL, member TEXT
   drops INTEGER, rejections TEXT, PRIMARY KEY(src, line));
 CREATE TABLE IF NOT EXISTS marks(src TEXT PRIMARY KEY, offset INTEGER);
 CREATE TABLE IF NOT EXISTS stuck(src TEXT PRIMARY KEY, zero_energy_streak INTEGER, ts REAL);
+CREATE TABLE IF NOT EXISTS cost(src TEXT, line INTEGER, ts REAL, calls INTEGER, fallbacks INTEGER, PRIMARY KEY(src, line));
+CREATE TABLE IF NOT EXISTS cost_marks(src TEXT PRIMARY KEY, calls_total INTEGER, fallbacks_total INTEGER);
 """
 IDLE = {"LOOK", "WAIT", "INSPECT", "MOVE"}
 STUCK_TURNS = 10
+DAILY_CALL_CAP = 10_000  # Workers AI daily cap (memory worker /usage)
+CAP_ALARM = 0.7  # S15
+FALLBACK_ALARM = 0.05  # S15: Ollama fallbacks / calls
 
 
 def zero_energy_streak(lines: list[str]) -> int:
@@ -91,6 +96,15 @@ def collect(root: Path, db: sqlite3.Connection) -> int:
                             d.get("stop_detail"), role_n, idle_n, turns, drops,
                             json.dumps((d.get("rejections") or {}).get("by_verb_code") or {})))
                 added += 1
+                health = d.get("health") or {}
+                if isinstance(health, dict) and "workers_ai_calls" in health:
+                    # health counters are cumulative per process; store the delta (reset on restart).
+                    calls, fb = int(health.get("workers_ai_calls") or 0), int(health.get("ollama_fallbacks") or 0)
+                    prev = db.execute("SELECT calls_total, fallbacks_total FROM cost_marks WHERE src=?", (src,)).fetchone()
+                    dc, df = (calls - prev[0], fb - prev[1]) if prev and calls >= prev[0] else (calls, fb)
+                    db.execute("INSERT OR IGNORE INTO cost VALUES (?,?,?,?,?)", (src, n, time.time(), dc, max(df, 0)))
+                    db.execute("INSERT INTO cost_marks VALUES (?,?,?) ON CONFLICT(src) DO UPDATE SET "
+                               "calls_total=excluded.calls_total, fallbacks_total=excluded.fallbacks_total", (src, calls, fb))
                 done = n + 1
                 turns, role_n, idle_n, drops = 0, 0, 0, 0
         db.execute("INSERT INTO marks VALUES (?,?) ON CONFLICT(src) DO UPDATE SET offset=excluded.offset", (src, done))
@@ -117,7 +131,20 @@ def digest(db: sqlite3.Connection, hours: float = 24) -> dict:
                                   (STUCK_TURNS,)).fetchall():
         member = src.removeprefix("noema-player@").removeprefix("noema-").removesuffix(".log")
         alerts.append(f"{member}: energy 0 for last {streak} turns (Noema#907)")
+    alerts += cost_alerts(db, hours)
     return {"window_hours": hours, "members": out, "alerts": alerts}
+
+
+def cost_alerts(db: sqlite3.Connection, hours: float = 24) -> list[str]:
+    """S15: one line when model calls near the daily cap or Ollama fallbacks exceed 5% of calls."""
+    calls, fallbacks = db.execute("SELECT coalesce(sum(calls),0), coalesce(sum(fallbacks),0) FROM cost WHERE ts >= ?",
+                                  (time.time() - hours * 3600,)).fetchone()
+    out = []
+    if calls >= CAP_ALARM * DAILY_CALL_CAP * hours / 24:
+        out.append(f"cost: {calls} model calls in {hours:g}h (cap {DAILY_CALL_CAP}/day)")
+    if calls >= 100 and fallbacks / calls > FALLBACK_ALARM:
+        out.append(f"cost: Ollama fallbacks {fallbacks}/{calls} ({fallbacks / calls:.0%})")
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:
