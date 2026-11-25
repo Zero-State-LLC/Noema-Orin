@@ -172,3 +172,7 @@ Live energy profile of m02, last 200 turns: energy at or below 3 in 113 turns, a
 - carrying fewer than 4 cargo: HARVEST into its own pack (not the treasury), walking toward a HARVEST room if needed;
 - carrying 4 or more: return to the build room.
 There, D-062 WAITs (+2 energy per cargo) until the build is affordable, and D-061 builds. Four cargo is 8 energy, the generator's holder share. Tested on the Orin with noema_client: 32/32.
+
+## D-064 Rest beside the harvest node on a fuel run
+
+After D-063, m02 looped through civic-exchange, archive and civic-exchange, arriving each time at energy 1. HARVEST needs 2, so it walked off again (12 of 40 turns were MOVE). On a fuel run it now WAITs where HARVEST is offered but unaffordable (empty-hold rest goes to 2), then harvests.

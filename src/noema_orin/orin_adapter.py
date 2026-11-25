@@ -162,6 +162,8 @@ class OrinAdapter:
         pack = next((o for o in options if o["action"] == "HARVEST" and not (o.get("raw") or {}).get("acting_for")), None)
         if pack is not None:
             return _proposal(pack, self.default_args, self.memory)  # _harvest_amount sizes it (up to 8)
+        if _offered_here(canonical, {"HARVEST"}):
+            return ActionProposal(action="WAIT")  # D-064: harvestable here, short of energy 2: rest, don't walk off
         if not _can_afford_move(canonical):
             return None
         direction = route(canonical, self.world_map, {"HARVEST"}, explorer=False)
