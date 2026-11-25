@@ -67,3 +67,7 @@ D-042 sent idle turns straight to WAIT. With an empty hold, m02 then sat in Gene
 After D-044, m04 had 39/40 MOVE turns at attention 0-1. Every archivist verb costs attention 2 (`COSTS.RECONSTRUCT`), so none were available, and the idle router walked it room to room, which never restores attention. Only WAIT does (+2, cap 8). The planner now WAITs when attention < 2 and the role's goal verbs cost attention.
 
 **D-045 hotfix.** `goal_verbs` is a tuple for supply roles, and `tuple & frozenset` raised TypeError inside `_plan`. It was caught as `memory_error`, so the custodian fell back to the model with no planner guidance. Fixed with `set(goal_verbs)`. The fix shipped past a failing test because the ship gate grepped for "OK|FAILED" and exited 0 either way. The gate is now `scripts/check.sh` (`set -e`, exit status of unittest).
+
+## D-046 The archivist inspects to make evidence
+
+m04 still had 32/40 MOVE turns at attention 8. RECONSTRUCT is only offered for subjects with LIVE_INSPECT or archive evidence (engine actions.ts reconSubjects), and nothing was producing new evidence, so nothing was offered and it walked. With attention >= 4 and no archivist verb on offer, the planner now INSPECTs an entity it hasn't inspected in its last 12 turns. That creates the evidence the next RECONSTRUCT needs.

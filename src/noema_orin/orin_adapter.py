@@ -206,6 +206,15 @@ class OrinAdapter:
             # D-045: every archivist verb costs attention 2, and moving between rooms doesn't restore it.
             self.dwell = 0
             return ActionProposal(action="WAIT")
+        if (set(goal_verbs) & ATTENTION_VERBS and isinstance(att, (int, float)) and att >= 4
+                and not has_role_verb(options, goal_verbs)):
+            # D-046: RECONSTRUCT needs evidence (LIVE_INSPECT). With no reconstruction on offer, INSPECT an
+            # entity not inspected lately instead of walking on.
+            seen = {r.get("target") for r in self.recent[-12:] if r["action"] == "INSPECT"}
+            insp = next((o for o in options if o["action"] == "INSPECT" and o.get("target_id") not in seen), None)
+            if insp is not None:
+                self.dwell = 0
+                return _proposal(insp, self.default_args, self.memory)
         here = has_role_verb(options, goal_verbs) or _offered_here(canonical, goal_verbs)
         if (not here and self.world_map is not None and not _wait_refuels(canonical.get("resources") or {})
                 and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)):
