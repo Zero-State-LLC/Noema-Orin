@@ -215,6 +215,15 @@ class OrinAdapter:
                          and str((o.get("raw") or {}).get("class") or "") in self.builds), None)
             if pick is not None:
                 return _proposal(pick, self.default_args, self.memory)  # build the role's own space (D-018)
+            blocked = [a for a in canonical.get("affordances") or [] if isinstance(a, dict)
+                       and str(a.get("operation") or "").upper() == "CONSTRUCT" and a.get("available") is False
+                       and str(a.get("class") or "") in self.builds
+                       and "materials" not in str(a.get("reason") or "")]
+            if blocked and "HARVEST" in (self.verbs | set(self.supply or ())):
+                # D-043: enough cargo for a role build, short only on energy. WAIT burns cargo +2 energy;
+                # harvesting more would spend the energy the build needs.
+                self.dwell = 0
+                return ActionProposal(action="WAIT")
         if self.supply and _hold_empty(canonical):
             # D-039: empty hold and a supply verb is offered: gather. The model kept choosing MOVE here.
             pick = next((o for o in options if o["action"] in self.supply), None)

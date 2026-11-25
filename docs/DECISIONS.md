@@ -53,3 +53,7 @@ SHARE and VEST move ownership, not cargo, and TRADE is denied, so a full hold ha
 ## D-042 Skip the model when no role verb is on offer
 
 If the planner passes and the menu has no role or supply verb, the model could only pick LOOK/WAIT/MOVE/INSPECT. The adapter now WAITs without a model call (`source: idle_skip`). WAIT is free and restores budgets. Routing toward role rooms is still the planner's job (dwell >= 2), and the loop-breaker still moves after 3 identical turns. Main saving: the founder, whose governance work is done.
+
+## D-043 Save energy for the build
+
+Live after D-041: m02's hold was full but it never had 5 energy. Each WAIT gave +2 (cargo fuel) and the next HARVEST spent it. When a role build is blocked only on resources (not materials), the planner now WAITs. Each WAIT burns 1 cargo for +2 energy, so after ~3 WAITs, energy 6 with 13 aboard affords a storage bay.
