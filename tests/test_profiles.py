@@ -11,7 +11,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from noema_orin.runner import FakeClient, ScriptedAdapter, run
+from noema_orin.runner import FakeClient, run
 
 ROOT = Path(__file__).resolve().parents[1]
 

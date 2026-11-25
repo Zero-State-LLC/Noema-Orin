@@ -12,8 +12,13 @@ ORG_VERBS = {"ORG_INVITE", "ORG_MEMBER_ADD", "ORG_OFFICE_CREATE", "ORG_OFFICE_AS
 BLOCKED_AGREEMENTS = {"trade", "access"}
 
 
+PINNED_HOME: str | None = None  # set from shared/home_org; survives observations that omit organizations
+
+
 def home_org(canonical: dict) -> str | None:
-    """The oldest org this Player founded; every later org act targets it."""
+    """The pinned home org, else the oldest org this Player founded; every later org act targets it."""
+    if PINNED_HOME:
+        return PINNED_HOME
     mine = [o for o in canonical.get("organizations") or [] if isinstance(o, dict) and o.get("my_role") == "founder"]
     if not mine:
         return None

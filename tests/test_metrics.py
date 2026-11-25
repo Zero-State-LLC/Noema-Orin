@@ -54,6 +54,19 @@ class MetricsTests(unittest.TestCase):
             self.assertEqual((out["turns"], out["role"]), (8, "founder"))
             db.close()
 
+    def test_zero_energy_streak_alert(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "logs").mkdir()
+            rows = [{"turn": 1, "action": "MOVE", "budgets": {"energy": 3}}] + [
+                {"turn": i, "action": "WAIT", "budgets": {"energy": 0}} for i in range(2, 14)]
+            (root / "logs" / "noema-player@m03.log").write_text("\n".join(json.dumps(x) for x in rows) + "\n")
+            (root / "logs" / "noema-player@m05.log").write_text(json.dumps(rows[0]) + "\n")
+            db = open_db(root)
+            collect(root, db)
+            self.assertEqual(digest(db)["alerts"], ["m03: energy 0 for last 12 turns (Noema#907)"])
+            db.close()
+
 
 if __name__ == "__main__":
     unittest.main()

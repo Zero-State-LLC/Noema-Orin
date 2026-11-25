@@ -84,3 +84,17 @@ class CohortTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PinnedHomeTests(unittest.TestCase):
+    def tearDown(self):
+        import noema_orin.planner as p
+        p.PINNED_HOME = None
+
+    def test_pinned_home_blocks_org_create_even_without_organizations(self):
+        import noema_orin.planner as p
+        canon = {"organizations": [], "players_here": []}
+        self.assertEqual([o["action"] for o in refine([{"action": "ORG_CREATE"}], canon, set())], ["ORG_CREATE"])
+        p.PINNED_HOME = "org.reach-compact.34df3bb5"
+        self.assertEqual(refine([{"action": "ORG_CREATE"}, {"action": "LOOK"}], canon, set())[0]["action"], "LOOK")
+        self.assertEqual(home_org(canon), "org.reach-compact.34df3bb5")
