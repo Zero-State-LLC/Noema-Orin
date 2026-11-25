@@ -45,3 +45,4 @@
 - D-037 cap live; `GET /usage` shows ~650 tokens in per call.
 - 06:20Z: Noema-Specs#456 merged. Pin-PR still fails: secret `NOEMA_PIN_PR_TOKEN` on Zero-State-LLC/Noema was last updated 2026-08-25 (not rotated) and gets "Authentication failed"; the GITHUB_TOKEN fallback gets 403 (workflow `permissions: contents: read`). Run 45559703109. Deploy itself succeeds.
 - 06:29Z: pin-PR fixed. The secret was reset from gh auth, deploy run 45560502414 is green, and pin PR Noema#928 is merged (Worker e2fbff23).
+- 07:34Z: D-041..D-043 live. Quartermaster m02 constructed a **storage_bay** in Civic Exchange (it appears in the engine observation at seq 65760): it waited 3 times to energy 6, then ran CONSTRUCT. The founder now idle-skips (29 of the last 600 turns fleet-wide were model calls avoided). Next: watch the generator build, then S3/S5 (low).
