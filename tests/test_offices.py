@@ -231,6 +231,12 @@ class QuartermasterAndIdleTests(unittest.TestCase):
         p = a._plan({"canonical": c}, _options(c, a.allowed))
         self.assertEqual(p.action, "HARVEST")
         self.assertFalse((p.arguments or {}).get("acting_for"))
+        # D-064: harvestable here but short of energy 2: WAIT, don't walk off
+        c["resources"] = {"energy": 1, "attention": 8, "storage": 16}
+        c["affordances"][-1] = {"action": "HARVEST", "verb": "COMMIT", "operation": "HARVEST", "target_id": "entity.node",
+                                "available": False, "reason": "You need energy 2 and compute 1 to harvest."}
+        p = a._plan({"canonical": c}, _options(c, a.allowed))
+        self.assertEqual(p.action, "WAIT")
         # loaded: head back to the build room
         c["resources"] = {"energy": 4, "attention": 8, "storage": 8}
         p = a._plan({"canonical": c}, _options(c, a.allowed))
