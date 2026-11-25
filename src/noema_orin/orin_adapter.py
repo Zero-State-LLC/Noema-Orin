@@ -255,7 +255,7 @@ class OrinAdapter:
                 and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)):
             # D-034: energy 1 + empty hold. WAIT gives nothing, so spend the 1 walking toward the goal;
             # arriving at 0 gets lockout rest (+2) right where the role verb is.
-            direction = route(canonical, self.world_map, goal_verbs, explorer=self.explorer)
+            direction = route(canonical, self.world_map, _route_verbs(goal_verbs), explorer=self.explorer)
             if direction:
                 self.dwell = 0
                 return ActionProposal(action="MOVE", target_id=direction)
@@ -290,7 +290,7 @@ class OrinAdapter:
             return None
         if not _can_afford_move(canonical):
             return ActionProposal(action="WAIT")  # WAIT burns cargo for energy; a refused MOVE wastes a turn
-        direction = route(canonical, self.world_map, goal_verbs, explorer=self.explorer)
+        direction = route(canonical, self.world_map, _route_verbs(goal_verbs), explorer=self.explorer)
         if not direction:
             return None
         self.dwell = 0
@@ -326,7 +326,7 @@ class OrinAdapter:
             if (self.world_map is not None and "ORG_CREATE" not in self.verbs
                     and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)):
                 # The founder (ORG_CREATE) stays put: its raw org offers are everywhere and get filtered.
-                direction = route(canonical, self.world_map, set(goal), explorer=self.explorer)
+                direction = route(canonical, self.world_map, _route_verbs(set(goal)), explorer=self.explorer)
             proposal = ActionProposal(action="MOVE", target_id=direction) if direction else ActionProposal(action="WAIT")
             source = "idle_skip"
             self.stats["idle_skip"] = self.stats.get("idle_skip", 0) + 1
@@ -406,6 +406,14 @@ def _starved_for_attention(canonical: dict, verbs: set[str]) -> bool:
 
 HARVEST_MAX = 8  # D-032: leaves hold room; cargo MOVE costs +1 regardless of amount
 SPEND_READY = 5  # D-050: cargo MOVE 2 + REPAIR 3 (engine COSTS)
+# D-052: CONSTRUCT is offered in every room, so routing on it walks to whichever room was seen last.
+UBIQUITOUS = frozenset({"CONSTRUCT", "BUILD"})
+
+
+def _route_verbs(verbs) -> set[str]:
+    """Route on the verbs that pick out a room; keep CONSTRUCT only when nothing else is left."""
+    v = set(verbs)
+    return (v - UBIQUITOUS) or v
 SUPPLY_AMOUNT = 3  # D-047: under the engine cap of 5; spreads the vault across peers
 LOW_ENERGY = 3  # D-048: a cohort peer at or below this recorded energy with an empty hold gets cargo (WAIT fuel)
 LOW_CARGO = 6  # D-048: custodian with fewer than this aboard (16 - free) gets cargo
