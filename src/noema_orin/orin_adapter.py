@@ -461,7 +461,10 @@ class OrinAdapter:
             self.stats["fallback"] += 1
             proposal = self._role_fallback(context, options)
         key = (getattr(proposal, "action", None), getattr(proposal, "target_id", None))
-        if len(self.recent) >= 2 and all((r["action"], r.get("target")) == key for r in self.recent[-2:]):
+        refuel_wait = (source == "planner" and key[0] == "WAIT"
+                       and _wait_refuels((context.get("canonical") or {}).get("resources") or {}))
+        if (len(self.recent) >= 2 and not refuel_wait
+                and all((r["action"], r.get("target")) == key for r in self.recent[-2:])):
             from noema_client.types import ActionProposal
 
             source = "loop_break"

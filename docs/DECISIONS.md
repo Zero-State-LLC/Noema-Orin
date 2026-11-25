@@ -176,3 +176,7 @@ There, D-062 WAITs (+2 energy per cargo) until the build is affordable, and D-06
 ## D-064 Rest beside the harvest node on a fuel run
 
 After D-063, m02 looped through civic-exchange, archive and civic-exchange, arriving each time at energy 1. HARVEST needs 2, so it walked off again (12 of 40 turns were MOVE). On a fuel run it now WAITs where HARVEST is offered but unaffordable (empty-hold rest goes to 2), then harvests.
+
+## D-065 loop_break leaves refuel waits alone
+
+Live m02 on a fuel run: WAIT, WAIT, then loop_break forced a MOVE (energy 5 to 7 with cargo aboard), walking it away from the treasury build every third turn. A planner WAIT that refuels (cargo aboard, or energy < 2 with an empty hold) is now exempt from the three-in-a-row loop_break.
