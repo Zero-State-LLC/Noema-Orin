@@ -93,3 +93,5 @@ Still at most once per peer per 10 turns. Energy SUPPLY stays unautomated: the t
 m06 spent 23 of 40 turns on FOCUS, alternating with loop-break MOVEs. Re-declaring the held track does nothing (engine `applyFocus` only resets `declared_cycle`), and the client's canonical view omits `focus_lines`. The adapter now remembers the track it last declared and drops that FOCUS from the menu. Other tracks stay offered. With no role verb left, the surveyor idle-skips and routes to the least-recently-seen room, which is its charter.
 
 Investigated and left alone: the fleet's top rejection, `ORG_OFFICE_ACT:INVALID_REQUEST` (16, all m05, persona versions 24 to 27), came from sessions before the current build. The current sessions show none.
+
+**D-049 follow-up.** Live, m06 still did 19 FOCUS in 30 turns because the model cycled through the other tracks. After the first declaration, every FOCUS is now dropped from the menu (one track per process lifetime). The surveyor walks to the least-recently-seen rooms instead.
