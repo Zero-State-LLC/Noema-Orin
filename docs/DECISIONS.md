@@ -111,3 +111,11 @@ D-050 result: m03's role actions stayed low (1/30). It now waits instead of wand
 ## D-052 Route on verbs that pick out a room
 
 The custodian's goal verbs include CONSTRUCT, which every room offers (map.db shows CONSTRUCT in 10 rooms). `where_offered` returns the most recently seen room offering any goal verb, so a loaded custodian walked to wherever CONSTRUCT was last seen instead of the REPAIR/RESTORE rooms (civic-exchange, relay-quarter). Routing now drops CONSTRUCT/BUILD from the goal set unless nothing else is left. Same for the quartermaster.
+
+## D-053 Walk less: nearest goal, stay beside work, explorer floor (S3-S6)
+
+Baseline (scripts/fleet.sh, 60 turns, 21:22Z): fleet MOVE 40%, energy <= 1 for 40% of turns, role actions 74/360. Four changes:
+- **Nearest goal (S5).** `where_offered(near=here)` picks the closest room by known exits, with recency as the tie-break. It used to pick the most recently seen room anywhere.
+- **Offers go stale (S4).** `observe` deletes offers a room no longer advertises. Offers that are only budget-blocked (energy, attention, materials) still count as work in the room. A depleted node ("Not enough stock") does not.
+- **Stay beside work (S4).** With no affordable role verb, idle_skip WAITs in place when the role verb is advertised here but unaffordable. m03 used to walk away from relay-quarter REPAIR at energy 3. When an affordable role verb (other than CONSTRUCT/BUILD) is in the menu, MOVE is removed from the model's options. m04 used to walk off beside RECONSTRUCT_PUBLISH.
+- **Explorer floor (S6).** The surveyor moves only at energy >= 2. It spent 38/60 turns at energy <= 1.

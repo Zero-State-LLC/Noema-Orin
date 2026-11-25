@@ -105,6 +105,9 @@ class OrinAdapter:
             # Hold has enough materials for a build or repair: stop gathering, spend them.
             menu = [{**o, "i": i} for i, o in enumerate(o for o in menu if o["action"] not in self.supply)]
         # D-051: SUPPLY is planner-only (need-gated, D-048); _ask hides it from the model.
+        if any(o["action"] in self.verbs and o["action"] not in ("CONSTRUCT", "BUILD") for o in menu):
+            # S4: role work is affordable here; the model still walked off (m04 MOVE 27/60 beside PUBLISH).
+            menu = [{**o, "i": i} for i, o in enumerate(o for o in menu if o["action"] != "MOVE")]
         return focus(menu, self.verbs, getattr(self, "held_track", None))
 
     def _built_classes(self) -> set[str]:
@@ -186,7 +189,7 @@ class OrinAdapter:
                                       res.get("energy"), res.get("storage"), seq)
             self.world_map.observe(room, loc.get("name"), seq, [e.get("to_room_id") for e in loc.get("exits") or [] if isinstance(e, dict)],
                                    [str(a.get("operation") or a.get("action") or "").upper() for a in canonical.get("affordances") or []
-                                    if isinstance(a, dict) and a.get("available") is not False])
+                                    if isinstance(a, dict) and (a.get("available") is not False or _budget_blocked(a))])
         if self.memory is not None:
             facts = facts_from(canonical)
             for kind, text in facts:
@@ -323,8 +326,13 @@ class OrinAdapter:
             canonical = context.get("canonical") or {}
             goal = self.supply if (self.supply and _hold_empty(canonical)) else self.verbs
             direction = None
-            if (self.world_map is not None and "ORG_CREATE" not in self.verbs
-                    and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)):
+            if _offered_here(canonical, set(goal)):
+                # S4: the role verb is here, only unaffordable now (filtered from options). WAIT refuels in place;
+                # m03 walked away from relay-quarter REPAIR at energy 3 every time it arrived.
+                pass
+            elif (self.world_map is not None and "ORG_CREATE" not in self.verbs
+                    and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)
+                    and _energy_after_move_ok(canonical, self.explorer)):
                 # The founder (ORG_CREATE) stays put: its raw org offers are everywhere and get filtered.
                 direction = route(canonical, self.world_map, _route_verbs(set(goal)), explorer=self.explorer)
             proposal = ActionProposal(action="MOVE", target_id=direction) if direction else ActionProposal(action="WAIT")
@@ -481,6 +489,21 @@ def _harvest_amount(proposal, canonical: dict):
 ATTENTION_VERBS = frozenset({"RECONSTRUCT", "RECONSTRUCT_PUBLISH", "RECONSTRUCT_SUPERSEDE", "ATTEST"})  # engine: attention 2
 
 
+def _energy_after_move_ok(canonical: dict, explorer: bool) -> bool:
+    """S3/S6: walk only when arriving leaves energy for something. Explorers need 2 (arrive at 1, can LOOK and
+    still WAIT-rest); m06 spent 38/60 turns at energy <= 1 bouncing MOVE/WAIT. Others keep D-034 (spend the 1)."""
+    energy = (canonical.get("resources") or {}).get("energy")
+    if not explorer or not isinstance(energy, (int, float)):
+        return True
+    return energy >= 2
+
+
+def _budget_blocked(aff: dict) -> bool:
+    """S4: offered but unaffordable for a budget or cargo reason, so the room still has the work.
+    "Not enough stock" means the node is depleted: the work is gone."""
+    return "stock" not in str(aff.get("reason") or "").lower()
+
+
 def _depleted(canonical: dict) -> bool:
     """Energy 0: only WAIT recovers it (engine applyLockoutRest, any hold since #910)."""
     energy = (canonical.get("resources") or {}).get("energy")
@@ -488,8 +511,10 @@ def _depleted(canonical: dict) -> bool:
 
 
 def _offered_here(canonical: dict, verbs: set[str]) -> bool:
-    """D-035: the room advertises a role verb even if unaffordable now; stay and rest rather than walk off."""
+    """D-035: the room advertises a role verb even if unaffordable now; stay and rest rather than walk off.
+    S4: a depleted node ("Not enough stock") does not count; WAIT cannot fix it."""
     return any(isinstance(a, dict) and str(a.get("operation") or a.get("action") or "").upper() in verbs
+               and (a.get("available") is not False or _budget_blocked(a))
                for a in canonical.get("affordances") or [])
 
 
