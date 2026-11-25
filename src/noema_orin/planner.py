@@ -122,8 +122,8 @@ def _drop_held_focus(options: list[dict], held_track: str | None) -> list[dict]:
     """
     if not held_track:
         return options
-    kept = [o for o in options if not (o["action"] == "FOCUS"
-                                       and str((o.get("raw") or {}).get("track") or "") == held_track)]
+    # Any FOCUS after the first declaration only switches or clears the track; the model cycled all five.
+    kept = [o for o in options if o["action"] != "FOCUS"]
     return [{**o, "i": i} for i, o in enumerate(kept)] if len(kept) != len(options) else options
 
 

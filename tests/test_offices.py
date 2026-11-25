@@ -323,5 +323,5 @@ class HeldFocusTests(unittest.TestCase):
                 {"i": 1, "action": "FOCUS", "raw": {"track": "explorer"}},
                 {"i": 2, "action": "MOVE", "raw": {}}]
         out = focus(opts, {"FOCUS"}, "surveyor")
-        self.assertEqual([o["raw"].get("track") for o in out if o["action"] == "FOCUS"], ["explorer"])
+        self.assertEqual([o for o in out if o["action"] == "FOCUS"], [])
         self.assertEqual(len(focus(opts, {"FOCUS"}, None)), 3)  # nothing dropped without a held track
