@@ -197,3 +197,25 @@ class QuartermasterAndIdleTests(unittest.TestCase):
                              {"action": "HARVEST", "operation": "HARVEST", "available": True, "target_id": "e.c"}]}
         p = a._plan({"canonical": c}, a._menu({"canonical": c}))
         self.assertEqual(p.action, "WAIT")
+
+    def test_idle_empty_hold_quartermaster_walks_to_harvest_room(self):
+        import tempfile
+        from pathlib import Path
+
+        from noema_orin.memory import WorldMap
+
+        a = self._qm()
+        a.on_turn, a.recent, a.memories = None, [], []
+        a.stats = {"planner": 0, "model": 0, "fallback": 0, "loop_break": 0}
+        a.health = type("H", (), {"record_turn": lambda *x, **k: None})()
+        a._ask = lambda *x: (_ for _ in ()).throw(AssertionError("model called"))
+        with tempfile.TemporaryDirectory() as d:
+            a.world_map = WorldMap(Path(d))
+            a.world_map.observe("room.civic", "Civic", 1, ["room.gen"], ["HARVEST"])
+            a.world_map.observe("room.gen", "Gen", 2, ["room.civic"], ["LOOK"])
+            c = {"resources": {"energy": 5, "attention": 8, "storage": 16},
+                 "location": {"room_id": "room.gen", "exits": [{"to_room_id": "room.civic", "direction": "west"}]},
+                 "affordances": [{"action": "LOOK", "available": True}]}
+            a.memory = None
+            p = a.decide({"canonical": c})
+            self.assertEqual((p.action, p.target_id), ("MOVE", "west"))
