@@ -165,3 +165,10 @@ The second decision (custodian energy) is "no engine change yet". Re-measure wit
 ## D-062 Wait beside a treasury build that lacks fuel
 
 Live after Worker b7ca6c7c (Noema#957, pin #958): in relay-quarter the quartermaster sees "Build a generator for Reach Compact" with vault 36, but the build is unavailable because it costs the holder 8 energy and m02 sat at energy 1 to 3. When a role-class treasury build is offered, the vault is at or above the floor, the build is blocked only on the holder's own resources, and WAIT refuels, the quartermaster WAITs in place instead of walking off.
+
+## D-063 Carry fuel for the treasury build
+
+Live energy profile of m02, last 200 turns: energy at or below 3 in 113 turns, and an empty hold in 69. A generator costs the holder 8 energy, and an empty hold rests only to 2, so D-062's WAIT never reaches 8. The quartermaster now remembers the room where a treasury build is offered. With the vault at or above the floor:
+- carrying fewer than 4 cargo: HARVEST into its own pack (not the treasury), walking toward a HARVEST room if needed;
+- carrying 4 or more: return to the build room.
+There, D-062 WAITs (+2 energy per cargo) until the build is affordable, and D-061 builds. Four cargo is 8 energy, the generator's holder share. Tested on the Orin with noema_client: 32/32.
