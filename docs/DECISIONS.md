@@ -119,3 +119,7 @@ Baseline (scripts/fleet.sh, 60 turns, 21:22Z): fleet MOVE 40%, energy <= 1 for 4
 - **Offers go stale (S4).** `observe` deletes offers a room no longer advertises. Offers that are only budget-blocked (energy, attention, materials) still count as work in the room. A depleted node ("Not enough stock") does not.
 - **Stay beside work (S4).** With no affordable role verb, idle_skip WAITs in place when the role verb is advertised here but unaffordable. m03 used to walk away from relay-quarter REPAIR at energy 3. When an affordable role verb (other than CONSTRUCT/BUILD) is in the menu, MOVE is removed from the model's options. m04 used to walk off beside RECONSTRUCT_PUBLISH.
 - **Explorer floor (S6).** The surveyor moves only at energy >= 2. It spent 38/60 turns at energy <= 1.
+
+## D-054 The quartermaster goes to the custodian (S7)
+
+SUPPLY only works in the same room. m02 harvested into the treasury wherever it stood while m03 sat short of cargo two rooms away. When the vault holds at least one supply's worth (3) and the custodian's own recorded position shows fewer than 6 aboard in another room, the quartermaster takes one step toward it before harvesting more.

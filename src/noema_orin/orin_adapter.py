@@ -220,6 +220,12 @@ class OrinAdapter:
             return p
         vault = next((o for o in options if "SUPPLY" in self.verbs and o["action"] == "HARVEST"
                       and (o.get("raw") or {}).get("acting_for")), None)
+        step = _toward_needy_custodian(canonical, custodian, self.world_map) if "SUPPLY" in self.verbs else None
+        if step is not None and _can_afford_move(canonical):
+            # S7: the vault holds cargo and the custodian (by its own recorded position) is short and elsewhere.
+            # SUPPLY needs the same room, so walk there before harvesting more.
+            self.dwell = 0
+            return ActionProposal(action="MOVE", target_id=step)
         if vault is not None:
             self.dwell = 0
             p = _proposal(vault, self.default_args, self.memory)
@@ -450,6 +456,26 @@ def _needs_supply(opt: dict, custodian: str | None, world_map, cohort_ids) -> bo
     energy = pos[1] if pos and isinstance(pos[1], (int, float)) else None
     return energy is not None and energy <= LOW_ENERGY and aboard == 0
 TREASURY_CAP = 64  # engine TREASURY_STORAGE_CAP (RFC-0133)
+
+
+def _toward_needy_custodian(canonical: dict, custodian: str | None, world_map) -> str | None:
+    """S7: exit toward the custodian when it is short of cargo (D-048 LOW_CARGO) and the vault can cover a supply."""
+    if not custodian or world_map is None or not hasattr(world_map, "position"):
+        return None
+    vault = max([(o.get("treasury") or {}).get("storage") or 0 for o in canonical.get("organizations") or []
+                 if isinstance(o, dict)] or [0])
+    if vault < SUPPLY_AMOUNT:
+        return None
+    pos = world_map.position(f"player.{custodian}")
+    if not pos or not isinstance(pos[2], (int, float)) or 16 - pos[2] >= LOW_CARGO:
+        return None
+    loc = canonical.get("location") or {}
+    here = loc.get("room_id")
+    if not here or pos[0] == here:
+        return None
+    hop = world_map.next_hop(here, pos[0])
+    exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict)}
+    return exits.get(hop) if hop else None
 
 
 def _vault_harvest_amount(opt: dict, canonical: dict) -> int:

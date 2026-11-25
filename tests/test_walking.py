@@ -46,5 +46,25 @@ class StayAndFloorTests(unittest.TestCase):
         self.assertTrue(_energy_after_move_ok({"resources": {"energy": 1}}, explorer=False))
 
 
+class QuartermasterStationTests(unittest.TestCase):
+    def test_walks_toward_short_custodian_when_vault_has_cargo(self):
+        from noema_orin.orin_adapter import _toward_needy_custodian
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        m = WorldMap(Path(tmp.name))
+        m.observe("room.a", "A", 1, ["room.b"], [])
+        m.observe("room.b", "B", 2, ["room.a"], [])
+        m.locate("player.Rivet-Custodian", "room.b", 3, 15, 2)
+        c = {"location": {"room_id": "room.a", "exits": [{"to_room_id": "room.b", "direction": "north"}]},
+             "organizations": [{"org_id": "o", "treasury": {"storage": 10}}]}
+        self.assertEqual(_toward_needy_custodian(c, "Rivet-Custodian", m), "north")
+        c["organizations"][0]["treasury"]["storage"] = 1
+        self.assertIsNone(_toward_needy_custodian(c, "Rivet-Custodian", m))
+        c["organizations"][0]["treasury"]["storage"] = 10
+        m.locate("player.Rivet-Custodian", "room.b", 3, 8, 3)  # 8 aboard: not short
+        self.assertIsNone(_toward_needy_custodian(c, "Rivet-Custodian", m))
+
+
 if __name__ == "__main__":
     unittest.main()
