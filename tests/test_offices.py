@@ -188,3 +188,12 @@ class QuartermasterAndIdleTests(unittest.TestCase):
         p = a.decide({"canonical": c})
         self.assertEqual(p.action, "WAIT")
         self.assertEqual(a.stats["idle_skip"], 1)
+
+    def test_full_hold_short_on_energy_waits_instead_of_harvesting(self):
+        a = self._qm()
+        c = {"resources": {"energy": 2, "attention": 8, "storage": 0}, "location": {"room_id": "room.civic-exchange"},
+             "affordances": [{"action": "BUILD", "operation": "CONSTRUCT", "class": "storage_bay", "available": False,
+                              "reason": "You do not have enough resources to construct."},
+                             {"action": "HARVEST", "operation": "HARVEST", "available": True, "target_id": "e.c"}]}
+        p = a._plan({"canonical": c}, a._menu({"canonical": c}))
+        self.assertEqual(p.action, "WAIT")
