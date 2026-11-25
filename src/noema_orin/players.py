@@ -7,7 +7,6 @@ Decisions come from an OpenAI-compatible endpoint (local Ollama by default).
 
 import argparse
 import json
-import os
 import signal
 import sys
 import threading
@@ -103,6 +102,10 @@ def main(argv: list[str] | None = None) -> int:
     def on_turn(pid):
         record_self(ns.root, ns.member, pid)
         adapter.role_handles = role_handles(ns.root, roles)
+        from . import planner
+
+        pin = ns.root / "shared" / "home_org"
+        planner.PINNED_HOME = pin.read_text().strip() or None if pin.exists() else None
         return cohort_ids(ns.root)
 
     adapter.on_turn = on_turn

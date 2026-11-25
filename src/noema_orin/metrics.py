@@ -19,8 +19,26 @@ CREATE TABLE IF NOT EXISTS sessions(src TEXT, line INTEGER, ts REAL, member TEXT
   stop_reason TEXT, stop_detail TEXT, role_actions INTEGER, idle_actions INTEGER, turns INTEGER,
   drops INTEGER, rejections TEXT, PRIMARY KEY(src, line));
 CREATE TABLE IF NOT EXISTS marks(src TEXT PRIMARY KEY, offset INTEGER);
+CREATE TABLE IF NOT EXISTS stuck(src TEXT PRIMARY KEY, zero_energy_streak INTEGER, ts REAL);
 """
 IDLE = {"LOOK", "WAIT", "INSPECT", "MOVE"}
+STUCK_TURNS = 10
+
+
+def zero_energy_streak(lines: list[str]) -> int:
+    """Trailing run of turns logged with budgets.energy == 0 (engine lock, Noema#907)."""
+    streak = 0
+    for raw in reversed(lines):
+        if not raw.startswith('{"turn"'):
+            continue
+        try:
+            budgets = json.loads(raw).get("budgets") or {}
+        except ValueError:
+            continue
+        if budgets.get("energy") != 0:
+            break
+        streak += 1
+    return streak
 
 
 def _role_verbs(role: str) -> set[str]:
@@ -76,6 +94,8 @@ def collect(root: Path, db: sqlite3.Connection) -> int:
                 done = n + 1
                 turns, role_n, idle_n, drops = 0, 0, 0, 0
         db.execute("INSERT INTO marks VALUES (?,?) ON CONFLICT(src) DO UPDATE SET offset=excluded.offset", (src, done))
+        db.execute("INSERT INTO stuck VALUES (?,?,?) ON CONFLICT(src) DO UPDATE SET zero_energy_streak=excluded.zero_energy_streak, "
+                   "ts=excluded.ts", (src, zero_energy_streak(lines[-400:]), time.time()))
     db.commit()
     return added
 
@@ -93,6 +113,10 @@ def digest(db: sqlite3.Connection, hours: float = 24) -> dict:
     alerts = [f"{m}: idle_rate {v['idle_rate']}" for m, v in out.items() if v["turns"] >= 20 and v["idle_rate"] > 0.6]
     alerts += [f"{m}: {v['sessions'] - v['full_sessions']}/{v['sessions']} sessions ended early" for m, v in out.items()
                if v["sessions"] >= 4 and v["full_sessions"] / v["sessions"] < 0.5]
+    for src, streak in db.execute("SELECT src, zero_energy_streak FROM stuck WHERE zero_energy_streak >= ? ORDER BY src",
+                                  (STUCK_TURNS,)).fetchall():
+        member = src.removeprefix("noema-player@").removeprefix("noema-").removesuffix(".log")
+        alerts.append(f"{member}: energy 0 for last {streak} turns (Noema#907)")
     return {"window_hours": hours, "members": out, "alerts": alerts}
 
 

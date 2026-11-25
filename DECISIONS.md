@@ -208,3 +208,11 @@ stops after the last complete session; metrics.db was rebuilt from the logs.
 Per-turn budget logs (#60) show five of six agents at energy 0 with an empty hold. In the engine that state cannot recover:
 WAIT's cargo fuel needs cargo, and lockout rest needs a full hold. Filed Zero-State-LLC/Noema#907 for a rule decision. The
 loop-breaker now LOOKs instead of proposing a MOVE the engine will refuse.
+
+## D-029: Pinned home org; zero-energy alert; no material sharing without TRADE (2026-11-25)
+
+After the real restart the founder created two more Reach Compacts (org.reach-compact.81a1adb9, .8acbfc9e): some
+observations arrive without the founder's org in `organizations`, so `home_org` returned None and the ORG_CREATE guard
+lapsed. `shared/home_org` now pins org.reach-compact.34df3bb5, and the planner trusts the pin over the observation. The
+metrics digest alerts when an agent's last >=10 logged turns all show energy 0 (Noema#907). The Quartermaster cannot relieve
+stuck agents: engine SHARE co-owns a structure, it does not move materials, and TRADE stays denied to role agents.
