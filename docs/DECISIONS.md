@@ -41,3 +41,7 @@ Noema#926 is live: WAIT at energy < 2 with an empty hold rests to 2. `_wait_refu
 ## D-039 Empty-hold supply roles gather when gathering is offered
 
 Live diagnostic (#84): the custodian had energy 50+ and an offered HARVEST in Civic Exchange, but the decide model chose MOVE every time, and the planner bounced it back out. With an empty hold and a supply verb offered, the planner now takes it directly. One harvest node in the room was empty ("Not enough stock"). The Salvage Cache was the available one.
+
+## D-040 Loaded supply roles spend materials where a spend verb is offered
+
+After D-039, the custodian harvested 8 and then walked past an offered RESTORE (the model chose MOVE). With materials aboard and a role spend verb offered, the planner takes it.

@@ -126,3 +126,17 @@ class SupplyPickTests(unittest.TestCase):
         options = a._menu({"canonical": c})
         p = a._plan({"canonical": c}, options)
         self.assertEqual((p.action, p.target_id), ("HARVEST", "e.cache"))
+
+    def test_loaded_custodian_restores_when_offered(self):
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        spec = role_for("custodian")
+        a.allowed, a.cohort_ids, a.role_handles = frozenset(spec["allow"]), set(), {}
+        a.builds, a.supply, a.verbs = spec.get("builds"), spec.get("supply"), set(spec["verbs"])
+        a.memory, a.world_map, a.dwell, a.explorer, a.default_args, a.stats_mem = None, None, 0, False, {}, 0
+        c = {"resources": {"energy": 43, "attention": 0, "storage": 11}, "location": {"room_id": "room.relay-quarter"},
+             "affordances": [{"action": "RESTORE", "operation": "RESTORE", "available": True, "target_id": "e.relay"},
+                             {"action": "MOVE", "available": True, "dest": "room.archive"}]}
+        p = a._plan({"canonical": c}, a._menu({"canonical": c}))
+        self.assertEqual((p.action, p.target_id), ("RESTORE", "e.relay"))
