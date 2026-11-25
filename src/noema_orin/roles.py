@@ -18,13 +18,14 @@ ROLES: dict[str, dict[str, object]] = {
                                 "charter": "Keep Perihelion Reach standing, supplied and remembered"}},
     },
     "quartermaster": {
-        "verbs": ("HARVEST", "COMMIT.HARVEST", "SHARE", "VEST", "CONSTRUCT"),
+        "verbs": ("HARVEST", "COMMIT.HARVEST", "SHARE", "VEST", "CONSTRUCT", "SUPPLY"),
         # D-041: a full hold has nowhere to go (SHARE/VEST move ownership, TRADE is denied), so the quartermaster
         # turns cargo into Compact infrastructure. storage_bay 6 cargo/5 energy, generator 5 cargo/8 energy
         # (generator also raises room harvest yield, engine productionModifier).
         "builds": ("storage_bay", "generator"),
-        "mission": "Keep the Compact supplied: find stock, HARVEST when stock and storage allow, and when the hold "
-                   "is full CONSTRUCT a storage bay or generator for the Compact. Never trade.",
+        "mission": "Keep the Compact supplied: once seated as Quartermaster, HARVEST into the Compact treasury and "
+                   "SUPPLY cargo to the custodian for repairs. Before that, HARVEST into your hold and CONSTRUCT a "
+                   "storage bay or generator when it is full. Never trade.",
     },
     "custodian": {
         "verbs": ("REPAIR", "COMMIT.REPAIR", "RESTORE", "UPGRADE", "CONSTRUCT", "REPURPOSE"),

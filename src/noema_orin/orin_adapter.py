@@ -195,6 +195,28 @@ class OrinAdapter:
         if _depleted(canonical):
             self.dwell = 0
             return ActionProposal(action="WAIT")  # engine #907/#910: WAIT at energy 0 rests +2 energy
+        # D-047 (RFC-0133): the seated quartermaster serves before gathering. SUPPLY cargo to the custodian when it
+        # is here (cargo is REPAIR/RESTORE material), at most once per 10 turns; then harvest into the treasury.
+        # Energy SUPPLY is not automated: peer budgets are not observable, so it would drain the vault blind.
+        custodian = self.role_handles.get("custodian")
+        served = {r.get("target") for r in getattr(self, "recent", [])[-10:] if r["action"] == "SUPPLY"}
+        sup = next((o for o in options if "SUPPLY" in self.verbs and o["action"] == "SUPPLY" and o.get("target_id") not in served
+                    and (o.get("raw") or {}).get("resource") == "storage" and custodian
+                    and str(o.get("target_id") or "").replace("player.", "", 1) == custodian), None)
+        if sup is not None:
+            self.dwell = 0
+            p = _proposal(sup, self.default_args, self.memory)
+            if p is not None:
+                p.arguments = {**(p.arguments or {}), "amount": SUPPLY_AMOUNT}
+            return p
+        vault = next((o for o in options if "SUPPLY" in self.verbs and o["action"] == "HARVEST"
+                      and (o.get("raw") or {}).get("acting_for")), None)
+        if vault is not None:
+            self.dwell = 0
+            p = _proposal(vault, self.default_args, self.memory)
+            if p is not None:
+                p.arguments = {**(p.arguments or {}), "amount": _vault_harvest_amount(vault, canonical)}
+            return p
         goal_verbs = self.verbs
         if self.supply and _hold_empty(canonical):
             goal_verbs = self.supply  # gather materials before repair/construct (engine cargo rule)
@@ -367,6 +389,20 @@ def _starved_for_attention(canonical: dict, verbs: set[str]) -> bool:
 
 
 HARVEST_MAX = 8  # D-032: leaves hold room; cargo MOVE costs +1 regardless of amount
+SUPPLY_AMOUNT = 3  # D-047: under the engine cap of 5; spreads the vault across peers
+TREASURY_CAP = 64  # engine TREASURY_STORAGE_CAP (RFC-0133)
+
+
+def _vault_harvest_amount(opt: dict, canonical: dict) -> int:
+    """Treasury harvest skips the pack, so only node stock and the vault cap bound it."""
+    target = opt.get("target_id")
+    loc = canonical.get("location") or {}
+    stock = next((e.get("stock_amount") for e in (loc.get("entities") or canonical.get("entities") or [])
+                  if isinstance(e, dict) and e.get("entity_id") == target), 1)
+    org = (opt.get("raw") or {}).get("acting_for")
+    vault = next(((o.get("treasury") or {}).get("storage") or 0 for o in canonical.get("organizations") or []
+                  if isinstance(o, dict) and o.get("org_id") == org), 0)
+    return max(1, int(min(HARVEST_MAX, stock if isinstance(stock, (int, float)) else 1, TREASURY_CAP - vault)))
 
 
 def _harvest_amount(proposal, canonical: dict):
