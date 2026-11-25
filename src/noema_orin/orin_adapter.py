@@ -87,14 +87,17 @@ class OrinAdapter:
         canonical = context.get("canonical") or {}
         from .planner import prefer_builds
 
-        menu = refine(_options(canonical, self.allowed), canonical, self.cohort_ids)
+        options = _options(canonical, self.allowed)
         if self.role_handles:
             from .offices import refine_offices, retarget_create
             from .planner import home_org
 
             home = home_org(canonical)
-            menu = [m for m in (retarget_create(o, canonical, home) if o["action"] == "ORG_OFFICE_CREATE" else o
-                                for o in menu) if m is not None]
+            # Retarget before refine: refine drops a create whose name exists, and the engine only offers Notice.
+            options = [m for m in (retarget_create(o, canonical, home) if o["action"] == "ORG_OFFICE_CREATE" else o
+                                   for o in options) if m is not None]
+        menu = refine(options, canonical, self.cohort_ids)
+        if self.role_handles:
             menu = refine_offices(menu, canonical, home, self.role_handles, self.role_handles.get("founder"))
         if self.builds:
             menu = prefer_builds(menu, self.builds, self._built_classes())

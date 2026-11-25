@@ -92,3 +92,17 @@ class CatalogTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MenuPipelineTests(unittest.TestCase):
+    def test_engine_notice_create_survives_as_steward_when_notice_exists(self):
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        a.allowed, a.cohort_ids, a.role_handles = frozenset(role_for("founder")["allow"]), set(), HANDLES
+        a.builds, a.supply, a.verbs = None, None, set(role_for("founder")["verbs"])
+        c = canon([NOTICE])
+        c["affordances"] = [{"action": "ORG_OFFICE_CREATE", "operation": "ORG_OFFICE_CREATE", "available": True,
+                             "target_id": HOME, "cmd": f'office create {HOME} name="Notice" profile=PUBLISH_NOTICE'}]
+        menu = a._menu({"canonical": c})
+        self.assertEqual([o["label"] for o in menu], ["Create Steward office"])

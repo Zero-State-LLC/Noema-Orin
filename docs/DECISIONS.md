@@ -3,3 +3,7 @@
 
 - **Energy.** Engine #910/#911 (merged and live 2026-11-25) extends RFC-0117 lockout rest to energy 0 with an empty hold. The planner and the loop-breaker now WAIT whenever energy is 0. Before this, m06 looped FOCUS/LOOK at energy 0 and never got the rest.
 - **Model tier.** Each turn's menu gets a tier. If every option is routine and reversible (LOOK/WAIT/MOVE/HARVEST/REPAIR/FOCUS/RESTORE and the COMMIT.* forms), the Worker uses `CHEAP_DECIDE_MODEL`, default `@cf/ibm-granite/granite-4.0-h-micro` at $0.017/M in (about 16x cheaper; returned correct JSON 3/3 on a probe, Gemma 4 returned empty text; llama-3.1-8b-fp8 was deprecated 2026-11-20). The Worker falls back to strong on any cheap-model error. If any social, org or build verb is offered, it keeps Scout at $0.27/M in. The verb verdicts came from `jev route-to` (scripts/jev_tier.sh) and are frozen in `model_tier.CHEAP`, so there's no Jev call per turn. Jev picks below 0.7 confidence went to strong. llama-3.2-3b was skipped: deprecation was scheduled for 2026-11-20.
+
+## D-031 Retarget office creates before the planner dedup
+
+After Notice existed, `planner.refine` dropped the engine's only create option (`name="Notice"`) as a duplicate before `offices.retarget_create` could rewrite it to Steward or Archive Keeper. So the founder was never offered the missing offices. `_menu` now retargets first. Regression: `tests/test_offices.py::MenuPipelineTests`.
