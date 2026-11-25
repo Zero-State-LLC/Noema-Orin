@@ -21,3 +21,7 @@ At energy 1 with an empty hold, engine WAIT restores nothing: lockout rest needs
 ## D-034 Walk toward the goal when WAIT can't refuel
 
 At energy 1 with an empty hold and no role verb here, the planner now spends the 1 energy MOVEing toward the goal room. It arrives at 0 and gets lockout rest (+2) there. Before this, the loop-breaker sent it the wrong way. That still leaves the in-room case: at energy 1 in the harvest room, HARVEST needs 2, and nothing burns 1 without leaving. The proper fix is an engine change (Noema#907 follow-up comment, operator decision).
+
+## D-035 Stay where the role verb lives
+
+D-034 live showed the custodian arriving at Civic Exchange (the only HARVEST room) at energy 1. HARVEST wasn't affordable, so `has_role_verb` (available options only) said "not here", and D-034 walked it straight out again. A room now counts as the goal if it advertises the role verb at all. The agent stays, the next turn burns to 0 or rests, then it acts.

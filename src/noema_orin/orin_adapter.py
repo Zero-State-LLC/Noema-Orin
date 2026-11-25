@@ -201,7 +201,7 @@ class OrinAdapter:
         if _starved_for_attention(canonical, goal_verbs):
             self.dwell = 0
             return ActionProposal(action="WAIT")  # engine: WAIT restores attention +2 (cap 8)
-        here = has_role_verb(options, goal_verbs)
+        here = has_role_verb(options, goal_verbs) or _offered_here(canonical, goal_verbs)
         if (not here and self.world_map is not None and not _wait_refuels(canonical.get("resources") or {})
                 and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)):
             # D-034: energy 1 + empty hold. WAIT gives nothing, so spend the 1 walking toward the goal;
@@ -334,6 +334,12 @@ def _depleted(canonical: dict) -> bool:
     """Energy 0: only WAIT recovers it (engine applyLockoutRest, any hold since #910)."""
     energy = (canonical.get("resources") or {}).get("energy")
     return isinstance(energy, (int, float)) and energy <= 0
+
+
+def _offered_here(canonical: dict, verbs: set[str]) -> bool:
+    """D-035: the room advertises a role verb even if unaffordable now; stay and rest rather than walk off."""
+    return any(isinstance(a, dict) and str(a.get("operation") or a.get("action") or "").upper() in verbs
+               for a in canonical.get("affordances") or [])
 
 
 def _wait_refuels(res: dict) -> bool:

@@ -53,3 +53,11 @@ class WaitRefuels(unittest.TestCase):
         self.assertFalse(_starved_for_attention(c, {"HARVEST"}))
         c["resources"]["storage"] = 12  # cargo aboard: WAIT burns it for +2
         self.assertTrue(_starved_for_attention(c, {"HARVEST"}))
+
+
+class OfferedHere(unittest.TestCase):
+    def test_unaffordable_role_verb_still_counts_as_here(self):
+        from noema_orin.orin_adapter import _offered_here
+        c = {"affordances": [{"action": "HARVEST", "available": False}, {"action": "LOOK"}]}
+        self.assertTrue(_offered_here(c, {"HARVEST"}))
+        self.assertFalse(_offered_here(c, {"REPAIR"}))
