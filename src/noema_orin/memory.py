@@ -149,14 +149,38 @@ class WorldMap(_Closable):
             for action in set(actions):
                 self.db.execute("INSERT INTO offers VALUES (?,?,?) ON CONFLICT(room_id, action) DO UPDATE SET seen_seq=excluded.seen_seq",
                                 (room_id, action, sequence or 0))
+            # S4: an offer the room no longer advertises is gone; stale rows sent m03 back and forth.
+            keep = sorted(set(actions)) or [""]
+            self.db.execute(f"DELETE FROM offers WHERE room_id=? AND action NOT IN ({','.join('?' * len(keep))})",
+                            (room_id, *keep))
 
-    def where_offered(self, actions: set[str], exclude: str | None = None) -> str | None:
+    def where_offered(self, actions: set[str], exclude: str | None = None, near: str | None = None) -> str | None:
+        """Room offering any of `actions`. With `near`, the closest by known exits (S5); recency breaks ties."""
         if not actions:
             return None
         marks = ",".join("?" * len(actions))
-        row = self.db.execute(f"SELECT room_id FROM offers WHERE action IN ({marks}) AND room_id IS NOT ? "
-                              "ORDER BY seen_seq DESC LIMIT 1", (*sorted(actions), exclude)).fetchone()
-        return row[0] if row else None
+        rows = self.db.execute(f"SELECT room_id, max(seen_seq) FROM offers WHERE action IN ({marks}) AND room_id IS NOT ? "
+                               "GROUP BY room_id ORDER BY max(seen_seq) DESC", (*sorted(actions), exclude)).fetchall()
+        if not rows:
+            return None
+        if near is None:
+            return rows[0][0]
+        dist = self.distances(near)
+        reachable = [(dist[r], -s, r) for r, s in rows if r in dist]
+        return min(reachable)[2] if reachable else rows[0][0]
+
+    def distances(self, start: str) -> dict[str, int]:
+        """BFS hop counts over observed exits."""
+        dist, frontier = {start: 0}, [start]
+        while frontier:
+            nxt = []
+            for room in frontier:
+                for (dest,) in self.db.execute("SELECT dest FROM exits WHERE room_id=?", (room,)):
+                    if dest not in dist:
+                        dist[dest] = dist[room] + 1
+                        nxt.append(dest)
+            frontier = nxt
+        return dist
 
     def locate(self, player_id: str, room_id: str, energy, free_storage, sequence) -> None:
         """D-048: each Orin agent records its own room and budgets (self-observed only) for cohort services."""

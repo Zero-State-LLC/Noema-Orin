@@ -137,7 +137,7 @@ def route(canonical: dict, world_map, verbs: set[str], *, explorer: bool) -> str
     if explorer:
         goal = world_map.least_recent(sorted(r for r in exits if r))
         return exits.get(goal)
-    goal = world_map.where_offered(verbs, exclude=here)
+    goal = world_map.where_offered(verbs, exclude=here, near=here)
     if goal is None:
         goal = world_map.least_recent(sorted(r for r in exits if r))
         return exits.get(goal)
