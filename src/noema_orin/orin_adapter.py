@@ -202,6 +202,14 @@ class OrinAdapter:
             self.dwell = 0
             return ActionProposal(action="WAIT")  # engine: WAIT restores attention +2 (cap 8)
         here = has_role_verb(options, goal_verbs)
+        if (not here and self.world_map is not None and not _wait_refuels(canonical.get("resources") or {})
+                and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)):
+            # D-034: energy 1 + empty hold. WAIT gives nothing, so spend the 1 walking toward the goal;
+            # arriving at 0 gets lockout rest (+2) right where the role verb is.
+            direction = route(canonical, self.world_map, goal_verbs, explorer=self.explorer)
+            if direction:
+                self.dwell = 0
+                return ActionProposal(action="MOVE", target_id=direction)
         if self.builds and _hold_ready(canonical):
             pick = next((o for o in options if o["action"] == "CONSTRUCT"
                          and str((o.get("raw") or {}).get("class") or "") in self.builds), None)

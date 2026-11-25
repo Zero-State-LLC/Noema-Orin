@@ -17,3 +17,7 @@ The engine's HARVEST affordance always says `amount 1`. HARVEST costs a flat 2 e
 ## D-033 Don't WAIT for energy that WAIT can't give
 
 At energy 1 with an empty hold, engine WAIT restores nothing: lockout rest needs energy 0, and cargo fuel needs cargo. The planner still WAITed "for energy" there, then the loop-breaker MOVEd, so the custodian spent about 50% of its turns on no-op WAITs and never reached a role action. `_starved_for_attention` now counts energy only when WAIT actually refuels.
+
+## D-034 Walk toward the goal when WAIT can't refuel
+
+At energy 1 with an empty hold and no role verb here, the planner now spends the 1 energy MOVEing toward the goal room. It arrives at 0 and gets lockout rest (+2) there. Before this, the loop-breaker sent it the wrong way. That still leaves the in-room case: at energy 1 in the harvest room, HARVEST needs 2, and nothing burns 1 without leaving. The proper fix is an engine change (Noema#907 follow-up comment, operator decision).
