@@ -379,3 +379,20 @@ class SupplyProposalTests(unittest.TestCase):
         a._ask({"canonical": {}}, [{"i": 0, "action": "SUPPLY", "label": "Supply", "raw": {}},
                                     {"i": 1, "action": "HARVEST", "label": "Harvest", "raw": {}}])
         self.assertNotIn("SUPPLY", seen.get("user", ""))
+
+
+class RouteVerbTests(unittest.TestCase):
+    def test_d052_route_skips_ubiquitous_construct(self):
+        from noema_orin.memory import WorldMap
+        from noema_orin.orin_adapter import _route_verbs
+        from noema_orin.planner import route
+
+        self.assertEqual(_route_verbs({"REPAIR", "CONSTRUCT"}), {"REPAIR"})
+        self.assertEqual(_route_verbs({"CONSTRUCT"}), {"CONSTRUCT"})
+        m = WorldMap(Path(tempfile.mkdtemp()))
+        m.observe("room.a", "A", 1, ["room.b", "room.c"], [])
+        m.observe("room.b", "B", 2, ["room.a"], ["REPAIR"])
+        m.observe("room.c", "C", 9, ["room.a"], ["CONSTRUCT"])
+        c = {"location": {"room_id": "room.a", "exits": [{"to_room_id": "room.b", "direction": "east"},
+                                                          {"to_room_id": "room.c", "direction": "west"}]}}
+        self.assertEqual(route(c, m, _route_verbs({"REPAIR", "CONSTRUCT"}), explorer=False), "east")

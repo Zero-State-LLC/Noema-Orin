@@ -107,3 +107,7 @@ After D-050, m02 spent 20 of 30 turns on SUPPLY, and the engine rejected most of
 - `_ask` hides SUPPLY from the model. Only the planner proposes it, and only on recorded need.
 
 D-050 result: m03's role actions stayed low (1/30). It now waits instead of wandering, but the only work on offer in its rooms is HARVEST on depleted nodes. Next: watch whether D-048 cargo plus waiting gets it to REPAIR/RESTORE.
+
+## D-052 Route on verbs that pick out a room
+
+The custodian's goal verbs include CONSTRUCT, which every room offers (map.db shows CONSTRUCT in 10 rooms). `where_offered` returns the most recently seen room offering any goal verb, so a loaded custodian walked to wherever CONSTRUCT was last seen instead of the REPAIR/RESTORE rooms (civic-exchange, relay-quarter). Routing now drops CONSTRUCT/BUILD from the goal set unless nothing else is left. Same for the quartermaster.
