@@ -99,3 +99,11 @@ Investigated and left alone: the fleet's top rejection, `ORG_OFFICE_ACT:INVALID_
 ## D-050 A loaded custodian waits for energy before walking
 
 m03 did 0 role actions in 30 turns. It carried 3 to 6 materials at energy 1 to 5 and kept walking (2 energy per move with cargo), so it arrived unable to REPAIR (energy 3) and burned its cargo as WAIT fuel. When a supply role carries materials, has no role verb here, and is below energy 5 (one cargo MOVE plus REPAIR), it now WAITs. Each WAIT with cargo gives +2 energy (RFC-0119).
+
+## D-051 SUPPLY is planner-only and always carries an amount
+
+After D-050, m02 spent 20 of 30 turns on SUPPLY, and the engine rejected most of them (`SUPPLY:INVALID_REQUEST`, args without `amount`). The model picked SUPPLY affordances directly, which skipped both the D-048 need check and the amount. Fixes:
+- `_proposal` defaults `amount` to 3 for SUPPLY.
+- `_ask` hides SUPPLY from the model. Only the planner proposes it, and only on recorded need.
+
+D-050 result: m03's role actions stayed low (1/30). It now waits instead of wandering, but the only work on offer in its rooms is HARVEST on depleted nodes. Next: watch whether D-048 cargo plus waiting gets it to REPAIR/RESTORE.

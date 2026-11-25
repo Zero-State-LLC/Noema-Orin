@@ -354,3 +354,28 @@ class CustodianEnergyTests(unittest.TestCase):
         c = self._canon(9)
         p = a._plan({"canonical": c}, a._menu({"canonical": c}))
         self.assertNotEqual(getattr(p, "action", None), "WAIT")
+
+
+@unittest.skipUnless(_HAS_CLIENT, "requires noema_client")
+class SupplyProposalTests(unittest.TestCase):
+    def test_d051_supply_proposal_always_has_amount(self):
+        from noema_orin.orin_adapter import _proposal
+
+        p = _proposal({"action": "SUPPLY", "target_id": "player.b",
+                       "raw": {"action": "SUPPLY", "operation": "SUPPLY", "player_id": "player.b", "resource": "storage",
+                               "acting_for": "org.c", "office_id": "office.c.1"}}, {})
+        self.assertEqual(p.arguments.get("amount"), 3)
+
+    def test_d051_model_never_sees_supply(self):
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        a.recent, a.system, a.memories, seen = [], "", [], {}
+
+        def chat(instruction, user, **kw):
+            seen["user"] = user
+            return {"choice": 0}
+        a._chat, a.memory, a.default_args = chat, None, {}
+        a._ask({"canonical": {}}, [{"i": 0, "action": "SUPPLY", "label": "Supply", "raw": {}},
+                                    {"i": 1, "action": "HARVEST", "label": "Harvest", "raw": {}}])
+        self.assertNotIn("SUPPLY", seen.get("user", ""))
