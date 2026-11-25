@@ -55,22 +55,31 @@ export default {
       const decide = url.pathname === "/chat";
       // D-030: routine-only menus use the cheap decide model; anything social/org/build uses the strong one.
       const cheap = decide && body.tier === "cheap";
-      const model = cheap ? env.CHEAP_DECIDE_MODEL || "@cf/meta/llama-3.1-8b-instruct-fp8"
-        : decide ? env.DECIDE_MODEL || "@cf/meta/llama-4-scout-17b-16e-instruct"
+      const strong = decide ? env.DECIDE_MODEL || "@cf/meta/llama-4-scout-17b-16e-instruct"
         : env.REFLECT_MODEL || "@cf/google/gemma-4-26b-a4b-it";
+      let model = cheap ? env.CHEAP_DECIDE_MODEL || "@cf/ibm-granite/granite-4.0-h-micro" : strong;
       const maxTokens = Math.min(Math.max(Number(body.max_tokens) || (decide ? 80 : 1024), 16), 1024);
-      const out = await env.AI.run(model, {
+      const input = {
         messages: [
           { role: "system", content: body.system.slice(0, 4000) },
           { role: "user", content: body.user.slice(0, 6000) },
         ],
         max_tokens: maxTokens,
         temperature: decide ? 0.3 : 0.4,
-      });
+      };
+      let out, cheapError;
+      try {
+        out = await env.AI.run(model, input);
+      } catch (err) {
+        if (model === strong) throw err;
+        cheapError = String(err?.message || err).slice(0, 200);
+        model = strong; // a cheap-model failure must never cost the turn
+        out = await env.AI.run(model, input);
+      }
       const text =
         typeof out?.response === "string" && out.response ? out.response
           : out?.choices?.[0]?.message?.content ?? (typeof out?.response === "object" ? JSON.stringify(out.response) : "");
-      return Response.json({ model, text: String(text || ""), shape: Object.keys(out || {}) });
+      return Response.json({ model, text: String(text || ""), shape: Object.keys(out || {}), cheap_error: cheapError });
     }
 
     if (request.method !== "POST" || url.pathname !== "/sync") return new Response("not found", { status: 404 });
