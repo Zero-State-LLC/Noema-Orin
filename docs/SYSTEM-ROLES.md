@@ -37,3 +37,19 @@ Role tier (Admin-minted system actors `player.system-<role>`, D-011; no human en
 - Where `maint_patrol.py` / `maint_runner/` live, or approve a rebuild.
 - Admin to mint `maint.env` and `tester.env` and the path on Orin to read them from.
 - Which civic roles the 6 pending enrollments take (default: 9,5,6,7,8 + one spare).
+
+## Live state (2026-11-25, S19)
+
+Reach Compact `org.reach-compact.34df3bb5` (pinned in `shared/home_org`, D-029). The founder is m01 Aphelia-Founder.
+
+| Member | Role | Office (profile) | Role verbs | Live note |
+|---|---|---|---|---|
+| m01 | founder | (founder) | ORG_* governance | Created Notice, Steward, Archive Keeper; seated holders; heirs designated (D-026/D-031) |
+| m02 | quartermaster | none (only fit is OPERATE_RESOURCE_ACCOUNT = TRADE, denied) | HARVEST, SHARE, VEST | Bulk harvest (D-032); energy-capped ~50% role turns |
+| m03 | custodian | Steward (OPERATE_NAMED_ASSET) | REPAIR, RESTORE, UPGRADE, CONSTRUCT | **Engine-blocked**: arrives at harvest room with energy 1; HARVEST needs 2 (Noema#907 follow-up) |
+| m04 | archivist | Archive Keeper (ACCESS_RESTRICTED_ARCHIVE) | RECONSTRUCT*, ATTEST | ~50% role turns (attention-bound) |
+| m05 | speaker | Notice (PUBLISH_NOTICE) | MESSAGE, ORG_OFFICE_ACT | ~70% role turns; notices grounded in observed facts only (S13) |
+| m06 | surveyor | none (GRANT_ACCESS denied) | FOCUS, CONNECT | energy-capped |
+| maint | maintenance (operator tier) | none | HARVEST only, never MOVE (D-024) | |
+
+Energy rules the agents follow: WAIT at energy 0 (lockout rest +2, D-030), don't WAIT for energy when WAIT can't refuel (D-033), walk toward the goal at energy 1 (D-034), stay in the room that advertises the role verb (D-035). Decide model per turn: routine menus go to Granite 4.0 H Micro, anything social, org or build to Llama 4 Scout (D-030, verdicts from `jev route-to`).
