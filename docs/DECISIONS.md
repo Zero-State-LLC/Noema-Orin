@@ -144,3 +144,10 @@ All rows come from each agent's own observations. Nothing is inferred about othe
 - **Cost alarm (S15).** The metrics timer stores per-session deltas of `health.workers_ai_calls` and `ollama_fallbacks` (the counters are cumulative per process) in a `cost` table. The digest adds one alert line when calls in the window reach 70% of the 10k/day cap pro rata, or when fallbacks exceed 5% of calls (minimum 100 calls).
 - **Map compaction (S17).** Each memory-sync run also drops `work` rows more than 20,000 world sequences behind the newest and runs `wal_checkpoint(TRUNCATE)`. The WAL had reached 4 MB beside a 60 KB map. A busy map is skipped until the next run.
 - **Single-unit deploys (S18).** `deploy/rolling-restart.sh` already honours `UNITS`, for example `UNITS="noema-player@m01 noema-player@m04" deploy/rolling-restart.sh --apply`. Recorded in FACTS. No code change.
+
+## D-059 Notices are planner-only and say something new (S13, S14)
+
+Tier data, last 3,000 model turns: 596 strong-tier calls were the speaker choosing ORG_OFFICE_ACT. The notice text is already deterministic (`grounded_notice`), so the model was only choosing "post", and what it posted was usually its own last consequence ("Notice posted for Reach Compact."). Changes:
+- `grounded_notice` skips the agent's own echoes: lines starting "You ", "Notice posted", "Reconstruction published" and "Welcome to". Each fact is posted once (memory kind `noticed`).
+- For the speaker, the planner posts a PUBLISH_NOTICE office act whenever a new fact exists and hides ORG_OFFICE_ACT from the model. Other roles' office acts are unchanged.
+- S14 (cheap-tier regen): this is the bigger win. The cheap set already covers HARVEST/REPAIR/FOCUS/MOVE, and most strong calls were these notices. CHEAP is unchanged.

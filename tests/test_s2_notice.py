@@ -20,6 +20,16 @@ class NoticeTests(unittest.TestCase):
             self.assertLessEqual(len(out), 280)
             m.close()
 
+    def test_d059_skips_own_echoes_and_posts_each_fact_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            m = Memory(Path(d))
+            m.remember("Relay Quarter relay is failing.", kind="consequence", room="room.r", sequence=10)
+            m.remember("Notice posted for Reach Compact.", kind="consequence", room="room.c", sequence=11)
+            m.remember("You wait.", kind="consequence", room="room.c", sequence=12)
+            self.assertIn("relay is failing", grounded_notice(m))
+            self.assertIsNone(grounded_notice(m))
+            m.close()
+
 
 @unittest.skipUnless(__import__("importlib").util.find_spec("noema_client"), "needs noema-client")
 class ProposalTests(unittest.TestCase):
