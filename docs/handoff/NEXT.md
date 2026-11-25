@@ -23,3 +23,5 @@
 ## 2026-11-25 update
 - Decision 1 resolved: engine #910/#911 (empty-hold lockout rest) is live, and D-030 makes agents WAIT at energy 0. All 6 agents now cycle WAIT then act (m06 went from 0 to 2).
 - D-030 tiered decide model: cheap menus go to Granite 4.0 H Micro, strong ones to Scout. TODO: log the per-turn tier (stats_tier) to verify the live split. Decision 2 (cost cap) is still open; re-estimate after a day of tiered usage.
+- 2026-11-25 02:45Z: D-031 live. Founder created Steward (`…steward.18c17379`) and Archive Keeper (`…archive-keeper.c0e3fac7`), seated Rivet-Custodian and Vellum-Archivist, and designated successors. Offices S10-S14 verified. The tier log shows org turns on strong and routine turns on cheap.
+- Next: S15-S18 role loops (office holders using ORG_OFFICE_ACT), S20 memory compaction, cost cap after a day of tier data.
