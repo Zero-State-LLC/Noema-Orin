@@ -221,6 +221,12 @@ class OrinAdapter:
             if pick is not None:
                 self.dwell = 0
                 return _proposal(pick, self.default_args, self.memory)
+        elif self.supply:
+            # D-040: materials aboard and a spend verb (REPAIR/RESTORE/...) is offered: spend them here.
+            pick = next((o for o in options if o["action"] in self.verbs and o["action"] not in self.supply), None)
+            if pick is not None:
+                self.dwell = 0
+                return _proposal(pick, self.default_args, self.memory)
         if self.world_map is None or here or self.dwell < 2 or (self.allowed and "MOVE" not in self.allowed):
             self.dwell = self.dwell + 1 if not here else 0
             return None
