@@ -37,3 +37,7 @@ Operator-approved 2026-11-25 ("cap 10000"). The Worker counts `/chat` calls per 
 ## D-038 Adapter follows RFC-0117 amendment 1
 
 Noema#926 is live: WAIT at energy < 2 with an empty hold rests to 2. `_wait_refuels` now reflects that, so at energy 1 next to an unaffordable role verb, the agent WAITs (+1 net) instead of walking. D-034's walk only fires when WAIT truly gives nothing (energy 2+ with an empty hold, below a verb's cost).
+
+## D-039 Empty-hold supply roles gather when gathering is offered
+
+Live diagnostic (#84): the custodian had energy 50+ and an offered HARVEST in Civic Exchange, but the decide model chose MOVE every time, and the planner bounced it back out. With an empty hold and a supply verb offered, the planner now takes it directly. One harvest node in the room was empty ("Not enough stock"). The Salvage Cache was the available one.
