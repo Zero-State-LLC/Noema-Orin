@@ -201,6 +201,11 @@ class OrinAdapter:
         if _starved_for_attention(canonical, goal_verbs):
             self.dwell = 0
             return ActionProposal(action="WAIT")  # engine: WAIT restores attention +2 (cap 8)
+        att = (canonical.get("resources") or {}).get("attention")
+        if isinstance(att, (int, float)) and att < 2 and goal_verbs & ATTENTION_VERBS:
+            # D-045: every archivist verb costs attention 2, and moving between rooms doesn't restore it.
+            self.dwell = 0
+            return ActionProposal(action="WAIT")
         here = has_role_verb(options, goal_verbs) or _offered_here(canonical, goal_verbs)
         if (not here and self.world_map is not None and not _wait_refuels(canonical.get("resources") or {})
                 and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)):
@@ -375,6 +380,9 @@ def _harvest_amount(proposal, canonical: dict):
     if amount > 1:
         proposal.arguments = {**(proposal.arguments or {}), "amount": amount}
     return proposal
+
+
+ATTENTION_VERBS = frozenset({"RECONSTRUCT", "RECONSTRUCT_PUBLISH", "RECONSTRUCT_SUPERSEDE", "ATTEST"})  # engine: attention 2
 
 
 def _depleted(canonical: dict) -> bool:
