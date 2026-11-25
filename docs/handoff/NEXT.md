@@ -19,11 +19,11 @@
 
 ## Open decisions (user)
 
-**S9 Treasury-funded CONSTRUCT (RFC-0133 amendment).** The vault fills (cap 64) faster than SUPPLY drains it. The quartermaster could spend vault cargo on a generator (5 cargo, raises room harvest yield) in the Compact's name.
+**S9 Treasury-funded CONSTRUCT: APPROVED 2026-11-25 (A), D-061, Specs#467, Noema#957.** The vault fills (cap 64) faster than SUPPLY drains it. The quartermaster could spend vault cargo on a generator (5 cargo, raises room harvest yield) in the Compact's name.
 - A (recommended): an RFC-0133 amendment lets the Quartermaster office CONSTRUCT `generator`/`storage_bay` from treasury storage. Same office gate and conflict check as HARVEST, with energy from the holder.
 - B: no change. The vault is only spent through SUPPLY.
 
-**S19 Custodian throughput (engine rule).** Measured, not guessed:
+**S19 Custodian throughput: APPROVED 2026-11-25 (A, no engine change; re-measure at 24h).** Measured, not guessed:
 - Civic Exchange has two nodes. The salvage cache holds about 12,786 and is harvestable. The production node is at 0.9, which is the "Not enough stock" line. So stock regen is NOT the bottleneck, and node regen work isn't needed.
 - The real limit is energy. REPAIR costs energy 3 + 1 cargo, and each WAIT with cargo gives +2 energy for 1 cargo. An empty hold rests only to 2. One repair therefore costs about 2 to 3 turns of waiting, and walking spends the margin.
 - A (recommended): no engine change for now. Let D-053 to D-057 (stay beside work, work queue, quartermaster supply) run for a day and re-measure with `fleet.sh 200`.

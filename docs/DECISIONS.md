@@ -155,3 +155,9 @@ Tier data, last 3,000 model turns: 596 strong-tier calls were the speaker choosi
 ## D-060 Filter notice and work-queue noise (S20 follow-up)
 
 Live check after D-059: the speaker noticed every room's "Open ground, routes lead outward" line. Those lines are now skipped. The founder wrote about 70 work rows, because org offers appear in every room. The founder no longer writes to the work queue, since it never routes on it.
+
+## D-061 The quartermaster builds from the treasury (RFC-0133 amendment 1)
+
+Approved by the user 2026-11-25 ("yes for both decisions"). Spec Noema-Specs#467, engine Noema#957. When the engine offers a treasury build (`BUILD CONSTRUCT` with `acting_for` + `office_id`) for a class in the role's builds (generator, storage_bay) and the vault holds at least 12 storage, the seated quartermaster builds it before harvesting more. The vault pays the cargo, the holder pays the fuel, and the Compact owns the result. The floor of 12 keeps two SUPPLYs (3 each) in reserve after a 5 to 6 cargo build.
+
+The second decision (custodian energy) is "no engine change yet". Re-measure with `fleet.sh 200` after 24h. Cargo fuel +3 stays as the fallback.

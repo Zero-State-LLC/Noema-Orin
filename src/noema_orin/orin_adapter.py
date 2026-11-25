@@ -272,6 +272,14 @@ class OrinAdapter:
             return p
         vault = next((o for o in options if "SUPPLY" in self.verbs and o["action"] == "HARVEST"
                       and (o.get("raw") or {}).get("acting_for")), None)
+        tbuild = next((o for o in options if "SUPPLY" in self.verbs and o["action"] in ("CONSTRUCT", "BUILD")
+                       and (o.get("raw") or {}).get("acting_for")
+                       and str((o.get("raw") or {}).get("class") or "") in self.builds), None)
+        if tbuild is not None and _vault_storage(canonical) >= TREASURY_BUILD_FLOOR:
+            # D-061 (RFC-0133 amendment 1): build the Compact's generator / storage bay from vault cargo once the vault
+            # keeps a supply reserve; the holder pays only fuel.
+            self.dwell = 0
+            return _proposal(tbuild, self.default_args, self.memory)
         step = _toward_needy_custodian(canonical, custodian, self.world_map) if "SUPPLY" in self.verbs else None
         if step is not None and _can_afford_move(canonical):
             # S7: the vault holds cargo and the custodian (by its own recorded position) is short and elsewhere.
@@ -532,6 +540,12 @@ def _needs_supply(opt: dict, custodian: str | None, world_map, cohort_ids) -> bo
     energy = pos[1] if pos and isinstance(pos[1], (int, float)) else None
     return energy is not None and energy <= LOW_ENERGY and aboard == 0
 TREASURY_CAP = 64  # engine TREASURY_STORAGE_CAP (RFC-0133)
+TREASURY_BUILD_FLOOR = 12  # D-061: build cost (5-6) + two SUPPLYs (3 each) stay in the vault
+
+
+def _vault_storage(canonical: dict) -> int:
+    return int(max([(o.get("treasury") or {}).get("storage") or 0 for o in canonical.get("organizations") or []
+                    if isinstance(o, dict)] or [0]))
 
 
 def _toward_needy_custodian(canonical: dict, custodian: str | None, world_map) -> str | None:

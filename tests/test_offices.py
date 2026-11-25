@@ -190,6 +190,17 @@ class QuartermasterAndIdleTests(unittest.TestCase):
              "organizations": [{"org_id": "org.c", "treasury": {"storage": storage}}], "affordances": affs}
         return a, c
 
+    def test_d061_builds_from_vault_above_floor(self):
+        a, c = self._seated(storage=20, custodian_here=False)
+        c["affordances"].append({"action": "BUILD", "verb": "BUILD", "operation": "CONSTRUCT", "class": "generator",
+                                 "acting_for": "org.c", "office_id": "office.c.1", "available": True})
+        p = a._plan({"canonical": c}, _options(c, a.allowed))
+        self.assertEqual((p.action, p.arguments.get("class"), p.arguments.get("acting_for")),
+                         ("CONSTRUCT", "generator", "org.c"))
+        c["organizations"][0]["treasury"]["storage"] = 8  # below floor: keep harvesting
+        p = a._plan({"canonical": c}, _options(c, a.allowed))
+        self.assertEqual(p.action, "HARVEST")
+
     def test_d047_supplies_custodian_cargo_first(self):
         a, c = self._seated()
         p = a._plan({"canonical": c}, _options(c, a.allowed))
