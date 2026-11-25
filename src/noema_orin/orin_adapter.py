@@ -280,6 +280,12 @@ class OrinAdapter:
             # keeps a supply reserve; the holder pays only fuel.
             self.dwell = 0
             return _proposal(tbuild, self.default_args, self.memory)
+        if ("SUPPLY" in self.verbs and _vault_storage(canonical) >= TREASURY_BUILD_FLOOR
+                and _treasury_build_waiting(canonical, self.builds) and _wait_refuels(canonical.get("resources") or {})):
+            # D-062: the treasury build is offered but the holder lacks fuel (generator 8 energy). Live m02 sat at
+            # energy 1-3 and never saw it as available. WAIT here until it is; walking spends the energy it needs.
+            self.dwell = 0
+            return ActionProposal(action="WAIT")
         step = _toward_needy_custodian(canonical, custodian, self.world_map) if "SUPPLY" in self.verbs else None
         if step is not None and _can_afford_move(canonical):
             # S7: the vault holds cargo and the custodian (by its own recorded position) is short and elsewhere.
@@ -541,6 +547,14 @@ def _needs_supply(opt: dict, custodian: str | None, world_map, cohort_ids) -> bo
     return energy is not None and energy <= LOW_ENERGY and aboard == 0
 TREASURY_CAP = 64  # engine TREASURY_STORAGE_CAP (RFC-0133)
 TREASURY_BUILD_FLOOR = 12  # D-061: build cost (5-6) + two SUPPLYs (3 each) stay in the vault
+
+
+def _treasury_build_waiting(canonical: dict, builds) -> bool:
+    """A treasury build of a role class is offered here and blocked only on the holder's own resources."""
+    return any(isinstance(a, dict) and a.get("acting_for") and str(a.get("operation") or "").upper() == "CONSTRUCT"
+               and a.get("available") is False and str(a.get("class") or "") in builds
+               and "treasury" not in str(a.get("reason") or "").lower()
+               for a in canonical.get("affordances") or [])
 
 
 def _vault_storage(canonical: dict) -> int:
