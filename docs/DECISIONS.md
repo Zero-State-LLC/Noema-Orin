@@ -25,3 +25,7 @@ At energy 1 with an empty hold and no role verb here, the planner now spends the
 ## D-035 Stay where the role verb lives
 
 D-034 live showed the custodian arriving at Civic Exchange (the only HARVEST room) at energy 1. HARVEST wasn't affordable, so `has_role_verb` (available options only) said "not here", and D-034 walked it straight out again. A room now counts as the goal if it advertises the role verb at all. The agent stays, the next turn burns to 0 or rests, then it acts.
+
+## D-036 (S20) Memory compaction at session end
+
+After each session, `Memory.compact()` keeps only the newest "<node> holds N <res> available to harvest" reading per (room, node, resource) and drops stale facts beyond the newest 50. Failures are logged as `memory_compacted: -1` and never end the loop. Dry run on a copy of live m02: 218 -> 103 facts, and recall still returns the latest stock reading.

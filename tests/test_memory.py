@@ -71,3 +71,25 @@ class WorldMapTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CompactTests(unittest.TestCase):
+    def test_keeps_newest_reading_and_bounds_stale(self):
+        import tempfile
+        from pathlib import Path
+
+        from noema_orin.memory import Memory
+        with tempfile.TemporaryDirectory() as d:
+            m = Memory(Path(d))
+            for seq, n in ((1, 10), (2, 11), (3, 12)):
+                m.remember(f"Salvage Cache holds {n} materials available to harvest.", kind="consequence", room="r", sequence=seq)
+            m.remember("Relay Quarter offers HARVEST", kind="offer", room="r", sequence=1)
+            for i in range(5):
+                m.remember(f"old {i}", kind="offer", room="r2", sequence=i)
+            m.mark_stale(kind="offer", room="r2", keep=set())
+            self.assertEqual(m.compact(keep_stale=2), 2 + 3)
+            texts = {t for (t,) in m.db.execute("SELECT text FROM facts")}
+            self.assertIn("Salvage Cache holds 12 materials available to harvest.", texts)
+            self.assertNotIn("Salvage Cache holds 10 materials available to harvest.", texts)
+            self.assertIn("Relay Quarter offers HARVEST", texts)
+            self.assertEqual(m.recall("Salvage Cache")[0]["fact"], "Salvage Cache holds 12 materials available to harvest.")
