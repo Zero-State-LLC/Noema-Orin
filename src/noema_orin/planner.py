@@ -127,7 +127,7 @@ def _drop_held_focus(options: list[dict], held_track: str | None) -> list[dict]:
     return [{**o, "i": i} for i, o in enumerate(kept)] if len(kept) != len(options) else options
 
 
-def route(canonical: dict, world_map, verbs: set[str], *, explorer: bool) -> str | None:
+def route(canonical: dict, world_map, verbs: set[str], *, explorer: bool, me: str | None = None) -> str | None:
     """Exit direction to take, or None to decide in place."""
     loc = canonical.get("location") or {}
     here = loc.get("room_id")
@@ -137,7 +137,15 @@ def route(canonical: dict, world_map, verbs: set[str], *, explorer: bool) -> str
     if explorer:
         goal = world_map.least_recent(sorted(r for r in exits if r))
         return exits.get(goal)
-    goal = world_map.where_offered(verbs, exclude=here, near=here)
+    goal = None
+    if me and hasattr(world_map, "work_for"):
+        # S10: rooms where this agent itself saw role work (its own work queue), nearest first.
+        rooms = {r for r, a, _t, _n in world_map.work_for(me) if a in verbs and r != here}
+        dist = world_map.distances(here) if rooms else {}
+        reach = sorted((dist[r], r) for r in rooms if r in dist)
+        goal = reach[0][1] if reach else None
+    if goal is None:
+        goal = world_map.where_offered(verbs, exclude=here, near=here)
     if goal is None:
         goal = world_map.least_recent(sorted(r for r in exits if r))
         return exits.get(goal)

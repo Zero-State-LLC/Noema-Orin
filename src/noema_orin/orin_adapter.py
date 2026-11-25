@@ -221,6 +221,9 @@ class OrinAdapter:
             if hasattr(self.world_map, "locate"):
                 self.world_map.locate(canonical.get("self") or getattr(self, "self_id", None), room,
                                       res.get("energy"), res.get("storage"), seq)
+            if hasattr(self.world_map, "record_work"):
+                self.world_map.record_work(canonical.get("self") or getattr(self, "self_id", None), room,
+                                           _role_work(canonical, self.verbs), seq)
             self.world_map.observe(room, loc.get("name"), seq, [e.get("to_room_id") for e in loc.get("exits") or [] if isinstance(e, dict)],
                                    [str(a.get("operation") or a.get("action") or "").upper() for a in canonical.get("affordances") or []
                                     if isinstance(a, dict) and (a.get("available") is not False or _budget_blocked(a))])
@@ -301,7 +304,7 @@ class OrinAdapter:
                 and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)):
             # D-034: energy 1 + empty hold. WAIT gives nothing, so spend the 1 walking toward the goal;
             # arriving at 0 gets lockout rest (+2) right where the role verb is.
-            direction = route(canonical, self.world_map, _route_verbs(goal_verbs), explorer=self.explorer)
+            direction = route(canonical, self.world_map, _route_verbs(goal_verbs), explorer=self.explorer, me=getattr(self, "self_id", None))
             if direction:
                 self.dwell = 0
                 return ActionProposal(action="MOVE", target_id=direction)
@@ -336,7 +339,7 @@ class OrinAdapter:
             return None
         if not _can_afford_move(canonical):
             return ActionProposal(action="WAIT")  # WAIT burns cargo for energy; a refused MOVE wastes a turn
-        direction = route(canonical, self.world_map, _route_verbs(goal_verbs), explorer=self.explorer)
+        direction = route(canonical, self.world_map, _route_verbs(goal_verbs), explorer=self.explorer, me=getattr(self, "self_id", None))
         if not direction:
             return None
         self.dwell = 0
@@ -377,7 +380,7 @@ class OrinAdapter:
                     and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)
                     and _energy_after_move_ok(canonical, self.explorer)):
                 # The founder (ORG_CREATE) stays put: its raw org offers are everywhere and get filtered.
-                direction = route(canonical, self.world_map, _route_verbs(set(goal)), explorer=self.explorer)
+                direction = route(canonical, self.world_map, _route_verbs(set(goal)), explorer=self.explorer, me=getattr(self, "self_id", None))
             proposal = ActionProposal(action="MOVE", target_id=direction) if direction else ActionProposal(action="WAIT")
             source = "idle_skip"
             self.stats["idle_skip"] = self.stats.get("idle_skip", 0) + 1
@@ -510,7 +513,8 @@ def _needs_supply(opt: dict, custodian: str | None, world_map, cohort_ids) -> bo
     free = pos[2] if pos and isinstance(pos[2], (int, float)) else None
     aboard = None if free is None else 16 - free
     if custodian and pid.replace("player.", "", 1) == custodian:
-        return aboard is None or aboard < LOW_CARGO
+        blocked = hasattr(world_map, "work_for") and bool(world_map.work_for(pid, need="materials"))
+        return aboard is None or aboard < LOW_CARGO or blocked  # S8: its own work is waiting on materials
     if cohort_ids and pid not in cohort_ids:
         return False
     energy = pos[1] if pos and isinstance(pos[1], (int, float)) else None
@@ -527,7 +531,8 @@ def _toward_needy_custodian(canonical: dict, custodian: str | None, world_map) -
     if vault < SUPPLY_AMOUNT:
         return None
     pos = world_map.position(f"player.{custodian}")
-    if not pos or not isinstance(pos[2], (int, float)) or 16 - pos[2] >= LOW_CARGO:
+    blocked = hasattr(world_map, "work_for") and bool(world_map.work_for(f"player.{custodian}", need="materials"))
+    if not pos or not isinstance(pos[2], (int, float)) or (16 - pos[2] >= LOW_CARGO and not blocked):
         return None
     loc = canonical.get("location") or {}
     here = loc.get("room_id")
@@ -582,6 +587,23 @@ def _energy_after_move_ok(canonical: dict, explorer: bool) -> bool:
     if not explorer or not isinstance(energy, (int, float)):
         return True
     return energy >= 2
+
+
+def _role_work(canonical: dict, verbs) -> list[tuple[str, str, str]]:
+    """S8/S10: (operation, target, need) for role verbs advertised here, except CONSTRUCT/BUILD (everywhere) and
+    depleted nodes. need '' = affordable now."""
+    out = []
+    for a in canonical.get("affordances") or []:
+        if not isinstance(a, dict):
+            continue
+        op = str(a.get("operation") or a.get("action") or "").upper()
+        if op not in verbs or op in ("CONSTRUCT", "BUILD") or not (a.get("available") is not False or _budget_blocked(a)):
+            continue
+        reason = str(a.get("reason") or "").lower()
+        need = ("" if a.get("available") is not False else "materials" if "material" in reason
+                else "energy" if "energy" in reason else "attention" if "attention" in reason else "other")
+        out.append((op, str(a.get("target_id") or ""), need))
+    return out
 
 
 def _budget_blocked(aff: dict) -> bool:
