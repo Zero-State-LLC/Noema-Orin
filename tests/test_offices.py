@@ -325,3 +325,32 @@ class HeldFocusTests(unittest.TestCase):
         out = focus(opts, {"FOCUS"}, "surveyor")
         self.assertEqual([o for o in out if o["action"] == "FOCUS"], [])
         self.assertEqual(len(focus(opts, {"FOCUS"}, None)), 3)  # nothing dropped without a held track
+
+
+@unittest.skipUnless(_HAS_CLIENT, "requires noema_client")
+class CustodianEnergyTests(unittest.TestCase):
+    def _cust(self):
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        spec = role_for("custodian")
+        a.allowed, a.cohort_ids, a.role_handles = frozenset(spec["allow"]), set(), {}
+        a.builds, a.supply, a.verbs = spec.get("builds"), spec.get("supply"), set(spec["verbs"])
+        a.memory, a.world_map, a.dwell, a.explorer, a.default_args, a.stats_mem = None, None, 0, False, {}, 0
+        a.recent = []
+        return a
+
+    def _canon(self, energy):
+        return {"resources": {"energy": energy, "attention": 8, "storage": 11}, "location": {"room_id": "room.x"},
+                "affordances": [{"action": "MOVE", "available": True, "direction": "north", "dest": "room.y"}]}
+
+    def test_d050_loaded_and_weak_waits(self):
+        a = self._cust()
+        c = self._canon(3)
+        self.assertEqual(a._plan({"canonical": c}, a._menu({"canonical": c})).action, "WAIT")
+
+    def test_d050_loaded_and_ready_does_not_wait(self):
+        a = self._cust()
+        c = self._canon(9)
+        p = a._plan({"canonical": c}, a._menu({"canonical": c}))
+        self.assertNotEqual(getattr(p, "action", None), "WAIT")
