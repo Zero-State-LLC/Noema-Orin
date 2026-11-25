@@ -247,7 +247,10 @@ class OrinAdapter:
         self._last_remote = False
         print(json.dumps({"turn": sum(self.stats.values()), "source": source,
                           "action": getattr(proposal, "action", None),
-                          "memories_used": len(self.memories)}), flush=True)
+                          "memories_used": len(self.memories),
+                          "budgets": {k: v for k, v in (canonical.get("resources") or {}).items()
+                                      if k in ("energy", "attention", "compute", "storage")},
+                          "offered_role": sorted({o["action"] for o in options} & self.verbs)}), flush=True)
         return proposal
 
 
