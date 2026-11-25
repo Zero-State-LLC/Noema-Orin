@@ -66,10 +66,15 @@ def retarget_create(opt: dict, canonical: dict, home: str | None) -> dict | None
     missing catalog office, or drop it when the catalog is complete."""
     if not home:
         return opt
+    if not _home(canonical, home).get("offices"):
+        return None  # D-066: the home org (or its office list) is not in this observation; never create blind
     todo = missing(canonical, home)
     if not todo:
         return None
     name, profile = todo[0]
+    if name in {str(o.get("display_name")) for o in _home(canonical, home).get("offices") or []
+                if isinstance(o, dict)}:
+        return None  # D-066: a same-named office exists (maybe VACANT); assign it, don't create another
     raw = {**(opt.get("raw") or {}), "cmd": f'office create {home} name="{name}" profile={profile}', "target_id": home}
     return {**opt, "raw": raw, "target_id": home, "label": f"Create {name} office"}
 

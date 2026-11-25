@@ -152,6 +152,28 @@ class SupplyPickTests(unittest.TestCase):
 
 
 @unittest.skipUnless(_HAS_CLIENT, "requires noema_client")
+class OfficeChurnTests(unittest.TestCase):
+    """D-066: observations without the home org's offices must never trigger an office create."""
+
+    def test_no_create_when_org_list_missing(self):
+        from noema_orin import planner
+
+        planner.PINNED_HOME = HOME
+        try:
+            opt = {"action": "ORG_OFFICE_CREATE", "target_id": HOME, "raw": {"cmd": f'office create {HOME} name="Notice"'}}
+            self.assertIsNone(retarget_create(opt, {"organizations": []}, HOME))
+            self.assertIsNone(retarget_create(opt, {}, HOME))
+        finally:
+            planner.PINNED_HOME = None
+
+    def test_no_create_when_same_name_exists_vacant(self):
+        vacant = {**DUP}
+        opt = {"action": "ORG_OFFICE_CREATE", "target_id": HOME, "raw": {"cmd": "x"}}
+        self.assertNotEqual(retarget_create(opt, canon([vacant]), HOME), None)  # other catalog offices still missing
+        out = retarget_create(opt, canon([vacant]), HOME)
+        self.assertNotIn('name="Notice"', out["raw"]["cmd"])
+
+
 class QuartermasterAndIdleTests(unittest.TestCase):
     def _qm(self):
         from noema_orin.orin_adapter import OrinAdapter

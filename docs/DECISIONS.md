@@ -180,3 +180,10 @@ After D-063, m02 looped through civic-exchange, archive and civic-exchange, arri
 ## D-065 loop_break leaves refuel waits alone
 
 Live m02 on a fuel run: WAIT, WAIT, then loop_break forced a MOVE (energy 5 to 7 with cargo aboard), walking it away from the treasury build every third turn. A planner WAIT that refuels (cargo aboard, or energy < 2 with an empty hold) is now exempt from the three-in-a-row loop_break.
+
+## D-066 Office-create hard gate (incident)
+
+From 23:27Z, m01 created about 30 duplicate "Notice" offices, alternating with retires and with MESSAGE to non-cohort players. I stopped m01 at 23:52Z. Cause: `model_context()["canonical"]` can arrive without the home org's office list. `missing()` then reports every catalog office as missing, and the create is retargeted at "Notice". Fixes:
+- `retarget_create` returns nothing unless the home org's office list is present, and never creates a name that already exists, even VACANT.
+- Hard gate in `decide`: any ORG_OFFICE_CREATE whose name already exists, isn't in the catalog's missing list, or comes with an unprojected office list becomes WAIT (source `guard`).
+- Cleanup: the existing D-031 duplicate-RETIRE rule retires the extras. I'm watching it live.
