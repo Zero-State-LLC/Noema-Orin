@@ -10,7 +10,9 @@ BASE = ("LOOK", "MOVE", "INSPECT", "WAIT", "OBSERVE", "ENTER_WORLD", "LEAVE_WORL
 ROLES: dict[str, dict[str, object]] = {
     "founder": {
         "verbs": ("ORG_CREATE", "ORG_MEMBER_ADD", "ORG_OFFICE_CREATE", "ORG_OFFICE_ASSIGN", "ORG_OFFICE_VACATE", "ORG_OFFICE_RETIRE",
-                  "ORG_SUCCESSION_RULE", "ORG_SUCCESSION_DESIGNATE", "JOIN"),
+                  "ORG_SUCCESSION_RULE", "ORG_SUCCESSION_DESIGNATE", "JOIN", "MESSAGE"),
+        # S11: once the Compact is seated the founder recruits: one MESSAGE welcome per non-cohort Player met
+        # (planner-only; see orin_adapter._welcome).
         # AGREEMENT_* is gated by noema-client allow_contest, which role agents keep off (DENY_ALWAYS).
         "mission": "Found and govern the Reach Compact: create the organization, open named offices, seat the other "
                    "Orin agents in them, set a succession rule.",
