@@ -45,3 +45,11 @@ Live diagnostic (#84): the custodian had energy 50+ and an offered HARVEST in Ci
 ## D-040 Loaded supply roles spend materials where a spend verb is offered
 
 After D-039, the custodian harvested 8 and then walked past an offered RESTORE (the model chose MOVE). With materials aboard and a role spend verb offered, the planner takes it.
+
+## D-041 The quartermaster builds with a full hold
+
+SHARE and VEST move ownership, not cargo, and TRADE is denied, so a full hold had nowhere to go. m02 cycled HARVEST 1/WAIT. The quartermaster now gets CONSTRUCT, with role builds `storage_bay` (6 cargo, 5 energy) and `generator` (5 cargo, 8 energy). The generator also raises the room's harvest yield (engine `productionModifier`). The existing D-018 build path takes it when the hold has 6 or more aboard. TRADE stays out of its allow list (tested).
+
+## D-042 Skip the model when no role verb is on offer
+
+If the planner passes and the menu has no role or supply verb, the model could only pick LOOK/WAIT/MOVE/INSPECT. The adapter now WAITs without a model call (`source: idle_skip`). WAIT is free and restores budgets. Routing toward role rooms is still the planner's job (dwell >= 2), and the loop-breaker still moves after 3 identical turns. Main saving: the founder, whose governance work is done.

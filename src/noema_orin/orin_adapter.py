@@ -239,6 +239,8 @@ class OrinAdapter:
         return ActionProposal(action="MOVE", target_id=direction)
 
     def decide(self, context):
+        from .planner import has_role_verb
+
         self.self_id = (context.get("canonical") or {}).get("self") or getattr(self, "self_id", None)
         if self.on_turn is not None:
             self.cohort_ids = self.on_turn(self.self_id)
@@ -252,12 +254,20 @@ class OrinAdapter:
         if proposal is not None:
             source = "planner"
             self.stats["planner"] += 1
+        elif not has_role_verb(options, self.verbs | set(self.supply or ())):
+            # D-042: nothing in role on offer; the model can only pick LOOK/WAIT/MOVE/INSPECT. Script it:
+            # the planner already routes toward role rooms, so the idle default is a free WAIT (restores budgets).
+            from noema_client.types import ActionProposal
+
+            proposal = ActionProposal(action="WAIT")
+            source = "idle_skip"
+            self.stats["idle_skip"] = self.stats.get("idle_skip", 0) + 1
         else:
             try:
                 proposal = self._ask(context, options)
             except Exception:
                 proposal = None
-        if source == "planner":
+        if source in ("planner", "idle_skip"):
             pass
         elif proposal is not None:
             self.stats["model"] += 1

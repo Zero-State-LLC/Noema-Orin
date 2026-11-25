@@ -146,3 +146,45 @@ class SupplyPickTests(unittest.TestCase):
                              {"action": "MOVE", "available": True, "dest": "room.archive"}]}
         p = a._plan({"canonical": c}, a._menu({"canonical": c}))
         self.assertEqual((p.action, p.target_id), ("RESTORE", "e.relay"))
+
+
+class QuartermasterAndIdleTests(unittest.TestCase):
+    def _qm(self):
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        spec = role_for("quartermaster")
+        a.allowed, a.cohort_ids, a.role_handles = frozenset(spec["allow"]), set(), {}
+        a.builds, a.supply, a.verbs = tuple(spec.get("builds") or ()), spec.get("supply"), set(spec["verbs"])
+        a.memory, a.world_map, a.dwell, a.explorer, a.default_args, a.stats_mem = None, None, 0, False, {}, 0
+        return a
+
+    def test_full_hold_quartermaster_constructs_storage_bay(self):
+        a = self._qm()
+        c = {"resources": {"energy": 20, "attention": 8, "storage": 0}, "location": {"room_id": "room.civic-exchange"},
+             "affordances": [{"action": "BUILD", "verb": "BUILD", "operation": "CONSTRUCT", "class": "storage_bay",
+                              "available": True},
+                             {"action": "BUILD", "verb": "BUILD", "operation": "CONSTRUCT", "class": "relay",
+                              "available": True}]}
+        p = a._plan({"canonical": c}, a._menu({"canonical": c}))
+        self.assertEqual((p.action, p.arguments.get("class")), ("CONSTRUCT", "storage_bay"))
+
+    def test_quartermaster_never_offered_trade(self):
+        self.assertNotIn("TRADE", role_for("quartermaster")["allow"])
+
+    def test_idle_menu_skips_model(self):
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        spec = role_for("founder")
+        a.allowed, a.cohort_ids, a.role_handles, a.on_turn = frozenset(spec["allow"]), set(), {}, None
+        a.builds, a.supply, a.verbs = (), None, set(spec["verbs"])
+        a.memory, a.world_map, a.dwell, a.explorer, a.default_args, a.stats_mem = None, None, 5, False, {}, 0
+        a.stats, a.recent, a.memories = {"planner": 0, "model": 0, "fallback": 0, "loop_break": 0}, [], []
+        a.health = type("H", (), {"record_turn": lambda *x, **k: None})()
+        a._ask = lambda *x: (_ for _ in ()).throw(AssertionError("model called on idle menu"))
+        c = {"resources": {"energy": 60, "attention": 8, "storage": 16}, "location": {"room_id": "room.transit-ring"},
+             "affordances": [{"action": "LOOK", "available": True}, {"action": "INSPECT", "available": True}]}
+        p = a.decide({"canonical": c})
+        self.assertEqual(p.action, "WAIT")
+        self.assertEqual(a.stats["idle_skip"], 1)
