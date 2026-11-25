@@ -274,9 +274,9 @@ class OrinAdapter:
             canonical = context.get("canonical") or {}
             goal = self.supply if (self.supply and _hold_empty(canonical)) else self.verbs
             direction = None
-            if (self.world_map is not None and not self.role_handles and _can_afford_move(canonical)
-                    and (not self.allowed or "MOVE" in self.allowed)):
-                # Governance roles (role_handles) stay put: their raw offers are everywhere and get filtered.
+            if (self.world_map is not None and "ORG_CREATE" not in self.verbs
+                    and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)):
+                # The founder (ORG_CREATE) stays put: its raw org offers are everywhere and get filtered.
                 direction = route(canonical, self.world_map, set(goal), explorer=self.explorer)
             proposal = ActionProposal(action="MOVE", target_id=direction) if direction else ActionProposal(action="WAIT")
             source = "idle_skip"

@@ -205,6 +205,7 @@ class QuartermasterAndIdleTests(unittest.TestCase):
         from noema_orin.memory import WorldMap
 
         a = self._qm()
+        a.role_handles = {"founder": "Aphelia-Founder"}  # every live agent has these (players.on_turn)
         a.on_turn, a.recent, a.memories = None, [], []
         a.stats = {"planner": 0, "model": 0, "fallback": 0, "loop_break": 0}
         a.health = type("H", (), {"record_turn": lambda *x, **k: None})()
