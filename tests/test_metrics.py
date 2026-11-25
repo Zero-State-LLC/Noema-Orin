@@ -35,6 +35,25 @@ class MetricsTests(unittest.TestCase):
             self.assertEqual(out["role_action_rate"], 0.5)  # CONSTRUCT + REPAIR of 4 (HARVEST is supply)
             db.close()
 
+    def test_session_split_across_collect_runs_counts_every_turn(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "logs").mkdir()
+            log = root / "logs" / "noema-player@m01.log"
+            head = [{"member": "m01", "role": "founder", "persona_version": 1}] + [
+                {"turn": i, "source": "model", "action": "LOOK"} for i in range(5)]
+            log.write_text("\n".join(json.dumps(x) for x in head) + "\n")
+            db = open_db(root)
+            self.assertEqual(collect(root, db), 0)  # session still running
+            tail = [{"turn": i, "source": "model", "action": "ORG_OFFICE_ASSIGN"} for i in range(5, 8)] + [
+                {"member": "m01", "role": "founder", "actions": 8, "stop_reason": "duration_elapsed"}]
+            with log.open("a") as f:
+                f.write("\n".join(json.dumps(x) for x in tail) + "\n")
+            self.assertEqual(collect(root, db), 1)
+            out = digest(db)["members"]["m01"]
+            self.assertEqual((out["turns"], out["role"]), (8, "founder"))
+            db.close()
+
 
 if __name__ == "__main__":
     unittest.main()
