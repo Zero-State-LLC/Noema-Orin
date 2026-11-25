@@ -276,6 +276,12 @@ class OrinAdapter:
                           "budgets": {k: v for k, v in (canonical.get("resources") or {}).items()
                                       if k in ("energy", "attention", "compute", "storage", "influence")},
                           "tier": getattr(self, "_last_tier", None) if source == "model" else None,
+                          "room": (canonical.get("location") or {}).get("room_id"),
+                          "offered_supply": sorted({o["action"] for o in options} & set(self.supply or ())),
+                          "blocked": sorted({str(a.get("action") or "").upper() + ":" + str(a.get("reason") or "")[:40]
+                                              for a in canonical.get("affordances") or []
+                                              if isinstance(a, dict) and a.get("available") is False
+                                              and str(a.get("action") or "").upper() in (self.verbs | set(self.supply or ()))})[:4],
                           "offered_role": sorted({o["action"] for o in options} & self.verbs)}), flush=True)
         self._last_tier = None
         proposal = _harvest_amount(proposal, canonical)
