@@ -108,6 +108,12 @@ class MenuPipelineTests(unittest.TestCase):
         self.assertEqual([o["label"] for o in menu], ["Create Steward office"])
 
 
+import importlib.util
+
+_HAS_CLIENT = importlib.util.find_spec("noema_client") is not None
+
+
+@unittest.skipUnless(_HAS_CLIENT, "requires noema_client")
 class SupplyPickTests(unittest.TestCase):
     def test_empty_hold_custodian_harvests_offered_node(self):
         from noema_orin.orin_adapter import OrinAdapter
