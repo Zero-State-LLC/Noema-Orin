@@ -43,3 +43,4 @@
 - 06:03Z: **custodian loop live**. Noema#926 deployed (Worker ca151afa, dispatched manually; the pin-PR step keeps failing on NOEMA_PIN_PR_TOKEN auth, a pre-existing issue since 01:45Z). D-038..D-040 shipped. m03 now does HARVEST 8 -> RESTORE ("You restored the archive annex.") -> HARVEST -> REPAIR.
 - Still open: Noema-Specs#456 (RFC-0117 amendment 1) needs a required review, which I can't give it. The Noema pin-PR token (`NOEMA_PIN_PR_TOKEN`) needs rotating. That's an operator secret.
 - D-037 cap live; `GET /usage` shows ~650 tokens in per call.
+- 06:20Z: Noema-Specs#456 merged. Pin-PR still fails: secret `NOEMA_PIN_PR_TOKEN` on Zero-State-LLC/Noema was last updated 2026-08-25 (not rotated) and gets "Authentication failed"; the GITHUB_TOKEN fallback gets 403 (workflow `permissions: contents: read`). Run 45559703109. Deploy itself succeeds.
