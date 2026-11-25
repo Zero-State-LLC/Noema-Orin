@@ -53,7 +53,10 @@ export default {
       }
       // /reflect: end-of-session persona drift. /chat: per-turn action choice (D-016), short and fast.
       const decide = url.pathname === "/chat";
-      const model = decide ? env.DECIDE_MODEL || "@cf/meta/llama-4-scout-17b-16e-instruct"
+      // D-030: routine-only menus use the cheap decide model; anything social/org/build uses the strong one.
+      const cheap = decide && body.tier === "cheap";
+      const model = cheap ? env.CHEAP_DECIDE_MODEL || "@cf/meta/llama-3.1-8b-instruct-fp8"
+        : decide ? env.DECIDE_MODEL || "@cf/meta/llama-4-scout-17b-16e-instruct"
         : env.REFLECT_MODEL || "@cf/google/gemma-4-26b-a4b-it";
       const maxTokens = Math.min(Math.max(Number(body.max_tokens) || (decide ? 80 : 1024), 16), 1024);
       const out = await env.AI.run(model, {

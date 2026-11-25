@@ -49,7 +49,7 @@ class OrinAdapter:
 
         self.system = SYSTEM_PROMPT + " Role: " + brief
 
-    def _chat(self, system: str, user: str, num_predict: int = 400) -> dict:
+    def _chat(self, system: str, user: str, num_predict: int = 400, tier: str | None = None) -> dict:
         """Cloud decision model when configured (D-016), local Ollama only as fallback.
 
         The circuit breaker skips Workers AI for its cooldown after repeated failures, so a
@@ -60,7 +60,7 @@ class OrinAdapter:
         now = time.time()
         cloud = None
         if self.breaker.allow_remote(now):
-            cloud = _cloud_call("/chat", system, user, max_tokens=max(num_predict, 80), timeout=20)
+            cloud = _cloud_call("/chat", system, user, max_tokens=max(num_predict, 80), timeout=20, tier=tier)
             if cloud is not None:
                 self.breaker.record_success()
             elif os.environ.get("MEMORY_SYNC_URL") and self.breaker.record_failure(now):
@@ -122,7 +122,12 @@ class OrinAdapter:
                        "over LOOK, INSPECT and WAIT. Use `memories` (facts you observed earlier). "
                        "Vary your actions; never pick the same option three times in a row. "
                        "Reply ONLY with JSON {\"choice\": <index>, \"why\": \"<6 words>\"}. Do not echo the input.")
-        data = self._chat(instruction, user, num_predict=60)
+        from .model_tier import tier_for
+
+        tier = tier_for(menu)
+        self.stats_tier = getattr(self, "stats_tier", {})
+        self.stats_tier[tier] = self.stats_tier.get(tier, 0) + 1
+        data = self._chat(instruction, user, num_predict=60, tier=tier)
         idx = data.get("choice")
         if type(idx) is not int or not 0 <= idx < len(menu):
             return None
@@ -183,6 +188,9 @@ class OrinAdapter:
                     self.memory.remember(str(cls), kind="built", room=room, sequence=seq)
             self.memories = self.memory.recall(" ".join([str(loc.get("name") or "")] + sorted(self.verbs)))
             self.stats_mem += len(self.memories)
+        if _depleted(canonical):
+            self.dwell = 0
+            return ActionProposal(action="WAIT")  # engine #907/#910: WAIT at energy 0 rests +2 energy
         goal_verbs = self.verbs
         if self.supply and _hold_empty(canonical):
             goal_verbs = self.supply  # gather materials before repair/construct (engine cargo rule)
@@ -239,7 +247,10 @@ class OrinAdapter:
 
             source = "loop_break"
             self.stats["loop_break"] += 1
-            proposal = self._loop_break_move(context) if key[0] != "MOVE" else ActionProposal(action="LOOK")
+            if _depleted(context.get("canonical") or {}):
+                proposal = ActionProposal(action="WAIT")
+            else:
+                proposal = self._loop_break_move(context) if key[0] != "MOVE" else ActionProposal(action="LOOK")
         self.recent = (self.recent + [{"action": getattr(proposal, "action", None),
                                        "target": getattr(proposal, "target_id", None)}])[-40:]
         canonical = (context.get("canonical") or {})
@@ -275,6 +286,12 @@ def _starved_for_attention(canonical: dict, verbs: set[str]) -> bool:
             if isinstance(need, (int, float)) and isinstance(have, (int, float)) and have < need and budget in reason:
                 return True
     return False
+
+
+def _depleted(canonical: dict) -> bool:
+    """Energy 0: only WAIT recovers it (engine applyLockoutRest, any hold since #910)."""
+    energy = (canonical.get("resources") or {}).get("energy")
+    return isinstance(energy, (int, float)) and energy <= 0
 
 
 def _can_afford_move(canonical: dict) -> bool:
@@ -420,7 +437,8 @@ def _cloud_reflect(system: str, user: str) -> dict | None:
     return _cloud_call("/reflect", system, user, timeout=60)
 
 
-def _cloud_call(path: str, system: str, user: str, *, max_tokens: int | None = None, timeout: float = 60) -> dict | None:
+def _cloud_call(path: str, system: str, user: str, *, max_tokens: int | None = None, timeout: float = 60,
+                tier: str | None = None) -> dict | None:
     """POST to the private Worker; parse the first JSON object from the model text."""
     url, token = os.environ.get("MEMORY_SYNC_URL"), os.environ.get("MEMORY_SYNC_TOKEN")
     if not url or not token:
@@ -428,6 +446,8 @@ def _cloud_call(path: str, system: str, user: str, *, max_tokens: int | None = N
     body = {"system": system, "user": user}
     if max_tokens:
         body["max_tokens"] = max_tokens
+    if tier:
+        body["tier"] = tier
     req = urllib.request.Request(url.rstrip("/") + path, method="POST",
                                  data=json.dumps(body).encode(),
                                  headers={"authorization": f"Bearer {token}", "content-type": "application/json",
