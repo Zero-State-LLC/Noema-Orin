@@ -61,3 +61,7 @@ Live after D-041: m02's hold was full but it never had 5 energy. Each WAIT gave 
 ## D-044 Idle turns walk toward the role's goal
 
 D-042 sent idle turns straight to WAIT. With an empty hold, m02 then sat in Generator Hall (WAIT, WAIT, loop-break MOVE, repeat) and never went back to the harvest room, because the planner's dwell gate never fired. An idle turn now routes toward the goal room (supply verbs while the hold is empty) when it can afford the move, and WAITs only when there's no route. The founder (has ORG_CREATE) still WAITs (follow-up fix: the first guard keyed on `role_handles`, which every live agent has), since its raw org offers are everywhere and get filtered.
+
+## D-045 The archivist rests attention instead of walking
+
+After D-044, m04 had 39/40 MOVE turns at attention 0-1. Every archivist verb costs attention 2 (`COSTS.RECONSTRUCT`), so none were available, and the idle router walked it room to room, which never restores attention. Only WAIT does (+2, cap 8). The planner now WAITs when attention < 2 and the role's goal verbs cost attention.

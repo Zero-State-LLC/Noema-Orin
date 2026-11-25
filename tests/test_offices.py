@@ -220,3 +220,15 @@ class QuartermasterAndIdleTests(unittest.TestCase):
             a.memory = None
             p = a.decide({"canonical": c})
             self.assertEqual((p.action, p.target_id), ("MOVE", "west"))
+
+    def test_archivist_low_attention_waits(self):
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        spec = role_for("archivist")
+        a.allowed, a.cohort_ids, a.role_handles = frozenset(spec["allow"]), set(), {}
+        a.builds, a.supply, a.verbs = (), None, set(spec["verbs"])
+        a.memory, a.world_map, a.dwell, a.explorer, a.default_args, a.stats_mem = None, None, 3, False, {}, 0
+        c = {"resources": {"energy": 40, "attention": 1, "storage": 16}, "location": {"room_id": "room.transit-ring"},
+             "affordances": [{"action": "MOVE", "available": True, "dest": "room.civic"}]}
+        self.assertEqual(a._plan({"canonical": c}, a._menu({"canonical": c})).action, "WAIT")
