@@ -313,3 +313,15 @@ class QuartermasterAndIdleTests(unittest.TestCase):
                              {"action": "MOVE", "available": True, "dest": "room.x"}]}
         p = a._plan({"canonical": c}, a._menu({"canonical": c}))
         self.assertEqual((p.action, p.target_id), ("INSPECT", "e.new"))
+
+
+class HeldFocusTests(unittest.TestCase):
+    def test_d049_held_track_not_reoffered(self):
+        from noema_orin.planner import focus
+
+        opts = [{"i": 0, "action": "FOCUS", "raw": {"track": "surveyor"}},
+                {"i": 1, "action": "FOCUS", "raw": {"track": "explorer"}},
+                {"i": 2, "action": "MOVE", "raw": {}}]
+        out = focus(opts, {"FOCUS"}, "surveyor")
+        self.assertEqual([o["raw"].get("track") for o in out if o["action"] == "FOCUS"], ["explorer"])
+        self.assertEqual(len(focus(opts, {"FOCUS"}, None)), 3)  # nothing dropped without a held track

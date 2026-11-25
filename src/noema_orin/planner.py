@@ -105,12 +105,26 @@ def prefer_builds(options: list[dict], builds: tuple, built: set[str]) -> list[d
     return [{**o, "i": i} for i, o in enumerate(ordered)]
 
 
-def focus(options: list[dict], verbs: set[str]) -> list[dict]:
+def focus(options: list[dict], verbs: set[str], held_track: str | None = None) -> list[dict]:
     """When the role's own verbs are on offer, hide idle perception so the model acts in role."""
+    options = _drop_held_focus(options, held_track)
     if not has_role_verb(options, verbs):
         return options
     kept = [o for o in options if o["action"] not in IDLE]
     return [{**o, "i": i} for i, o in enumerate(kept)]
+
+
+def _drop_held_focus(options: list[dict], held_track: str | None) -> list[dict]:
+    """D-049: re-declaring the held FOCUS track is a no-op (engine applyFocus just resets declared_cycle).
+
+    The surveyor spent ~23/40 turns on it. The client's canonical view omits `focus_lines`, so the adapter
+    passes the track it last declared itself.
+    """
+    if not held_track:
+        return options
+    kept = [o for o in options if not (o["action"] == "FOCUS"
+                                       and str((o.get("raw") or {}).get("track") or "") == held_track)]
+    return [{**o, "i": i} for i, o in enumerate(kept)] if len(kept) != len(options) else options
 
 
 def route(canonical: dict, world_map, verbs: set[str], *, explorer: bool) -> str | None:

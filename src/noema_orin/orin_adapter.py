@@ -104,7 +104,7 @@ class OrinAdapter:
         if self.supply and _hold_ready(canonical):
             # Hold has enough materials for a build or repair: stop gathering, spend them.
             menu = [{**o, "i": i} for i, o in enumerate(o for o in menu if o["action"] not in self.supply)]
-        return focus(menu, self.verbs)
+        return focus(menu, self.verbs, getattr(self, "held_track", None))
 
     def _built_classes(self) -> set[str]:
         if self.memory is None:
@@ -345,6 +345,9 @@ class OrinAdapter:
                 proposal = self._loop_break_move(context) if key[0] != "MOVE" else ActionProposal(action="LOOK")
         self.recent = (self.recent + [{"action": getattr(proposal, "action", None),
                                        "target": getattr(proposal, "target_id", None)}])[-40:]
+        track = (getattr(proposal, "arguments", None) or {}).get("track")
+        if str(getattr(proposal, "action", "") or "").upper() == "FOCUS" and track:
+            self.held_track = str(track)  # D-049: don't re-offer the same track
         canonical = (context.get("canonical") or {})
         self.health.record_turn(verb=str(getattr(proposal, "action", "") or ""),
                                 used_workers_ai=bool(getattr(self, "_last_remote", False)) or source == "planner",
