@@ -104,6 +104,7 @@ class OrinAdapter:
         if self.supply and _hold_ready(canonical):
             # Hold has enough materials for a build or repair: stop gathering, spend them.
             menu = [{**o, "i": i} for i, o in enumerate(o for o in menu if o["action"] not in self.supply)]
+        # D-051: SUPPLY is planner-only (need-gated, D-048); _ask hides it from the model.
         return focus(menu, self.verbs, getattr(self, "held_track", None))
 
     def _built_classes(self) -> set[str]:
@@ -115,6 +116,8 @@ class OrinAdapter:
     def _ask(self, context, options):
         canonical = context.get("canonical") or {}
         recent = [f"{r['action']} {r.get('target') or ''}".strip() for r in self.recent[-5:]]
+        # D-051: SUPPLY is planner-only (need-gated, D-048). The model spent 20/30 turns supplying blind.
+        options = [{**o, "i": i} for i, o in enumerate(o for o in options if o["action"] != "SUPPLY")]
         if not options:
             return None
         menu = [{k: o[k] for k in ("i", "action", "label")} for o in options[:24]]
@@ -541,6 +544,8 @@ def _proposal(opt: dict, default_args: dict, memory=None):
     if base is None:
         return ActionProposal(action=opt["action"], target_id=opt.get("target_id"), arguments=dict(default_args.get(opt["action"], {})))
     args = {**default_args.get(base.action, {}), **_cmd_args(opt["raw"]), **dict(base.arguments or {})}
+    if base.action == "SUPPLY":
+        args.setdefault("amount", SUPPLY_AMOUNT)  # engine requires 1..5; model-picked SUPPLY carried none
     if base.action == "ORG_OFFICE_ACT" and not args.get("notice") and not args.get("governance_rule"):
         notice = grounded_notice(memory)
         if not notice:
