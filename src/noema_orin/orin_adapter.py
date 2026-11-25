@@ -343,11 +343,12 @@ def _offered_here(canonical: dict, verbs: set[str]) -> bool:
 
 
 def _wait_refuels(res: dict) -> bool:
-    """Engine: WAIT gives energy only at energy 0 (lockout rest) or with cargo aboard (RFC-0119 cargo fuel)."""
+    """Engine: WAIT gives energy at energy < 2 with an empty hold (RFC-0117 amendment 1, Noema#926), at energy 0
+    with a full hold (lockout rest), or with cargo aboard (RFC-0119 cargo fuel)."""
     energy, storage = res.get("energy"), res.get("storage")
     if not isinstance(energy, (int, float)) or not isinstance(storage, (int, float)):
         return True
-    return energy <= 0 or storage < 16
+    return energy <= 0 or storage < 16 or energy < 2
 
 
 def _can_afford_move(canonical: dict) -> bool:
