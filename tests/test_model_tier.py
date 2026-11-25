@@ -42,3 +42,14 @@ class HarvestAmount(unittest.TestCase):
     def test_unknown_stock_left_alone(self):
         from noema_orin.orin_adapter import _harvest_amount
         self.assertEqual(_harvest_amount(self._p(), {"resources": {"storage": 16}}).arguments["amount"], 1)
+
+
+class WaitRefuels(unittest.TestCase):
+    def test_energy_one_empty_hold_does_not_wait_for_energy(self):
+        from noema_orin.orin_adapter import _starved_for_attention
+        c = {"resources": {"energy": 1, "storage": 16, "attention": 8},
+             "affordances": [{"action": "HARVEST", "available": False, "requires": {"energy": 2},
+                              "reason": "You need energy 2 and compute 1 to harvest."}]}
+        self.assertFalse(_starved_for_attention(c, {"HARVEST"}))
+        c["resources"]["storage"] = 12  # cargo aboard: WAIT burns it for +2
+        self.assertTrue(_starved_for_attention(c, {"HARVEST"}))

@@ -288,6 +288,8 @@ def _starved_for_attention(canonical: dict, verbs: set[str]) -> bool:
             continue
         reason = str(aff.get("reason") or "")
         for budget in ("attention", "energy"):
+            if budget == "energy" and not _wait_refuels(res):
+                continue  # D-033: WAIT at energy 1+ with an empty hold restores nothing
             need = (aff.get("requires") or {}).get(budget)
             have = res.get(budget)
             if isinstance(need, (int, float)) and isinstance(have, (int, float)) and have < need and budget in reason:
@@ -324,6 +326,14 @@ def _depleted(canonical: dict) -> bool:
     """Energy 0: only WAIT recovers it (engine applyLockoutRest, any hold since #910)."""
     energy = (canonical.get("resources") or {}).get("energy")
     return isinstance(energy, (int, float)) and energy <= 0
+
+
+def _wait_refuels(res: dict) -> bool:
+    """Engine: WAIT gives energy only at energy 0 (lockout rest) or with cargo aboard (RFC-0119 cargo fuel)."""
+    energy, storage = res.get("energy"), res.get("storage")
+    if not isinstance(energy, (int, float)) or not isinstance(storage, (int, float)):
+        return True
+    return energy <= 0 or storage < 16
 
 
 def _can_afford_move(canonical: dict) -> bool:
