@@ -71,3 +71,11 @@ After D-044, m04 had 39/40 MOVE turns at attention 0-1. Every archivist verb cos
 ## D-046 The archivist inspects to make evidence
 
 m04 still had 32/40 MOVE turns at attention 8. RECONSTRUCT is only offered for subjects with LIVE_INSPECT or archive evidence (engine actions.ts reconSubjects), and nothing was producing new evidence, so nothing was offered and it walked. With attention >= 4 and no archivist verb on offer, the planner now INSPECTs an entity it hasn't inspected in its last 12 turns. That creates the evidence the next RECONSTRUCT needs.
+
+## D-047 The quartermaster is a seated office with treasury services (RFC-0133)
+
+The owner asked for the quartermaster to get "its own rules" as a system agent that serves other agents. Capability attaches to the in-game office, not a system flag (a title still grants nothing). Specs#463 (RFC-0133), Noema#949 and noema-client#51/#52 add, for an OCCUPIED `OPERATE_RESOURCE_ACCOUNT` holder:
+- `HARVEST acting_for` credits the treasury vault (cap 64), so a full 16-slot pack no longer stalls it.
+- `COMMIT SUPPLY` hands 1..5 treasury energy or cargo to an entered Player in the same room (compute 1).
+
+The agent side: the founder seats a "Quartermaster" office (catalog entry). Once seated, the planner first SUPPLYs 3 cargo to the custodian when it is in the room (at most once per 10 turns), then treasury-harvests up to 8. Energy SUPPLY is not automated because peer budgets are not visible. TRADE stays client-denied even though the profile carries treasury TRADE.

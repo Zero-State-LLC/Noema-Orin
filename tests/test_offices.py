@@ -4,6 +4,7 @@ from pathlib import Path
 
 from noema_orin.offices import CATALOG, duplicates, missing, refine_offices, retarget_create
 from noema_orin.players import role_handles
+from noema_orin.orin_adapter import _options
 from noema_orin.roles import DENY_ALWAYS, role_for
 
 HOME = "org.reach-compact.34df3bb5"
@@ -30,15 +31,16 @@ def opt(action, target, label=None, **raw):
 class CatalogTests(unittest.TestCase):
     def test_catalog_never_grants_denied_authority(self):
         profiles = {p for _n, p in CATALOG.values()}
-        self.assertNotIn("OPERATE_RESOURCE_ACCOUNT", profiles)  # treasury TRADE
+        self.assertIn("OPERATE_RESOURCE_ACCOUNT", profiles)  # D-047: seated; TRADE stays client-denied
         self.assertNotIn("GRANT_ACCESS", profiles)
         self.assertIn("TRADE", DENY_ALWAYS)
         self.assertIn("ORG_OFFICE_RETIRE", role_for("founder")["allow"])
 
     def test_missing_offices_in_catalog_order(self):
-        self.assertEqual([n for n, _ in missing(canon([NOTICE]), HOME)], ["Steward", "Archive Keeper"])
+        self.assertEqual([n for n, _ in missing(canon([NOTICE]), HOME)], ["Steward", "Archive Keeper", "Quartermaster"])
         self.assertEqual(missing(canon([NOTICE, STEWARD, {**STEWARD, "display_name": "Archive Keeper",
-                                                          "office_id": "x"}]), HOME), [])
+                                                          "office_id": "x"},
+                                        {**STEWARD, "display_name": "Quartermaster", "office_id": "q"}]), HOME), [])
 
     def test_duplicate_keeps_occupied_office(self):
         self.assertEqual(duplicates(canon([DUP, NOTICE]), HOME), {DUP["office_id"]})
@@ -48,7 +50,8 @@ class CatalogTests(unittest.TestCase):
         base = opt("ORG_OFFICE_CREATE", HOME, cmd=f'office create {HOME} name="Notice" profile=PUBLISH_NOTICE')
         out = retarget_create(base, canon([NOTICE]), HOME)
         self.assertIn('name="Steward" profile=OPERATE_NAMED_ASSET', out["raw"]["cmd"])
-        full = [NOTICE, STEWARD, {**STEWARD, "display_name": "Archive Keeper", "office_id": "y"}]
+        full = [NOTICE, STEWARD, {**STEWARD, "display_name": "Archive Keeper", "office_id": "y"},
+                {**STEWARD, "display_name": "Quartermaster", "office_id": "q"}]
         self.assertIsNone(retarget_create(base, canon(full), HOME))
 
     def test_create_args_reach_engine_fields(self):
@@ -171,6 +174,37 @@ class QuartermasterAndIdleTests(unittest.TestCase):
 
     def test_quartermaster_never_offered_trade(self):
         self.assertNotIn("TRADE", role_for("quartermaster")["allow"])
+
+    def _seated(self, storage=10, custodian_here=True):
+        a = self._qm()
+        a.recent, a.role_handles = [], {"custodian": "Rivet-Custodian"}
+        affs = [{"action": "HARVEST", "verb": "COMMIT", "operation": "HARVEST", "target_id": "entity.node",
+                 "acting_for": "org.c", "office_id": "office.c.1", "available": True}]
+        if custodian_here:
+            affs += [{"action": "SUPPLY", "verb": "COMMIT", "operation": "SUPPLY", "target_id": "player.Rivet-Custodian",
+                      "player_id": "player.Rivet-Custodian", "resource": r, "acting_for": "org.c",
+                      "office_id": "office.c.1", "available": True} for r in ("energy", "storage")]
+        c = {"resources": {"energy": 20, "attention": 8, "storage": 0}, "location": {
+                "room_id": "room.x", "entities": [{"entity_id": "entity.node", "stock_amount": 30}]},
+             "organizations": [{"org_id": "org.c", "treasury": {"storage": storage}}], "affordances": affs}
+        return a, c
+
+    def test_d047_supplies_custodian_cargo_first(self):
+        a, c = self._seated()
+        p = a._plan({"canonical": c}, _options(c, a.allowed))
+        self.assertEqual((p.action, p.arguments.get("resource"), p.arguments.get("amount")), ("SUPPLY", "storage", 3))
+        self.assertEqual(p.arguments.get("office_id"), "office.c.1")
+
+    def test_d047_treasury_harvest_with_full_pack(self):
+        a, c = self._seated(storage=60, custodian_here=False)
+        p = a._plan({"canonical": c}, _options(c, a.allowed))
+        self.assertEqual((p.action, p.arguments.get("acting_for"), p.arguments.get("amount")), ("HARVEST", "org.c", 4))
+
+    def test_d047_no_repeat_supply_within_10_turns(self):
+        a, c = self._seated()
+        a.recent = [{"action": "SUPPLY", "target": "player.Rivet-Custodian"}]
+        p = a._plan({"canonical": c}, _options(c, a.allowed))
+        self.assertEqual(p.action, "HARVEST")
 
     def test_idle_menu_skips_model(self):
         from noema_orin.orin_adapter import OrinAdapter

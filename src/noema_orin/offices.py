@@ -10,8 +10,11 @@ CATALOG: dict[str, tuple[str, str]] = {
     "speaker": ("Notice", "PUBLISH_NOTICE"),
     "custodian": ("Steward", "OPERATE_NAMED_ASSET"),  # engine: repair local infra for the org, VEST
     "archivist": ("Archive Keeper", "ACCESS_RESTRICTED_ARCHIVE"),
+    # D-047 (RFC-0133): the seat unlocks treasury HARVEST and SUPPLY. The profile also carries treasury TRADE,
+    # which the agent never sends (roles.DENY_ALWAYS blocks TRADE in the client policy).
+    "quartermaster": ("Quartermaster", "OPERATE_RESOURCE_ACCOUNT"),
 }
-# Not seated: quartermaster (OPERATE_RESOURCE_ACCOUNT = treasury TRADE) and surveyor (GRANT_ACCESS).
+# Not seated: surveyor (GRANT_ACCESS).
 
 
 def _home(canonical: dict, home: str | None) -> dict:
