@@ -136,6 +136,10 @@ def main(argv: list[str] | None = None) -> int:
             stop.wait(cooldown)
             continue
         line = report.as_dict()
+        try:
+            compacted = adapter.memory.compact() if adapter.memory is not None else 0
+        except Exception:  # compaction must never end a session loop
+            compacted = -1
         patch = reflect(adapter, persona, adapter.recent)
         persona, accepted = apply_reflection(mind, persona, patch)
         adapter.set_brief(system_brief())
@@ -143,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
                           "stop_reason": line.get("stop_reason"), "stop_detail": stop_detail(report),
                           "rejections": rejection_summary(report), "decisions": dict(adapter.stats),
                           "persona_version": persona["version"], "memories_recalled": adapter.stats_mem,
-                          "health": adapter.health.summary(), "reflection": "accepted" if accepted else "rejected"},
+                          "health": adapter.health.summary(), "memory_compacted": compacted, "reflection": "accepted" if accepted else "rejected"},
                          default=str), flush=True)
         stop.wait(ns.cooldown)
     return 0

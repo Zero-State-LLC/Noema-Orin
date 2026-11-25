@@ -90,6 +90,35 @@ class Memory(_Closable):
             (" OR ".join(terms), limit)).fetchall()
         return [{"fact": t, "room": r, "source_sequence": s} for t, r, s in rows]
 
+    def compact(self, *, keep_stale: int = 50) -> int:
+        """S20: drop superseded readings and old stale facts. Returns rows deleted.
+
+        "<Label> holds N <res> available to harvest." is a reading: only the newest per (room, label) is kept.
+        Stale facts beyond the newest `keep_stale` are dropped (current observation already won).
+        """
+        import re
+
+        pat = re.compile(r"^(.+?) holds [0-9.]+ (\w+) available to harvest\.$")
+        newest: dict[tuple, tuple[int, int]] = {}
+        doomed: list[int] = []
+        for fid, room, text, seq in self.db.execute("SELECT id, room, text, coalesce(source_sequence,0) FROM facts"):
+            m = pat.match(text or "")
+            if not m:
+                continue
+            key = (room, m.group(1), m.group(2))
+            if key in newest and newest[key][0] >= seq:
+                doomed.append(fid)
+                continue
+            if key in newest:
+                doomed.append(newest[key][1])
+            newest[key] = (seq, fid)
+        stale = [fid for (fid,) in self.db.execute(
+            "SELECT id FROM facts WHERE stale=1 ORDER BY source_sequence DESC LIMIT -1 OFFSET ?", (keep_stale,))]
+        ids = sorted(set(doomed) | set(stale))
+        with self.db:
+            self.db.executemany("DELETE FROM facts WHERE id=?", [(i,) for i in ids])
+        return len(ids)
+
     def note_player(self, player_id: str, note: str, *, sign: int, sequence: int | None) -> None:
         """Every piece of evidence is kept; nothing is collapsed into one score (SOCIAL-MEMORY)."""
         with self.db:
