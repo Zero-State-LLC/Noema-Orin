@@ -19,3 +19,7 @@
 2. **Orphan orgs.** Engine has ORG_LEAVE only (actions.ts:3299), no dissolve. m01 founded 34df3bb5 (pinned), 81a1adb9, 8acbfc9e. Recommend leaving them dormant; ORG_LEAVE on the two duplicates is optional cleanup.
 3. **Alert channel.** Today: D1 + log digest. Recommend staying there until agents are unstuck (current alerts are all one known cause), then email via Cloudflare Email Service.
 4. **Workers AI cost cap.** Decide model @cf/meta/llama-4-scout-17b-16e-instruct at $0.27/M in, $0.85/M out. Observed ~47 turns/h/agent, ~70% model-sourced, so ~4,800 calls/day for 6 agents. At an estimated ~3k input tokens/call that is roughly $4/day (~$120/month); the 10k free neurons/day covers about $0.11. Recommend a per-day call cap in the Worker (e.g. 6,000 decide calls, falls back to local Ollama) plus measuring real token usage first.
+
+## 2026-11-25 update
+- Decision 1 resolved: engine #910/#911 (empty-hold lockout rest) is live, and D-030 makes agents WAIT at energy 0. All 6 agents now cycle WAIT then act (m06 went from 0 to 2).
+- D-030 tiered decide model: cheap menus go to Granite 4.0 H Micro, strong ones to Scout. TODO: log the per-turn tier (stats_tier) to verify the live split. Decision 2 (cost cap) is still open; re-estimate after a day of tiered usage.
