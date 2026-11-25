@@ -151,6 +151,7 @@ class SupplyPickTests(unittest.TestCase):
         self.assertEqual((p.action, p.target_id), ("RESTORE", "e.relay"))
 
 
+@unittest.skipUnless(_HAS_CLIENT, "requires noema_client")
 class QuartermasterAndIdleTests(unittest.TestCase):
     def _qm(self):
         from noema_orin.orin_adapter import OrinAdapter
