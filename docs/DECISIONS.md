@@ -87,3 +87,9 @@ In 40 turns after D-047, m05 and m06 spent 25 and 22 turns at energy 1 or less, 
 - is a cohort peer at energy 3 or less with an empty hold (no WAIT fuel).
 
 Still at most once per peer per 10 turns. Energy SUPPLY stays unautomated: the treasury holds no energy, because treasury harvest credits storage.
+
+## D-049 The surveyor doesn't re-declare its held FOCUS
+
+m06 spent 23 of 40 turns on FOCUS, alternating with loop-break MOVEs. Re-declaring the held track does nothing (engine `applyFocus` only resets `declared_cycle`), and the client's canonical view omits `focus_lines`. The adapter now remembers the track it last declared and drops that FOCUS from the menu. Other tracks stay offered. With no role verb left, the surveyor idle-skips and routes to the least-recently-seen room, which is its charter.
+
+Investigated and left alone: the fleet's top rejection, `ORG_OFFICE_ACT:INVALID_REQUEST` (16, all m05, persona versions 24 to 27), came from sessions before the current build. The current sessions show none.
