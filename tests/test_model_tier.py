@@ -23,3 +23,22 @@ class Depleted(unittest.TestCase):
         self.assertTrue(_depleted({"resources": {"energy": 0, "storage": 9}}))
         self.assertFalse(_depleted({"resources": {"energy": 1}}))
         self.assertFalse(_depleted({}))
+
+
+class HarvestAmount(unittest.TestCase):
+    def _p(self):
+        from noema_client.types import ActionProposal
+        return ActionProposal(action="HARVEST", target_id="e.cache", arguments={"operation": "HARVEST", "amount": 1})
+
+    def test_bulk_bounded_by_cap_storage_stock(self):
+        from noema_orin.orin_adapter import HARVEST_MAX, _harvest_amount
+        c = {"resources": {"storage": 16}, "location": {"entities": [{"entity_id": "e.cache", "stock_amount": 9999}]}}
+        self.assertEqual(_harvest_amount(self._p(), c).arguments["amount"], HARVEST_MAX)
+        c["resources"]["storage"] = 3
+        self.assertEqual(_harvest_amount(self._p(), c).arguments["amount"], 3)
+        c["location"]["entities"][0]["stock_amount"] = 1.9
+        self.assertEqual(_harvest_amount(self._p(), c).arguments["amount"], 1)
+
+    def test_unknown_stock_left_alone(self):
+        from noema_orin.orin_adapter import _harvest_amount
+        self.assertEqual(_harvest_amount(self._p(), {"resources": {"storage": 16}}).arguments["amount"], 1)

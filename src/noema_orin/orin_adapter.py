@@ -270,6 +270,7 @@ class OrinAdapter:
                           "tier": getattr(self, "_last_tier", None) if source == "model" else None,
                           "offered_role": sorted({o["action"] for o in options} & self.verbs)}), flush=True)
         self._last_tier = None
+        proposal = _harvest_amount(proposal, canonical)
         return proposal
 
 
@@ -292,6 +293,31 @@ def _starved_for_attention(canonical: dict, verbs: set[str]) -> bool:
             if isinstance(need, (int, float)) and isinstance(have, (int, float)) and have < need and budget in reason:
                 return True
     return False
+
+
+HARVEST_MAX = 8  # D-032: leaves hold room; cargo MOVE costs +1 regardless of amount
+
+
+def _harvest_amount(proposal, canonical: dict):
+    """HARVEST costs 2 energy flat and WAIT burns 1 cargo for +2 energy, so amount 1 only breaks even.
+
+    Take up to HARVEST_MAX, bounded by free storage and the node's visible stock.
+    """
+    if proposal is None or str(getattr(proposal, "action", "")).upper() != "HARVEST":
+        return proposal
+    free = (canonical.get("resources") or {}).get("storage")
+    if not isinstance(free, (int, float)) or free < 2:
+        return proposal
+    target = getattr(proposal, "target_id", None) or (proposal.arguments or {}).get("entity_id")
+    loc = canonical.get("location") or {}
+    stock = next((e.get("stock_amount") for e in (loc.get("entities") or canonical.get("entities") or [])
+                  if isinstance(e, dict) and e.get("entity_id") == target), None)
+    if not isinstance(stock, (int, float)):
+        return proposal
+    amount = int(min(HARVEST_MAX, free, stock))
+    if amount > 1:
+        proposal.arguments = {**(proposal.arguments or {}), "amount": amount}
+    return proposal
 
 
 def _depleted(canonical: dict) -> bool:
