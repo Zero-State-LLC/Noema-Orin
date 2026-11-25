@@ -11,3 +11,5 @@ After Notice existed, `planner.refine` dropped the engine's only create option (
 ## D-032 Harvest in bulk
 
 The engine's HARVEST affordance always says `amount 1`. HARVEST costs a flat 2 energy, and WAIT turns 1 cargo into 2 energy, so harvesting one unit at a time only breaks even. m02 cycled HARVEST/WAIT at energy 1 to 3 for hours. The adapter now sets amount = min(8, free storage, visible stock). One harvest then fuels several WAITs (+2 energy each) and gives materials for repair and build. Holding 8 cargo costs +1 per MOVE, which one WAIT more than covers.
+
+**D-032 correction (live, 2026-11-25 03:10Z).** Energy doesn't improve. WAIT refuels a flat +2 per WAIT whatever the cargo, and m02's hold was already full, so steady state stays at about one WAIT per 2-energy action. Bulk harvest still fills empty holds faster (custodian supply for REPAIR/CONSTRUCT), so it stays. The role-action ceiling of about 50% for energy-spending roles is an engine economy property (RFC-0117/0119), not an adapter bug. Raising it means an engine rule change (operator decision).
