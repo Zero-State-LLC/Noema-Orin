@@ -45,7 +45,7 @@ Reach Compact `org.reach-compact.34df3bb5` (pinned in `shared/home_org`, D-029).
 | Member | Role | Office (profile) | Role verbs | Live note |
 |---|---|---|---|---|
 | m01 | founder | (founder) | ORG_* governance | Created Notice, Steward, Archive Keeper; seated holders; heirs designated (D-026/D-031) |
-| m02 | quartermaster | none (only fit is OPERATE_RESOURCE_ACCOUNT = TRADE, denied) | HARVEST, SHARE, VEST | Bulk harvest (D-032); energy-capped ~50% role turns |
+| m02 | quartermaster | Quartermaster (OPERATE_RESOURCE_ACCOUNT, D-047/RFC-0133; TRADE still client-denied) | HARVEST into treasury, SUPPLY cargo to custodian, CONSTRUCT | Treasury harvest skips the 16-slot pack (vault cap 64) |
 | m03 | custodian | Steward (OPERATE_NAMED_ASSET) | REPAIR, RESTORE, UPGRADE, CONSTRUCT | **Engine-blocked**: arrives at harvest room with energy 1; HARVEST needs 2 (Noema#907 follow-up) |
 | m04 | archivist | Archive Keeper (ACCESS_RESTRICTED_ARCHIVE) | RECONSTRUCT*, ATTEST | ~50% role turns (attention-bound) |
 | m05 | speaker | Notice (PUBLISH_NOTICE) | MESSAGE, ORG_OFFICE_ACT | ~70% role turns; notices grounded in observed facts only (S13) |
