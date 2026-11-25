@@ -153,7 +153,10 @@ class OrinAdapter:
         recent = [f"{r['action']} {r.get('target') or ''}".strip() for r in self.recent[-5:]]
         # D-051: SUPPLY is planner-only (need-gated, D-048). The model spent 20/30 turns supplying blind.
         # S11: the founder's MESSAGE is planner-only too (one welcome per non-cohort Player).
-        hidden = {"SUPPLY"} | ({"MESSAGE"} if "ORG_CREATE" in getattr(self, "verbs", ()) else set())
+        # D-059: notices are planner-only (posted when a new fact exists).
+        verbs = getattr(self, "verbs", ())
+        hidden = ({"SUPPLY"} | ({"MESSAGE"} if "ORG_CREATE" in verbs else set())
+                  | ({"ORG_OFFICE_ACT"} if "MESSAGE" in verbs and "ORG_CREATE" not in verbs else set()))
         options = [{**o, "i": i} for i, o in enumerate(o for o in options if o["action"] not in hidden)]
         if not options:
             return None
@@ -245,6 +248,15 @@ class OrinAdapter:
         welcome = self._welcome(canonical, options) if "ORG_CREATE" in self.verbs else None
         if welcome is not None:
             return welcome
+        notice = next((o for o in options if o["action"] == "ORG_OFFICE_ACT"
+                       and str((o.get("raw") or {}).get("authority_profile") or "PUBLISH_NOTICE") == "PUBLISH_NOTICE"), None)
+        if notice is not None and "MESSAGE" in self.verbs and "ORG_CREATE" not in self.verbs:
+            # D-059 (S13): the notice text is deterministic (grounded_notice), so the model only ever chose "post";
+            # that was 596 strong-tier calls a day. Post when a new observed fact exists, else fall through.
+            p = _proposal(notice, self.default_args, self.memory)
+            if p is not None:
+                self.dwell = 0
+                return p
         # D-047/D-048 (RFC-0133): the seated quartermaster serves before gathering: cargo to the custodian or to a
         # stuck peer (see _needs_supply), at most once per peer per 10 turns; then harvest into the treasury.
         custodian = self.role_handles.get("custodian")
@@ -733,16 +745,23 @@ def _cmd_args(raw: dict) -> dict:
 
 
 def grounded_notice(memory, org_name: str = "the Compact") -> str | None:
-    """A public notice built only from observed, non-stale facts, citing the source sequence (S13)."""
+    """A public notice built only from observed, non-stale facts, citing the source sequence (S13).
+
+    D-059: skip the speaker's own echoes ("Notice posted", "You wait", "You arrive"): m05 was publishing its last
+    consequence, which was usually its previous notice. One notice per fact (kind `noticed`)."""
     if memory is None:
         return None
-    row = memory.db.execute(
+    posted = {t for (t,) in memory.db.execute("SELECT text FROM facts WHERE kind='noticed'").fetchall()}
+    rows = memory.db.execute(
         "SELECT text, source_sequence FROM facts WHERE stale=0 AND kind IN ('consequence','room') "
-        "AND text NOT LIKE 'You take in%' AND text NOT LIKE 'You arrive%' AND text NOT LIKE 'Enter the world%' "
-        "ORDER BY sequence DESC LIMIT 1").fetchone()
+        "AND text NOT LIKE 'You %' AND text NOT LIKE 'Enter the world%' AND text NOT LIKE 'Notice posted%' "
+        "AND text NOT LIKE 'Reconstruction published%' AND text NOT LIKE 'Welcome to%' "
+        "ORDER BY sequence DESC LIMIT 12").fetchall()
+    row = next((r for r in rows if r[0] not in posted), None)
     if not row:
         return None
     text, seq = row
+    memory.remember(text, kind="noticed", room=None, sequence=seq)
     return f"{org_name} notice: {text} (observed at seq {seq})"[:280]
 
 
