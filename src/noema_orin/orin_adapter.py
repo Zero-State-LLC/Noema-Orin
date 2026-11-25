@@ -136,6 +136,8 @@ class OrinAdapter:
         allowed = getattr(self, "allowed", frozenset())
         if allowed and "MOVE" not in allowed:  # operator tier may not move (OPERATOR-MAINT-EVOLVE §1)
             return ActionProposal(action="WAIT")
+        if not _can_afford_move(context.get("canonical") or {}):
+            return ActionProposal(action="LOOK")  # a MOVE the engine will refuse is not a loop break
         exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict) and e.get("direction")}
         if not exits:
             return ActionProposal(action="WAIT")

@@ -202,3 +202,9 @@ The founder alternated ORG_SUCCESSION_RULE and ORG_SUCCESSION_DESIGNATE every tu
 designated for that office. Separately, `metrics.collect` advanced its log offset to end of file mid-session, so a session
 split across two 10-minute runs lost its earlier turns (m01 sessions read 0-5 turns against ~30 real). The offset now
 stops after the last complete session; metrics.db was rebuilt from the logs.
+
+## D-028: Loop-break never MOVEs without energy; engine energy deadlock reported (2026-11-25)
+
+Per-turn budget logs (#60) show five of six agents at energy 0 with an empty hold. In the engine that state cannot recover:
+WAIT's cargo fuel needs cargo, and lockout rest needs a full hold. Filed Zero-State-LLC/Noema#907 for a rule decision. The
+loop-breaker now LOOKs instead of proposing a MOVE the engine will refuse.
