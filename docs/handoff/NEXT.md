@@ -29,3 +29,13 @@
 - Custodian (m03) got 0 role actions in 60 turns: hold empty, no REPAIR target in reach at energy 1-2. Investigate next: route to the damaged Civic Exchange infra with materials.
 - 04:12Z: D-033..D-035 live. The custodian still can't HARVEST, and that's provable: every arrival costs MOVE 1, and rest tops out at 2, so it always arrives with energy 1. HARVEST needs 2, and WAIT at energy 1 with an empty hold gives nothing. There's no adapter fix. **Open decision #5 (operator):** the engine change proposed on Noema#907 (lockout rest also when the hold is empty and energy < 2). The same rule raises the ~50% role-action ceiling for the quartermaster and surveyor.
 - The Orin's IP moved .99 -> .100; ssh now uses linux.local (FACTS.md).
+
+## Open decisions, round 2 (researched 2026-11-25 04:55Z)
+
+**#5 Energy-1 lock (engine rule, operator).** Noema#907 is CLOSED. My follow-up comment is unanswered. Facts: MOVE 1, HARVEST 2, REPAIR 3; rest only at energy 0 (+2); cargo fuel +2 needs cargo; no passive regen (RESOURCE-ECONOMY energy regen 0). Every arrival lands at energy 1, so m03 is blocked and m02/m06 cap at ~50% role turns. Also, **spec drift**: engine #910/#911 extended lockout rest to empty holds, but Noema-Specs RFC-0117 still says full hold only, with no amendment.
+  - A (recommended): amend RFC-0117: WAIT with an empty hold and energy < 2 sets energy to 2. One line in `applyLockoutRest`, no new verbs, still no passive regen. Also fixes the spec drift.
+  - B: cargo fuel +4 instead of +2 (RFC-0119 lists "+2 retuned later" as unresolved). Helps loaded holds only, so it doesn't unblock m03.
+  - C: no engine change. Reassign m03 to a role without energy costs (archivist-style), and accept ~50% for gatherers.
+  - Needs: the operator's pick, then an RFC-0117 amendment PR in Noema-Specs plus an engine PR. Reopen #907 or file a new issue.
+
+**#2 cost cap: data now in.** Since tier logging (02:24Z), 76% of model calls are cheap (427 cheap / 133 strong over 966 turns). ~66 turns/h/agent, 58% model-sourced, so ~6,400 calls/day. Prompt is ~1.5k input tokens (system ~650 chars + payload capped at 5k chars). Estimated $0.82/day (~$25/mo) tiered vs $2.82/day untiered. Recommend: a soft cap of 10,000 decide calls/day in the Worker (about 1.5x current, about $1.30/day worst case), falling back to strong-only refusal, so local Ollama takes over. Measure real token counts by logging `usage` from the Worker response before tuning.
