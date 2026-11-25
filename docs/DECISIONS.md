@@ -151,3 +151,7 @@ Tier data, last 3,000 model turns: 596 strong-tier calls were the speaker choosi
 - `grounded_notice` skips the agent's own echoes: lines starting "You ", "Notice posted", "Reconstruction published" and "Welcome to". Each fact is posted once (memory kind `noticed`).
 - For the speaker, the planner posts a PUBLISH_NOTICE office act whenever a new fact exists and hides ORG_OFFICE_ACT from the model. Other roles' office acts are unchanged.
 - S14 (cheap-tier regen): this is the bigger win. The cheap set already covers HARVEST/REPAIR/FOCUS/MOVE, and most strong calls were these notices. CHEAP is unchanged.
+
+## D-060 Filter notice and work-queue noise (S20 follow-up)
+
+Live check after D-059: the speaker noticed every room's "Open ground, routes lead outward" line. Those lines are now skipped. The founder wrote about 70 work rows, because org offers appear in every room. The founder no longer writes to the work queue, since it never routes on it.

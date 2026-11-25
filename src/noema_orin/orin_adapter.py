@@ -224,7 +224,7 @@ class OrinAdapter:
             if hasattr(self.world_map, "locate"):
                 self.world_map.locate(canonical.get("self") or getattr(self, "self_id", None), room,
                                       res.get("energy"), res.get("storage"), seq)
-            if hasattr(self.world_map, "record_work"):
+            if hasattr(self.world_map, "record_work") and "ORG_CREATE" not in self.verbs:  # founder org offers are everywhere
                 self.world_map.record_work(canonical.get("self") or getattr(self, "self_id", None), room,
                                            _role_work(canonical, self.verbs), seq)
             self.world_map.observe(room, loc.get("name"), seq, [e.get("to_room_id") for e in loc.get("exits") or [] if isinstance(e, dict)],
@@ -756,6 +756,7 @@ def grounded_notice(memory, org_name: str = "the Compact") -> str | None:
         "SELECT text, source_sequence FROM facts WHERE stale=0 AND kind IN ('consequence','room') "
         "AND text NOT LIKE 'You %' AND text NOT LIKE 'Enter the world%' AND text NOT LIKE 'Notice posted%' "
         "AND text NOT LIKE 'Reconstruction published%' AND text NOT LIKE 'Welcome to%' "
+        "AND text NOT LIKE '%Open ground%' "
         "ORDER BY sequence DESC LIMIT 12").fetchall()
     row = next((r for r in rows if r[0] not in posted), None)
     if not row:
