@@ -44,3 +44,4 @@
 - 06:15Z: **Synced across suite**: `Noema-Specs#456` (RFC-0117 amendment 1) is merged (`66b28bc`), live Worker `ca151afa` is pinned in both `Noema-Specs` and `Noema`, `noema-client` `worker-contract-drift` is green, and `deploy-worker-pin-pr.yml` now falls back to `GITHUB_TOKEN` when `NOEMA_PIN_PR_TOKEN` fails (operator may still rotate `NOEMA_PIN_PR_TOKEN` when convenient).
 - D-037 cap live; `GET /usage` shows ~650 tokens in per call.
 - 06:20Z: Noema-Specs#456 merged. Pin-PR still fails: secret `NOEMA_PIN_PR_TOKEN` on Zero-State-LLC/Noema was last updated 2026-08-25 (not rotated) and gets "Authentication failed"; the GITHUB_TOKEN fallback gets 403 (workflow `permissions: contents: read`). Run 45559703109. Deploy itself succeeds.
+- 06:29Z: pin-PR fixed. The secret was reset from gh auth, deploy run 45560502414 is green, and pin PR Noema#928 is merged (Worker e2fbff23).
