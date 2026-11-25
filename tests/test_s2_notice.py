@@ -53,6 +53,14 @@ class ProposalTests(unittest.TestCase):
         ctx = {"canonical": {"location": {"exits": [{"direction": "north", "to_room_id": "room.r"}]}}}
         self.assertEqual(a._loop_break_move(ctx).action, "WAIT")
 
+    def test_loop_break_never_moves_without_energy(self):
+        from noema_orin.orin_adapter import OrinAdapter
+        a = OrinAdapter.__new__(OrinAdapter)
+        a.world_map = None
+        ctx = {"canonical": {"resources": {"energy": 0, "storage": 16},
+                             "location": {"exits": [{"direction": "north", "to_room_id": "room.r"}]}}}
+        self.assertEqual(a._loop_break_move(ctx).action, "LOOK")
+
 
 if __name__ == "__main__":
     unittest.main()
