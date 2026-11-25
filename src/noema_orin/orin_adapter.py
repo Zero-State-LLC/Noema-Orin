@@ -263,7 +263,7 @@ class OrinAdapter:
                           "action": getattr(proposal, "action", None),
                           "memories_used": len(self.memories),
                           "budgets": {k: v for k, v in (canonical.get("resources") or {}).items()
-                                      if k in ("energy", "attention", "compute", "storage")},
+                                      if k in ("energy", "attention", "compute", "storage", "influence")},
                           "tier": getattr(self, "_last_tier", None) if source == "model" else None,
                           "offered_role": sorted({o["action"] for o in options} & self.verbs)}), flush=True)
         self._last_tier = None
