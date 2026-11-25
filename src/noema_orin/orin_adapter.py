@@ -264,11 +264,21 @@ class OrinAdapter:
             source = "planner"
             self.stats["planner"] += 1
         elif not has_role_verb(options, self.verbs | set(self.supply or ())):
-            # D-042: nothing in role on offer; the model can only pick LOOK/WAIT/MOVE/INSPECT. Script it:
-            # the planner already routes toward role rooms, so the idle default is a free WAIT (restores budgets).
+            # D-042: nothing in role on offer; the model can only pick LOOK/WAIT/MOVE/INSPECT. Script it.
+            # D-044: walk toward the role's goal room first (the dwell gate made idle WAITs loop in place);
+            # WAIT only when there is no route or the move is unaffordable.
             from noema_client.types import ActionProposal
 
-            proposal = ActionProposal(action="WAIT")
+            from .planner import route
+
+            canonical = context.get("canonical") or {}
+            goal = self.supply if (self.supply and _hold_empty(canonical)) else self.verbs
+            direction = None
+            if (self.world_map is not None and not self.role_handles and _can_afford_move(canonical)
+                    and (not self.allowed or "MOVE" in self.allowed)):
+                # Governance roles (role_handles) stay put: their raw offers are everywhere and get filtered.
+                direction = route(canonical, self.world_map, set(goal), explorer=self.explorer)
+            proposal = ActionProposal(action="MOVE", target_id=direction) if direction else ActionProposal(action="WAIT")
             source = "idle_skip"
             self.stats["idle_skip"] = self.stats.get("idle_skip", 0) + 1
         else:

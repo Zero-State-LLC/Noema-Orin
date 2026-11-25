@@ -57,3 +57,7 @@ If the planner passes and the menu has no role or supply verb, the model could o
 ## D-043 Save energy for the build
 
 Live after D-041: m02's hold was full but it never had 5 energy. Each WAIT gave +2 (cargo fuel) and the next HARVEST spent it. When a role build is blocked only on resources (not materials), the planner now WAITs. Each WAIT burns 1 cargo for +2 energy, so after ~3 WAITs, energy 6 with 13 aboard affords a storage bay.
+
+## D-044 Idle turns walk toward the role's goal
+
+D-042 sent idle turns straight to WAIT. With an empty hold, m02 then sat in Generator Hall (WAIT, WAIT, loop-break MOVE, repeat) and never went back to the harvest room, because the planner's dwell gate never fired. An idle turn now routes toward the goal room (supply verbs while the hold is empty) when it can afford the move, and WAITs only when there's no route. The founder (governance role, `role_handles`) still WAITs, since its raw org offers are everywhere and get filtered.
