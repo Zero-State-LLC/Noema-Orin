@@ -79,3 +79,11 @@ The owner asked for the quartermaster to get "its own rules" as a system agent t
 - `COMMIT SUPPLY` hands 1..5 treasury energy or cargo to an entered Player in the same room (compute 1).
 
 The agent side: the founder seats a "Quartermaster" office (catalog entry). Once seated, the planner first SUPPLYs 3 cargo to the custodian when it is in the room (at most once per 10 turns), then treasury-harvests up to 8. Energy SUPPLY is not automated because peer budgets are not visible. TRADE stays client-denied even though the profile carries treasury TRADE.
+
+## D-048 Quartermaster supplies on recorded need
+
+In 40 turns after D-047, m05 and m06 spent 25 and 22 turns at energy 1 or less, and m03 spent 9. The treasury fills with cargo only, and WAIT burns 1 cargo for +2 energy (RFC-0119), so cargo is also fuel. Each agent now records its own room, energy and free storage in shared `map.db` (`positions`; self-observed only, never inferred from others). The quartermaster SUPPLYs 3 cargo when the recipient is in the room and:
+- is the custodian with fewer than 6 aboard (REPAIR/RESTORE material), or
+- is a cohort peer at energy 3 or less with an empty hold (no WAIT fuel).
+
+Still at most once per peer per 10 turns. Energy SUPPLY stays unautomated: the treasury holds no energy, because treasury harvest credits storage.

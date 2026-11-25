@@ -25,6 +25,8 @@ _MAP = """
 CREATE TABLE IF NOT EXISTS rooms(room_id TEXT PRIMARY KEY, name TEXT, last_seen_seq INTEGER);
 CREATE TABLE IF NOT EXISTS exits(room_id TEXT, dest TEXT, PRIMARY KEY(room_id, dest));
 CREATE TABLE IF NOT EXISTS offers(room_id TEXT, action TEXT, seen_seq INTEGER, PRIMARY KEY(room_id, action));
+CREATE TABLE IF NOT EXISTS positions(player_id TEXT PRIMARY KEY, room_id TEXT, energy INTEGER, free_storage INTEGER,
+                                     seen_seq INTEGER);
 """
 
 
@@ -155,6 +157,20 @@ class WorldMap(_Closable):
         row = self.db.execute(f"SELECT room_id FROM offers WHERE action IN ({marks}) AND room_id IS NOT ? "
                               "ORDER BY seen_seq DESC LIMIT 1", (*sorted(actions), exclude)).fetchone()
         return row[0] if row else None
+
+    def locate(self, player_id: str, room_id: str, energy, free_storage, sequence) -> None:
+        """D-048: each Orin agent records its own room and budgets (self-observed only) for cohort services."""
+        if not player_id or not room_id:
+            return
+        with self.db:
+            self.db.execute("INSERT INTO positions VALUES (?,?,?,?,?) ON CONFLICT(player_id) DO UPDATE SET "
+                            "room_id=excluded.room_id, energy=excluded.energy, free_storage=excluded.free_storage, "
+                            "seen_seq=excluded.seen_seq", (player_id, room_id, energy, free_storage, sequence or 0))
+
+    def position(self, player_id: str):
+        """(room_id, energy, free_storage, seen_seq) or None."""
+        return self.db.execute("SELECT room_id, energy, free_storage, seen_seq FROM positions WHERE player_id=?",
+                               (player_id,)).fetchone()
 
     def least_recent(self, candidates: list[str]) -> str | None:
         if not candidates:

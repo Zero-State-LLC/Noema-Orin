@@ -207,6 +207,36 @@ class QuartermasterAndIdleTests(unittest.TestCase):
         p = a._plan({"canonical": c}, _options(c, a.allowed))
         self.assertEqual(p.action, "HARVEST")
 
+    def _peer(self, energy, free):
+        from noema_orin.memory import WorldMap
+
+        a, c = self._seated(custodian_here=False)
+        a.world_map = WorldMap(Path(tempfile.mkdtemp()))
+        a.cohort_ids = {"player.Cantor-Speaker"}
+        a.world_map.locate("player.Cantor-Speaker", "room.x", energy, free, 1)
+        c["affordances"].append({"action": "SUPPLY", "verb": "COMMIT", "operation": "SUPPLY", "available": True,
+                                 "target_id": "player.Cantor-Speaker", "player_id": "player.Cantor-Speaker",
+                                 "resource": "storage", "acting_for": "org.c", "office_id": "office.c.1"})
+        return a, c
+
+    def test_d048_stuck_peer_gets_cargo_fuel(self):
+        a, c = self._peer(energy=1, free=16)
+        p = a._plan({"canonical": c}, _options(c, a.allowed))
+        self.assertEqual((p.action, p.target_id), ("SUPPLY", "player.Cantor-Speaker"))
+
+    def test_d048_healthy_or_loaded_peer_not_supplied(self):
+        for energy, free in ((20, 16), (1, 10)):
+            a, c = self._peer(energy, free)
+            self.assertEqual(a._plan({"canonical": c}, _options(c, a.allowed)).action, "HARVEST")
+
+    def test_d048_loaded_custodian_not_supplied(self):
+        from noema_orin.memory import WorldMap
+
+        a, c = self._seated()
+        a.world_map = WorldMap(Path(tempfile.mkdtemp()))
+        a.world_map.locate("player.Rivet-Custodian", "room.x", 9, 4, 1)  # 12 aboard
+        self.assertEqual(a._plan({"canonical": c}, _options(c, a.allowed)).action, "HARVEST")
+
     def test_idle_menu_skips_model(self):
         from noema_orin.orin_adapter import OrinAdapter
 
