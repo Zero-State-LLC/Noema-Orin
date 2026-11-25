@@ -177,6 +177,10 @@ class OrinAdapter:
         room = loc.get("room_id")
         seq = canonical.get("sequence")
         if self.world_map is not None and room:
+            res = canonical.get("resources") or {}
+            if hasattr(self.world_map, "locate"):
+                self.world_map.locate(canonical.get("self") or getattr(self, "self_id", None), room,
+                                      res.get("energy"), res.get("storage"), seq)
             self.world_map.observe(room, loc.get("name"), seq, [e.get("to_room_id") for e in loc.get("exits") or [] if isinstance(e, dict)],
                                    [str(a.get("operation") or a.get("action") or "").upper() for a in canonical.get("affordances") or []
                                     if isinstance(a, dict) and a.get("available") is not False])
@@ -195,14 +199,13 @@ class OrinAdapter:
         if _depleted(canonical):
             self.dwell = 0
             return ActionProposal(action="WAIT")  # engine #907/#910: WAIT at energy 0 rests +2 energy
-        # D-047 (RFC-0133): the seated quartermaster serves before gathering. SUPPLY cargo to the custodian when it
-        # is here (cargo is REPAIR/RESTORE material), at most once per 10 turns; then harvest into the treasury.
-        # Energy SUPPLY is not automated: peer budgets are not observable, so it would drain the vault blind.
+        # D-047/D-048 (RFC-0133): the seated quartermaster serves before gathering: cargo to the custodian or to a
+        # stuck peer (see _needs_supply), at most once per peer per 10 turns; then harvest into the treasury.
         custodian = self.role_handles.get("custodian")
         served = {r.get("target") for r in getattr(self, "recent", [])[-10:] if r["action"] == "SUPPLY"}
-        sup = next((o for o in options if "SUPPLY" in self.verbs and o["action"] == "SUPPLY" and o.get("target_id") not in served
-                    and (o.get("raw") or {}).get("resource") == "storage" and custodian
-                    and str(o.get("target_id") or "").replace("player.", "", 1) == custodian), None)
+        sup = next((o for o in options if "SUPPLY" in self.verbs and o["action"] == "SUPPLY"
+                    and o.get("target_id") not in served
+                    and _needs_supply(o, custodian, self.world_map, self.cohort_ids)), None)
         if sup is not None:
             self.dwell = 0
             p = _proposal(sup, self.default_args, self.memory)
@@ -390,6 +393,30 @@ def _starved_for_attention(canonical: dict, verbs: set[str]) -> bool:
 
 HARVEST_MAX = 8  # D-032: leaves hold room; cargo MOVE costs +1 regardless of amount
 SUPPLY_AMOUNT = 3  # D-047: under the engine cap of 5; spreads the vault across peers
+LOW_ENERGY = 3  # D-048: a cohort peer at or below this recorded energy with an empty hold gets cargo (WAIT fuel)
+LOW_CARGO = 6  # D-048: custodian with fewer than this aboard (16 - free) gets cargo
+
+
+def _needs_supply(opt: dict, custodian: str | None, world_map, cohort_ids) -> bool:
+    """D-048: supply only on recorded need. Positions are each agent's own observation (shared map.db).
+
+    The treasury fills with cargo only (treasury harvest), so cargo is the service. The custodian spends it on
+    REPAIR/RESTORE. Any low-energy cohort peer with an empty hold gets it too, because WAIT burns 1 cargo for
+    +2 energy (RFC-0119): a peer stuck at energy 0-1 with nothing aboard has no other way back.
+    """
+    raw = opt.get("raw") or {}
+    if raw.get("resource") != "storage":
+        return False
+    pid = str(opt.get("target_id") or raw.get("player_id") or "")
+    pos = world_map.position(pid) if world_map is not None and hasattr(world_map, "position") else None
+    free = pos[2] if pos and isinstance(pos[2], (int, float)) else None
+    aboard = None if free is None else 16 - free
+    if custodian and pid.replace("player.", "", 1) == custodian:
+        return aboard is None or aboard < LOW_CARGO
+    if cohort_ids and pid not in cohort_ids:
+        return False
+    energy = pos[1] if pos and isinstance(pos[1], (int, float)) else None
+    return energy is not None and energy <= LOW_ENERGY and aboard == 0
 TREASURY_CAP = 64  # engine TREASURY_STORAGE_CAP (RFC-0133)
 
 
