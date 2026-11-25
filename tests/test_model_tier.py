@@ -25,6 +25,12 @@ class Depleted(unittest.TestCase):
         self.assertFalse(_depleted({}))
 
 
+import importlib.util
+
+_HAS_CLIENT = importlib.util.find_spec("noema_client") is not None
+
+
+@unittest.skipUnless(_HAS_CLIENT, "requires noema_client")
 class HarvestAmount(unittest.TestCase):
     def _p(self):
         from noema_client.types import ActionProposal
