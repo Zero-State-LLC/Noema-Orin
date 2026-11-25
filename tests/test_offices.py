@@ -232,3 +232,19 @@ class QuartermasterAndIdleTests(unittest.TestCase):
         c = {"resources": {"energy": 40, "attention": 1, "storage": 16}, "location": {"room_id": "room.transit-ring"},
              "affordances": [{"action": "MOVE", "available": True, "dest": "room.civic"}]}
         self.assertEqual(a._plan({"canonical": c}, a._menu({"canonical": c})).action, "WAIT")
+
+    def test_archivist_inspects_new_entity_when_no_reconstruction(self):
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        spec = role_for("archivist")
+        a.allowed, a.cohort_ids, a.role_handles = frozenset(spec["allow"]), set(), {}
+        a.builds, a.supply, a.verbs = (), None, set(spec["verbs"])
+        a.memory, a.world_map, a.dwell, a.explorer, a.default_args, a.stats_mem = None, None, 3, False, {}, 0
+        a.recent = [{"action": "INSPECT", "target": "e.old"}]
+        c = {"resources": {"energy": 2, "attention": 8, "storage": 16}, "location": {"room_id": "room.civic"},
+             "affordances": [{"action": "INSPECT", "available": True, "target_id": "e.old"},
+                             {"action": "INSPECT", "available": True, "target_id": "e.new"},
+                             {"action": "MOVE", "available": True, "dest": "room.x"}]}
+        p = a._plan({"canonical": c}, a._menu({"canonical": c}))
+        self.assertEqual((p.action, p.target_id), ("INSPECT", "e.new"))
