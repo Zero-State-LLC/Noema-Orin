@@ -45,12 +45,14 @@ class HarvestAmount(unittest.TestCase):
 
 
 class WaitRefuels(unittest.TestCase):
-    def test_energy_one_empty_hold_does_not_wait_for_energy(self):
-        from noema_orin.orin_adapter import _starved_for_attention
+    def test_energy_one_empty_hold_now_waits_for_energy(self):
+        # Noema#926 (RFC-0117 amendment 1): WAIT at energy 1 with an empty hold rests to 2.
+        from noema_orin.orin_adapter import _starved_for_attention, _wait_refuels
         c = {"resources": {"energy": 1, "storage": 16, "attention": 8},
              "affordances": [{"action": "HARVEST", "available": False, "requires": {"energy": 2},
                               "reason": "You need energy 2 and compute 1 to harvest."}]}
-        self.assertFalse(_starved_for_attention(c, {"HARVEST"}))
+        self.assertTrue(_starved_for_attention(c, {"HARVEST"}))
+        self.assertFalse(_wait_refuels({"energy": 2, "storage": 16}))  # no passive regen at 2+
         c["resources"]["storage"] = 12  # cargo aboard: WAIT burns it for +2
         self.assertTrue(_starved_for_attention(c, {"HARVEST"}))
 

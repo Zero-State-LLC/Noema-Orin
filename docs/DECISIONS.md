@@ -33,3 +33,7 @@ After each session, `Memory.compact()` keeps only the newest "<node> holds N <re
 ## D-037 Soft daily cap on decide calls, with real token accounting
 
 Operator-approved 2026-11-25 ("cap 10000"). The Worker counts `/chat` calls per UTC day in D1 `ai_usage`. Above `DECIDE_DAILY_CAP` (default 10,000) it returns 429. The Orin treats that as a cloud failure: the breaker opens and local Ollama decides (`NOEMA_DECIDE_LOCAL_FALLBACK=1`). The Worker also records real `usage` tokens and the cheap-call share. `GET /usage` shows 14 days. First live reading: ~650 input tokens/call (estimate was 1.5k), so tiered cost is ~$0.40/day.
+
+## D-038 Adapter follows RFC-0117 amendment 1
+
+Noema#926 is live: WAIT at energy < 2 with an empty hold rests to 2. `_wait_refuels` now reflects that, so at energy 1 next to an unaffordable role verb, the agent WAITs (+1 net) instead of walking. D-034's walk only fires when WAIT truly gives nothing (energy 2+ with an empty hold, below a verb's cost).
