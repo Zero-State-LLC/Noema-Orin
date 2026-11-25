@@ -95,3 +95,7 @@ m06 spent 23 of 40 turns on FOCUS, alternating with loop-break MOVEs. Re-declari
 Investigated and left alone: the fleet's top rejection, `ORG_OFFICE_ACT:INVALID_REQUEST` (16, all m05, persona versions 24 to 27), came from sessions before the current build. The current sessions show none.
 
 **D-049 follow-up.** Live, m06 still did 19 FOCUS in 30 turns because the model cycled through the other tracks. After the first declaration, every FOCUS is now dropped from the menu (one track per process lifetime). The surveyor walks to the least-recently-seen rooms instead.
+
+## D-050 A loaded custodian waits for energy before walking
+
+m03 did 0 role actions in 30 turns. It carried 3 to 6 materials at energy 1 to 5 and kept walking (2 energy per move with cargo), so it arrived unable to REPAIR (energy 3) and burned its cargo as WAIT fuel. When a supply role carries materials, has no role verb here, and is below energy 5 (one cargo MOVE plus REPAIR), it now WAITs. Each WAIT with cargo gives +2 energy (RFC-0119).

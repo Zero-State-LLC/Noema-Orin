@@ -241,6 +241,13 @@ class OrinAdapter:
                 self.dwell = 0
                 return _proposal(insp, self.default_args, self.memory)
         here = has_role_verb(options, goal_verbs) or _offered_here(canonical, goal_verbs)
+        energy = (canonical.get("resources") or {}).get("energy")
+        if (self.supply and not _hold_empty(canonical) and not here and isinstance(energy, (int, float))
+                and energy < SPEND_READY):
+            # D-050: carrying materials but too weak to walk (2 with cargo) and still REPAIR (3) on arrival.
+            # m03 wandered at energy 1-5, burning its cargo as fuel and repairing nothing. WAIT here first.
+            self.dwell = 0
+            return ActionProposal(action="WAIT")
         if (not here and self.world_map is not None and not _wait_refuels(canonical.get("resources") or {})
                 and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)):
             # D-034: energy 1 + empty hold. WAIT gives nothing, so spend the 1 walking toward the goal;
@@ -395,6 +402,7 @@ def _starved_for_attention(canonical: dict, verbs: set[str]) -> bool:
 
 
 HARVEST_MAX = 8  # D-032: leaves hold room; cargo MOVE costs +1 regardless of amount
+SPEND_READY = 5  # D-050: cargo MOVE 2 + REPAIR 3 (engine COSTS)
 SUPPLY_AMOUNT = 3  # D-047: under the engine cap of 5; spreads the vault across peers
 LOW_ENERGY = 3  # D-048: a cohort peer at or below this recorded energy with an empty hold gets cargo (WAIT fuel)
 LOW_CARGO = 6  # D-048: custodian with fewer than this aboard (16 - free) gets cargo
