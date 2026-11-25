@@ -106,3 +106,23 @@ class MenuPipelineTests(unittest.TestCase):
                              "target_id": HOME, "cmd": f'office create {HOME} name="Notice" profile=PUBLISH_NOTICE'}]
         menu = a._menu({"canonical": c})
         self.assertEqual([o["label"] for o in menu], ["Create Steward office"])
+
+
+class SupplyPickTests(unittest.TestCase):
+    def test_empty_hold_custodian_harvests_offered_node(self):
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        spec = role_for("custodian")
+        a.allowed, a.cohort_ids, a.role_handles = frozenset(spec["allow"]), set(), {}
+        a.builds, a.supply, a.verbs = spec.get("builds"), spec.get("supply"), set(spec["verbs"])
+        a.memory, a.world_map, a.dwell, a.explorer, a.default_args, a.stats_mem = None, None, 0, False, {}, 0
+        c = {"resources": {"energy": 50, "attention": 1, "storage": 16}, "location": {"room_id": "room.civic-exchange"},
+             "affordances": [{"action": "HARVEST", "operation": "HARVEST", "available": False, "target_id": "e.fab",
+                              "reason": "Not enough stock available."},
+                             {"action": "HARVEST", "operation": "HARVEST", "available": True, "target_id": "e.cache",
+                              "cmd": "harvest Salvage Cache 1"},
+                             {"action": "MOVE", "available": True, "dest": "room.archive"}]}
+        options = a._menu({"canonical": c})
+        p = a._plan({"canonical": c}, options)
+        self.assertEqual((p.action, p.target_id), ("HARVEST", "e.cache"))

@@ -215,6 +215,12 @@ class OrinAdapter:
                          and str((o.get("raw") or {}).get("class") or "") in self.builds), None)
             if pick is not None:
                 return _proposal(pick, self.default_args, self.memory)  # build the role's own space (D-018)
+        if self.supply and _hold_empty(canonical):
+            # D-039: empty hold and a supply verb is offered: gather. The model kept choosing MOVE here.
+            pick = next((o for o in options if o["action"] in self.supply), None)
+            if pick is not None:
+                self.dwell = 0
+                return _proposal(pick, self.default_args, self.memory)
         if self.world_map is None or here or self.dwell < 2 or (self.allowed and "MOVE" not in self.allowed):
             self.dwell = self.dwell + 1 if not here else 0
             return None
