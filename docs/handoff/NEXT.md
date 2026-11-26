@@ -53,3 +53,10 @@
 - D-069 (#128) deployed to m06: the surveyor now walks (MOVE east/east/south/east after restart). Before: 0/100 role actions, 67% WAIT at energy 80.
 - fleet.sh 100 at 04:27Z: role 98/600. m01 has 0 role actions but is correctly idle (org settled). m05 shows MESSAGE 32, which is the speaker doing its role.
 - Still due ~2026-11-27 00:00Z: `fleet.sh 200 --save` custodian-energy re-measure.
+
+## 2026-11-26 11:48Z: #130 rolled fleet-wide
+- #130 (RSI ratchet, Deep Time Atlas, RFC-0136 RECHARGE, new resident verbs) passed 201/201 on Orin. D-066..D-069 guards intact.
+- Canary m03+m06 ran 7 min with no errors (m06 RECHARGE x3), then rolled m01/m02/m04/m05. All 6 active and taking turns.
+- Watch (next 24h): SHOUT/BOARD/CONTRACT_POST/COMMEMORATE are model-choosable, not planner-gated. If any agent repeats one more than about 5 times per session, gate it like D-059 (one per fact).
+- Watch: RSI autonomous rollback writes `quarantine.jsonl`; `metrics.py` raises `rsi_rollback` alerts.
+- Due ~2026-11-27 00:00Z: `fleet.sh 200 --save` custodian-energy re-measure. RECHARGE may change the answer.
