@@ -377,12 +377,12 @@ class OrinAdapter:
                 self.dwell = 0
                 return warden_prop
         if role_name in ("founder", "quartermaster", "custodian", "archivist", "speaker", "surveyor"):
-            equip_prop = plan_equipment_step(role_name, canonical, knobs_now)
+            equip_prop = plan_equipment_step(role_name, canonical, knobs_now, allowed_actions=getattr(self, "allowed", None) or None)
             if equip_prop is not None and hasattr(equip_prop, "action"):
                 self.dwell = 0
                 return equip_prop
         if role_name == "quartermaster":
-            shop_prop = plan_quartermaster_shop(canonical, knobs_now)
+            shop_prop = plan_quartermaster_shop(canonical, knobs_now, recent_actions=getattr(self, "recent", None))
             if shop_prop is not None and hasattr(shop_prop, "action"):
                 self.dwell = 0
                 return shop_prop
@@ -682,8 +682,14 @@ class OrinAdapter:
                 proposal = ActionProposal(action="WAIT")
             else:
                 proposal = self._loop_break_move(context) if key[0] != "MOVE" else ActionProposal(action="LOOK")
-        self.recent = (self.recent + [{"action": getattr(proposal, "action", None),
-                                       "target": getattr(proposal, "target_id", None)}])[-40:]
+        prop_args = getattr(proposal, "arguments", None) or {}
+        rec_entry = {
+            "action": getattr(proposal, "action", None),
+            "target": getattr(proposal, "target_id", None),
+        }
+        if prop_args.get("phase"):
+            rec_entry["phase"] = str(prop_args["phase"])
+        self.recent = (self.recent + [rec_entry])[-40:]
         track = (getattr(proposal, "arguments", None) or {}).get("track")
         subject = (getattr(proposal, "arguments", None) or {}).get("subject_ref")
         if (str(getattr(proposal, "action", "") or "").upper() == "RECONSTRUCT_PUBLISH" and subject
@@ -706,6 +712,8 @@ class OrinAdapter:
         budgets_snap = {k: v for k, v in (canonical.get("resources") or {}).items()
                         if k in ("energy", "attention", "compute", "storage", "influence")}
         if hasattr(self, "turn_log"):
+            from .shop_planner import count_unequipped_broken_tools
+
             self.turn_log.append({
                 "seq": canonical.get("sequence"),
                 "room": (canonical.get("location") or {}).get("room_id"),
@@ -713,6 +721,7 @@ class OrinAdapter:
                 "target": getattr(proposal, "target_id", None),
                 "source": source,
                 "budgets": budgets_snap,
+                "unequipped_broken_tools": count_unequipped_broken_tools(canonical),
                 "consequence": canonical.get("last_consequence"),
             })
         print(json.dumps({"turn": sum(self.stats.values()), "source": source,
