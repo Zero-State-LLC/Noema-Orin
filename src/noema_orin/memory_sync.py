@@ -115,7 +115,9 @@ def main(argv: list[str] | None = None) -> int:
             continue
         marks = advance(marks, payload)
         sent[member] = result.get("written")
-    state.write_text(json.dumps(marks))
+    from .rsi import atomic_write_json
+
+    atomic_write_json(state, marks, mode=0o600)
     compacted = compact_map(ns.root / "shared" / "map.db")
     print(json.dumps({"status": "OK", "written": sent, "map": compacted}))
     return 0

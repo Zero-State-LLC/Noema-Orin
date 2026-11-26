@@ -53,12 +53,21 @@ def role_handles(root: Path, roles: dict[str, str]) -> dict[str, str]:
 def record_self(root: Path, member: str, player_id: str | None) -> None:
     if not player_id:
         return
+    import fcntl
+    from .rsi import atomic_write_text
+
     path = root / "shared" / "cohort.tsv"
+    lock_path = root / "shared" / ".cohort.lock"
     path.parent.mkdir(parents=True, exist_ok=True)
-    rows = dict(line.split("\t", 1) for line in path.read_text().splitlines() if "\t" in line) if path.exists() else {}
-    if rows.get(member) != player_id:
-        rows[member] = player_id
-        path.write_text("".join(f"{k}\t{v}\n" for k, v in sorted(rows.items())))
+    with lock_path.open("a+") as lock_fh:
+        fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX)
+        try:
+            rows = dict(line.split("\t", 1) for line in path.read_text().splitlines() if "\t" in line) if path.exists() else {}
+            if rows.get(member) != player_id:
+                rows[member] = player_id
+                atomic_write_text(path, "".join(f"{k}\t{v}\n" for k, v in sorted(rows.items())), mode=0o644)
+        finally:
+            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -75,7 +84,16 @@ def main(argv: list[str] | None = None) -> int:
     from noema_client.client import NoemaClient
 
     from .orin_adapter import from_env, reflect
-    from .persona import apply_reflection, load_or_seed, prompt_block
+    from .persona import apply_reflection, load_or_seed, prompt_block, rollback_to_version
+    from .rsi import (
+        RsiRatchet,
+        apply_knob_deltas,
+        atomic_write_json,
+        build_session_dossier,
+        load_agenda,
+        load_or_init_knobs,
+        save_agenda,
+    )
 
     home = ns.root / ns.member
     mind = home / "mind"
@@ -83,6 +101,9 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     spec = role_for(role)
     persona = load_or_seed(mind, role)
+    knobs = load_or_init_knobs(mind, persona.get("traits"))
+    agenda = load_agenda(mind)
+    ratchet = RsiRatchet(mind)
 
     def system_brief() -> str:
         return (prompt_block(persona) + " Mission: " + str(spec["mission"]) +
@@ -96,6 +117,13 @@ def main(argv: list[str] | None = None) -> int:
     adapter.builds = tuple(spec.get("builds") or ())
     adapter.health.role = f"{persona['name']}-{role}"
     adapter.explorer = role == "surveyor"
+    adapter.policy_knobs = dict(knobs)
+    adapter.persona_traits = dict(persona.get("traits") or {})
+    adapter.mind_dir = mind
+    if agenda.get("held_track"):
+        adapter.held_track = agenda["held_track"]
+    if agenda.get("build_room"):
+        adapter.build_room = agenda["build_room"]
     from .memory import Memory, WorldMap
 
     adapter.memory, adapter.world_map = Memory(mind), WorldMap(ns.root)
@@ -122,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
         if not getattr(client, "_credential", None):
             print(json.dumps({"member": ns.member, "role": role, "status": "NO_CREDENTIAL"}), flush=True)
             return 3
+        loop_breaks_before = int(adapter.stats.get("loop_break", 0))
         try:
             report = client.play(duration=ns.session_seconds, cooldown=cooldown, adapter=adapter)
         except (ConnectionError, EOFError, OSError) as exc:
@@ -140,14 +169,56 @@ def main(argv: list[str] | None = None) -> int:
             compacted = adapter.memory.compact() if adapter.memory is not None else 0
         except Exception:  # compaction must never end a session loop
             compacted = -1
-        patch = reflect(adapter, persona, adapter.recent)
-        persona, accepted = apply_reflection(mind, persona, patch)
+        save_agenda(mind, {
+            "held_track": getattr(adapter, "held_track", None),
+            "build_room": getattr(adapter, "build_room", None),
+            "epoch": agenda.get("epoch", 0),
+            "steps": agenda.get("steps", []),
+            "updated_seq": adapter.health.last_source_sequence,
+        })
+        rej = rejection_summary(report)
+        dossier = build_session_dossier(
+            role=role,
+            role_verbs=set(spec["verbs"]),
+            turn_log=list(getattr(adapter, "turn_log", [])),
+            rejections=rej,
+            stop_reason=line.get("stop_reason"),
+            loop_breaks=max(0, int(adapter.stats.get("loop_break", 0)) - loop_breaks_before),
+            deep_time_seen=dict(getattr(adapter, "deep_time_seen", {})),
+        )
+        rsi_verdict = ratchet.evaluate_session(dossier, persona, knobs)
+        accepted = False
+        if rsi_verdict["verdict"] == "ROLLED_BACK":
+            restored = rollback_to_version(mind, rsi_verdict["rollback_persona_version"])
+            if restored is not None:
+                persona = restored
+            knobs = dict(rsi_verdict["rollback_knobs"])
+            atomic_write_json(mind / "policy_knobs.json", knobs)
+        elif ratchet.can_propose() and dossier["turns"] >= 5:
+            patch = reflect(adapter, persona, adapter.recent, dossier=dossier, knobs=knobs)
+            if isinstance(patch, dict):
+                cand_knobs, knobs_ok = apply_knob_deltas(knobs, patch.get("knob_deltas"))
+                if knobs_ok:
+                    reg_ok, _sig = ratchet.register_candidate(patch, persona["version"] + 1)
+                    if reg_ok:
+                        valid_seqs = set(dossier.get("valid_sequences") or []) or None
+                        persona, accepted = apply_reflection(mind, persona, patch, valid_sequences=valid_seqs)
+                        if accepted:
+                            knobs = cand_knobs
+                            atomic_write_json(mind / "policy_knobs.json", knobs)
+                        else:
+                            ratchet.state["candidate"] = None
+                            ratchet.save()
+        adapter.policy_knobs = dict(knobs)
+        adapter.persona_traits = dict(persona.get("traits") or {})
+        adapter.turn_log = []
         adapter.set_brief(system_brief())
         print(json.dumps({"member": ns.member, "role": role, "actions": len(report),
                           "stop_reason": line.get("stop_reason"), "stop_detail": stop_detail(report),
-                          "rejections": rejection_summary(report), "decisions": dict(adapter.stats),
+                          "rejections": rej, "decisions": dict(adapter.stats),
                           "persona_version": persona["version"], "memories_recalled": adapter.stats_mem,
-                          "health": adapter.health.summary(), "memory_compacted": compacted, "reflection": "accepted" if accepted else "rejected"},
+                          "health": adapter.health.summary(), "memory_compacted": compacted,
+                          "reflection": "accepted" if accepted else "rejected", "rsi": rsi_verdict},
                          default=str), flush=True)
         stop.wait(ns.cooldown)
     return 0

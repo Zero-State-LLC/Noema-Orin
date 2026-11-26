@@ -174,6 +174,7 @@ class OfficeChurnTests(unittest.TestCase):
         self.assertNotIn('name="Notice"', out["raw"]["cmd"])
 
 
+@unittest.skipUnless(_HAS_CLIENT, "requires noema_client")
 class QuartermasterAndIdleTests(unittest.TestCase):
     def _qm(self):
         from noema_orin.orin_adapter import OrinAdapter
@@ -472,6 +473,7 @@ class RouteVerbTests(unittest.TestCase):
         self.assertEqual(route(c, m, _route_verbs({"REPAIR", "CONSTRUCT"}), explorer=False), "east")
 
 
+@unittest.skipUnless(_HAS_CLIENT, "requires noema_client")
 class FallbackHiddenTests(unittest.TestCase):
     """D-067: the founder's fallback messaged maint and tester; planner-only verbs are hidden from it too."""
 

@@ -38,6 +38,7 @@ class RoleHealthTracker:
     active_turns: int = 0
     idle_turns: int = 0
     workers_ai_calls: int = 0
+    planner_turns: int = 0
     ollama_fallbacks: int = 0
     error_count: int = 0
     last_source_sequence: int = 0
@@ -50,13 +51,16 @@ class RoleHealthTracker:
         used_workers_ai: bool,
         source_sequence: int,
         had_error: bool = False,
+        used_planner: bool = False,
     ) -> None:
         norm = verb.strip().upper()
         if norm in {"LOOK", "WAIT"}:
             self.idle_turns += 1
         else:
             self.active_turns += 1
-        if used_workers_ai:
+        if used_planner:
+            self.planner_turns += 1
+        elif used_workers_ai:
             self.workers_ai_calls += 1
         else:
             self.ollama_fallbacks += 1
@@ -80,6 +84,7 @@ class RoleHealthTracker:
             "idle_turns": self.idle_turns,
             "idle_ratio": idle_ratio,
             "workers_ai_calls": self.workers_ai_calls,
+            "planner_turns": self.planner_turns,
             "ollama_fallbacks": self.ollama_fallbacks,
             "fallback_ratio": fallback_ratio,
             "error_count": self.error_count,

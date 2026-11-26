@@ -8,7 +8,7 @@ scripts/jev_tier.sh when roles gain verbs.
 
 CHEAP = frozenset({
     "LOOK", "INSPECT", "WAIT", "OBSERVE", "MOVE", "ENTER_WORLD", "LEAVE_WORLD",
-    "HARVEST", "COMMIT.HARVEST", "REPAIR", "COMMIT.REPAIR", "FOCUS", "COMMIT.FOCUS", "RESTORE",
+    "HARVEST", "COMMIT.HARVEST", "REPAIR", "COMMIT.REPAIR", "FOCUS", "COMMIT.FOCUS", "RESTORE", "RECHARGE",
 })
 
 

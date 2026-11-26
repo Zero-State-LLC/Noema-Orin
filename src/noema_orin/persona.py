@@ -5,11 +5,14 @@ only through bounded, schema-checked reflection patches; every version is kept.
 """
 
 import json
-import os
 from pathlib import Path
+
+from .rsi import atomic_write_json
 
 TRAITS = ("caution", "curiosity", "sociability", "thrift")
 MAX_DRIFT = 0.1
+MAX_SEED_DISTANCE = 0.35
+MEAN_REVERSION_STEP = 0.02
 
 # Seed personas themed to Perihelion Reach: a scarred orbital frontier of relays, transit
 # rings, salvage and archives. Names evoke orbital mechanics, light and salvage.
@@ -46,10 +49,15 @@ def handle_for(role: str) -> str:
 
 
 def _private_write(path: Path, data: dict) -> None:
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as fh:
-        json.dump(data, fh, indent=2, sort_keys=True)
+    atomic_write_json(path, data, mode=0o600)
+
+
+def _token_overlap(a: str, b: str) -> float:
+    ta = {t for t in "".join(c if c.isalnum() else " " for c in a.lower()).split() if len(t) > 2}
+    tb = {t for t in "".join(c if c.isalnum() else " " for c in b.lower()).split() if len(t) > 2}
+    if not ta or not tb:
+        return 0.0
+    return len(ta & tb) / len(ta | tb)
 
 
 def load_or_seed(mind: Path, role: str) -> dict:
@@ -62,22 +70,73 @@ def load_or_seed(mind: Path, role: str) -> dict:
     return persona
 
 
-def apply_reflection(mind: Path, persona: dict, patch: object) -> tuple[dict, bool]:
-    """Apply a model-proposed patch with bounded drift. Name, role and mission are immutable."""
-    if type(patch) is not dict or set(patch) - {"trait_deltas", "lesson", "quirk"}:
+def rollback_to_version(mind: Path, version: int) -> dict | None:
+    """Restore a previously saved persona.vN.json atomically onto persona.json."""
+    target = mind / f"persona.v{int(version)}.json"
+    if not target.is_file():
+        return None
+    restored = json.loads(target.read_text())
+    _private_write(mind / "persona.json", restored)
+    return restored
+
+
+def mean_revert_toward_seed(persona: dict, *, step: float = MEAN_REVERSION_STEP) -> dict:
+    """Gentle epoch-boundary pull toward the role seed to prevent monotonic saturation."""
+    role = str(persona.get("role") or "")
+    seed_traits = (SEEDS.get(role) or {}).get("traits")
+    if not isinstance(seed_traits, dict):
+        return persona
+    nxt = json.loads(json.dumps(persona))
+    for k in TRAITS:
+        cur = float(nxt["traits"].get(k, seed_traits[k]))
+        anchor = float(seed_traits[k])
+        diff = anchor - cur
+        if abs(diff) <= step:
+            nxt["traits"][k] = round(anchor, 3)
+        else:
+            nxt["traits"][k] = round(cur + (step if diff > 0 else -step), 3)
+    return nxt
+
+
+def apply_reflection(
+    mind: Path,
+    persona: dict,
+    patch: object,
+    *,
+    valid_sequences: set[int] | None = None,
+) -> tuple[dict, bool]:
+    """Apply a model-proposed patch with bounded drift, seed tether, and lesson grounding.
+
+    Name, role and mission are immutable.
+    """
+    allowed_keys = {"trait_deltas", "lesson", "lesson_seq", "quirk", "knob_deltas"}
+    if type(patch) is not dict or set(patch) - allowed_keys:
         return persona, False
     deltas = patch.get("trait_deltas", {})
     if type(deltas) is not dict or set(deltas) - set(TRAITS):
         return persona, False
+    role = str(persona.get("role") or "")
+    seed_traits = (SEEDS.get(role) or {}).get("traits") or {}
     nxt = json.loads(json.dumps(persona))
     for key, raw in deltas.items():
         if type(raw) not in (int, float):
             return persona, False
         step = max(-MAX_DRIFT, min(MAX_DRIFT, float(raw)))
-        nxt["traits"][key] = round(max(0.0, min(1.0, nxt["traits"][key] + step)), 3)
+        anchor = float(seed_traits.get(key, nxt["traits"][key]))
+        lo = max(0.0, anchor - MAX_SEED_DISTANCE)
+        hi = min(1.0, anchor + MAX_SEED_DISTANCE)
+        nxt["traits"][key] = round(max(lo, min(hi, nxt["traits"][key] + step)), 3)
     lesson = patch.get("lesson")
     if type(lesson) is str and lesson.strip():
-        nxt["lessons"] = (nxt["lessons"] + [lesson.strip()[:200]])[-20:]
+        clean = " ".join(lesson.strip().split())[:200]
+        seq = patch.get("lesson_seq")
+        if valid_sequences is not None:
+            if type(seq) is not int or seq not in valid_sequences:
+                clean = ""  # ungrounded lesson rejected; keep rest of patch valid
+            else:
+                clean = f"{clean} [seq {seq}]"[:200]
+        if clean and not any(_token_overlap(clean, old) >= 0.7 for old in nxt.get("lessons", [])):
+            nxt["lessons"] = (nxt["lessons"] + [clean])[-20:]
     quirk = patch.get("quirk")
     if type(quirk) is str and quirk.strip():
         nxt["quirk"] = quirk.strip()[:120]

@@ -43,6 +43,12 @@ class OrinAdapter:
         self.on_turn = None
         self.self_id = None
         self.role_handles: dict[str, str] = {}
+        self.policy_knobs: dict[str, float | int] = {}
+        self.persona_traits: dict[str, float] = {}
+        self.mind_dir = None
+        self.turn_log: list[dict] = []
+        self.deep_time_seen: dict[str, int] = {"scars": 0, "lore": 0, "culture": 0, "inherited": 0}
+        self._attested_targets: set[str] = set()
 
     def set_brief(self, brief: str) -> None:
         from noema_client.adapters.openai_compatible import SYSTEM_PROMPT
@@ -193,8 +199,30 @@ class OrinAdapter:
             return None
         menu = [{k: o[k] for k in ("i", "action", "label")} for o in options[:24]]
         loc = canonical.get("location") or {}
-        user = json.dumps({"recent_own_actions": recent, "room": loc.get("name"), "memories": self.memories,
-                           "resources": canonical.get("resources"), "options": menu}, sort_keys=True, default=str)[:5000]
+        peer_ids = [str(p.get("player_id") or "") for p in canonical.get("players_here") or [] if isinstance(p, dict)]
+        relations = (
+            self.memory.relation_summary(peer_ids)
+            if self.memory is not None and hasattr(self.memory, "relation_summary")
+            else []
+        )
+        dt_ctx = {
+            k: v
+            for k, v in (
+                ("scars", canonical.get("scars")),
+                ("lore", canonical.get("lore_attractors")),
+                ("culture", canonical.get("culture_lines")),
+                ("inherited", canonical.get("inherited_lines")),
+                ("rumors", canonical.get("rumor_lines")),
+            )
+            if v
+        }
+        payload = {"recent_own_actions": recent, "room": loc.get("name"), "memories": self.memories,
+                   "resources": canonical.get("resources"), "options": menu}
+        if relations:
+            payload["peer_relations"] = relations
+        if dt_ctx:
+            payload["deep_time"] = dt_ctx
+        user = json.dumps(payload, sort_keys=True, default=str)[:5000]
         instruction = (self.system + " Choose exactly ONE option by its index from `options`. Prefer actions unique to your role "
                        "over LOOK, INSPECT and WAIT. Use `memories` (facts you observed earlier). "
                        "Vary your actions; never pick the same option three times in a row. "
@@ -275,11 +303,24 @@ class OrinAdapter:
             self.world_map.observe(room, loc.get("name"), seq, [e.get("to_room_id") for e in loc.get("exits") or [] if isinstance(e, dict)],
                                    [str(a.get("operation") or a.get("action") or "").upper() for a in canonical.get("affordances") or []
                                     if isinstance(a, dict) and (a.get("available") is not False or _budget_blocked(a))])
+            if hasattr(self.world_map, "observe_deep_time"):
+                dt_obs = self.world_map.observe_deep_time(room, canonical)
+                seen = getattr(self, "deep_time_seen", None)
+                if isinstance(seen, dict):
+                    if dt_obs.get("scars"):
+                        seen["scars"] = seen.get("scars", 0) + int(dt_obs["scars"])
+                    if dt_obs.get("lore"):
+                        seen["lore"] = seen.get("lore", 0) + int(dt_obs["lore"])
+                    if dt_obs.get("culture"):
+                        seen["culture"] = seen.get("culture", 0) + int(dt_obs["culture"])
+                    if canonical.get("inherited_lines"):
+                        seen["inherited"] = seen.get("inherited", 0) + len(canonical.get("inherited_lines") or [])
         if self.memory is not None:
             facts = facts_from(canonical)
             for kind, text in facts:
                 self.memory.remember(text, kind=kind, room=room, sequence=seq)
             self.memory.mark_stale(kind="offer", room=room, keep={t for k, t in facts if k == "offer"})
+            self._record_social_evidence(canonical, seq)
             for ent in loc.get("entities") or canonical.get("entities") or []:
                 cls = isinstance(ent, dict) and ent.get("entity_type") == "INFRASTRUCTURE" and (
                     ent.get("infra_type") or str(ent.get("label") or "").replace("-", "_"))
@@ -288,8 +329,21 @@ class OrinAdapter:
             self.memories = self.memory.recall(" ".join([str(loc.get("name") or "")] + sorted(self.verbs)))
             self.stats_mem += len(self.memories)
         if _depleted(canonical):
+            # RFC-0136: if an active generator offers RECHARGE here, prefer +4 energy over WAIT +2.
+            rech = next((o for o in options if o["action"] == "RECHARGE"), None)
+            if rech is not None:
+                self.dwell = 0
+                return _proposal(rech, self.default_args, self.memory)
             self.dwell = 0
             return ActionProposal(action="WAIT")  # engine #907/#910: WAIT at energy 0 rests +2 energy
+        # RFC-0136: when below energy reserve floor and an active generator offers RECHARGE, top up (+4, 0 cargo burned).
+        energy_now = (canonical.get("resources") or {}).get("energy")
+        energy_floor = int((getattr(self, "policy_knobs", None) or {}).get("energy_reserve_floor", 3))
+        if isinstance(energy_now, (int, float)) and energy_now <= energy_floor:
+            rech = next((o for o in options if o["action"] == "RECHARGE"), None)
+            if rech is not None:
+                self.dwell = 0
+                return _proposal(rech, self.default_args, self.memory)
         welcome = self._welcome(canonical, options) if "ORG_CREATE" in self.verbs else None
         if welcome is not None:
             return welcome
@@ -314,7 +368,27 @@ class OrinAdapter:
             p = _proposal(sup, self.default_args, self.memory)
             if p is not None:
                 p.arguments = {**(p.arguments or {}), "amount": SUPPLY_AMOUNT}
+                if self.memory is not None and p.target_id:
+                    self.memory.note_player(str(p.target_id), "supplied cargo from treasury", sign=1, sequence=seq)
             return p
+        # Deep Time multi-controller scar coalition: custodian/speaker/surveyor contribute independent ATTEST
+        # evidence when standing in a room with an active public scar so Vellum-Archivist can weaken it (>=3 controllers).
+        if (
+            "ATTEST" in self.verbs
+            and "RECONSTRUCT" not in self.verbs
+            and (canonical.get("scars") or [])
+        ):
+            attested = getattr(self, "_attested_targets", set())
+            att_opt = next(
+                (o for o in options if o["action"] == "ATTEST" and str(o.get("target_id") or "") not in attested),
+                None,
+            )
+            if att_opt is not None:
+                self.dwell = 0
+                if not hasattr(self, "_attested_targets"):
+                    self._attested_targets = set()
+                self._attested_targets.add(str(att_opt.get("target_id") or ""))
+                return _proposal(att_opt, self.default_args, self.memory)
         vault = next((o for o in options if "SUPPLY" in self.verbs and o["action"] == "HARVEST"
                       and (o.get("raw") or {}).get("acting_for")), None)
         tbuild = next((o for o in options if "SUPPLY" in self.verbs and o["action"] in ("CONSTRUCT", "BUILD")
@@ -342,6 +416,38 @@ class OrinAdapter:
             self.dwell = 0
             return ActionProposal(action="MOVE", target_id=step)
         if vault is not None:
+            knobs = getattr(self, "policy_knobs", None) or {}
+            scar_w = float(knobs.get("scar_avoidance_weight", 0.7))
+            here_pressure = (
+                self.world_map.room_pressure_for(room)
+                if self.world_map is not None and room and hasattr(self.world_map, "room_pressure_for")
+                else 0.0
+            )
+            if (
+                scar_w >= 0.5
+                and here_pressure >= 3.0
+                and self.world_map is not None
+                and _can_afford_move(canonical)
+                and (not self.allowed or "MOVE" in self.allowed)
+            ):
+                # Deep Time fallow rotation: step ONLY to a room with strictly lower harvest pressure.
+                better = (
+                    self.world_map.low_pressure_offered(
+                        {"HARVEST"},
+                        exclude=room,
+                        near=room,
+                        pressure_weight=scar_w,
+                        max_pressure=here_pressure,
+                    )
+                    if hasattr(self.world_map, "low_pressure_offered")
+                    else None
+                )
+                hop = self.world_map.next_hop(room, better) if better else None
+                exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict)}
+                alt_dir = exits.get(hop) if hop else None
+                if alt_dir:
+                    self.dwell = 0
+                    return ActionProposal(action="MOVE", target_id=alt_dir)
             self.dwell = 0
             p = _proposal(vault, self.default_args, self.memory)
             if p is not None:
@@ -354,12 +460,16 @@ class OrinAdapter:
             self.dwell = 0
             return ActionProposal(action="WAIT")  # engine: WAIT restores attention +2 (cap 8)
         att = (canonical.get("resources") or {}).get("attention")
-        if isinstance(att, (int, float)) and att < 2 and set(goal_verbs) & ATTENTION_VERBS:
+        if isinstance(att, (int, float)) and att < 2 and "RECONSTRUCT" in goal_verbs:
             # D-045: every archivist verb costs attention 2, and moving between rooms doesn't restore it.
             self.dwell = 0
             return ActionProposal(action="WAIT")
-        if (set(goal_verbs) & ATTENTION_VERBS and isinstance(att, (int, float)) and att >= 4
-                and not has_role_verb(options, goal_verbs)):
+        if (
+            "RECONSTRUCT" in goal_verbs
+            and isinstance(att, (int, float))
+            and att >= 4
+            and not has_role_verb(options, goal_verbs)
+        ):
             # D-046: RECONSTRUCT needs evidence (LIVE_INSPECT). With no reconstruction on offer, INSPECT an
             # entity not inspected lately instead of walking on.
             seen = {r.get("target") for r in self.recent[-12:] if r["action"] == "INSPECT"}
@@ -409,16 +519,53 @@ class OrinAdapter:
             if pick is not None:
                 self.dwell = 0
                 return _proposal(pick, self.default_args, self.memory)
-        if self.world_map is None or here or self.dwell < 2 or (self.allowed and "MOVE" not in self.allowed):
+        dwell_limit = int((getattr(self, "policy_knobs", None) or {}).get("dwell_before_route", 2))
+        if self.world_map is None or here or self.dwell < dwell_limit or (self.allowed and "MOVE" not in self.allowed):
             self.dwell = self.dwell + 1 if not here else 0
             return None
         if not _can_afford_move(canonical):
             return ActionProposal(action="WAIT")  # WAIT burns cargo for energy; a refused MOVE wastes a turn
-        direction = route(canonical, self.world_map, _route_verbs(goal_verbs), explorer=self.explorer, me=getattr(self, "self_id", None))
+        knobs = getattr(self, "policy_knobs", None) or {}
+        avoid_p = "SUPPLY" in self.verbs and float(knobs.get("scar_avoidance_weight", 0.7)) >= 0.5
+        seek_s = "RECONSTRUCT" in self.verbs
+        direction = route(
+            canonical,
+            self.world_map,
+            _route_verbs(goal_verbs),
+            explorer=self.explorer,
+            me=getattr(self, "self_id", None),
+            avoid_pressure=avoid_p,
+            pressure_weight=float(knobs.get("scar_avoidance_weight", 0.7)),
+            seek_scars=seek_s,
+        )
         if not direction:
             return None
         self.dwell = 0
         return ActionProposal(action="MOVE", target_id=direction)
+
+    def _record_social_evidence(self, canonical: dict, seq) -> None:
+        """Record observed co-located peer / rumor evidence into memory.db relations table."""
+        if self.memory is None or not hasattr(self.memory, "note_player"):
+            return
+        cons = str(canonical.get("last_consequence") or "")
+        low = cons.lower()
+        for peer in canonical.get("players_here") or []:
+            if not isinstance(peer, dict):
+                continue
+            pid = str(peer.get("player_id") or "")
+            handle = str(peer.get("handle") or "")
+            if not pid or not handle or handle.lower() not in low:
+                continue
+            if any(w in low for w in ("supplied", "repaired", "corroborated", "agreed", "welcomed", "shared", "vested")):
+                self.memory.note_player(pid, cons[:180], sign=1, sequence=seq)
+            elif any(w in low for w in ("refused", "contested", "broken", "denied", "disrupted")):
+                self.memory.note_player(pid, cons[:180], sign=-1, sequence=seq)
+        for line in canonical.get("rumor_lines") or []:
+            txt = str(line or "")
+            if txt.startswith("You heard a report from "):
+                who = txt.removeprefix("You heard a report from ").rstrip(".")
+                if who and who != "an unknown source":
+                    self.memory.note_player(who, txt[:180], sign=1, sequence=seq)
 
     def decide(self, context):
         from .planner import has_role_verb
@@ -502,17 +649,31 @@ class OrinAdapter:
         if str(getattr(proposal, "action", "") or "").upper() == "FOCUS" and track:
             self.held_track = str(track)  # D-049: don't re-offer the same track
         canonical = (context.get("canonical") or {})
-        self.health.record_turn(verb=str(getattr(proposal, "action", "") or ""),
-                                used_workers_ai=bool(getattr(self, "_last_remote", False)) or source == "planner",
-                                source_sequence=int(canonical.get("sequence") or 0))
+        self.health.record_turn(
+            verb=str(getattr(proposal, "action", "") or ""),
+            used_workers_ai=bool(getattr(self, "_last_remote", False)),
+            used_planner=source in ("planner", "idle_skip", "guard"),
+            source_sequence=int(canonical.get("sequence") or 0),
+        )
         self._last_remote = False
+        budgets_snap = {k: v for k, v in (canonical.get("resources") or {}).items()
+                        if k in ("energy", "attention", "compute", "storage", "influence")}
+        if hasattr(self, "turn_log"):
+            self.turn_log.append({
+                "seq": canonical.get("sequence"),
+                "room": (canonical.get("location") or {}).get("room_id"),
+                "action": getattr(proposal, "action", None),
+                "target": getattr(proposal, "target_id", None),
+                "source": source,
+                "budgets": budgets_snap,
+                "consequence": canonical.get("last_consequence"),
+            })
         print(json.dumps({"turn": sum(self.stats.values()), "source": source,
                           "action": getattr(proposal, "action", None),
                           "target": getattr(proposal, "target_id", None),
                           "args_keys": sorted((getattr(proposal, "arguments", None) or {}).keys()),
                           "memories_used": len(self.memories),
-                          "budgets": {k: v for k, v in (canonical.get("resources") or {}).items()
-                                      if k in ("energy", "attention", "compute", "storage", "influence")},
+                          "budgets": budgets_snap,
                           "tier": getattr(self, "_last_tier", None) if source == "model" else None,
                           "room": (canonical.get("location") or {}).get("room_id"),
                           "offered_supply": sorted({o["action"] for o in options} & set(self.supply or ())),
@@ -522,7 +683,8 @@ class OrinAdapter:
                                               and str(a.get("action") or "").upper() in (self.verbs | set(self.supply or ()))})[:4],
                           "offered_role": sorted({o["action"] for o in options} & self.verbs)}), flush=True)
         self._last_tier = None
-        proposal = _harvest_amount(proposal, canonical)
+        batch_cap = int((getattr(self, "policy_knobs", None) or {}).get("harvest_batch_target", HARVEST_MAX))
+        proposal = _harvest_amount(proposal, canonical, max_batch=batch_cap)
         return proposal
 
 
@@ -673,10 +835,10 @@ def _vault_harvest_amount(opt: dict, canonical: dict) -> int:
     return max(1, int(min(HARVEST_MAX, stock if isinstance(stock, (int, float)) else 1, TREASURY_CAP - vault)))
 
 
-def _harvest_amount(proposal, canonical: dict):
+def _harvest_amount(proposal, canonical: dict, *, max_batch: int = HARVEST_MAX):
     """HARVEST costs 2 energy flat and WAIT burns 1 cargo for +2 energy, so amount 1 only breaks even.
 
-    Take up to HARVEST_MAX, bounded by free storage and the node's visible stock.
+    Take up to max_batch, bounded by free storage and the node's visible stock.
     """
     if proposal is None or str(getattr(proposal, "action", "")).upper() != "HARVEST":
         return proposal
@@ -689,7 +851,7 @@ def _harvest_amount(proposal, canonical: dict):
                   if isinstance(e, dict) and e.get("entity_id") == target), None)
     if not isinstance(stock, (int, float)):
         return proposal
-    amount = int(min(HARVEST_MAX, free, stock))
+    amount = int(min(max(1, max_batch), free, stock))
     if amount > 1:
         proposal.arguments = {**(proposal.arguments or {}), "amount": amount}
     return proposal
@@ -882,21 +1044,40 @@ def _compact(canonical):
     return out or canonical
 
 
-def reflect(adapter: OrinAdapter, persona: dict, recent: list[dict]) -> object:
-    """Ask the model for a bounded persona patch from this session's own actions."""
-    system = ("You reflect on a game character's last session and propose small changes to temperament. "
-              "Reply only with JSON {\"trait_deltas\": {trait: number between -0.1 and 0.1}, "
-              "\"lesson\": one short sentence learned, \"quirk\": optional new quirk}. Traits: caution, curiosity, "
-              "sociability, thrift. Do not change name or role.")
-    user = json.dumps({"persona": {k: persona[k] for k in ("name", "role", "traits", "quirk", "lessons")},
-                       "session_actions": recent[-40:]})[:6000]
+def reflect(
+    adapter: OrinAdapter,
+    persona: dict,
+    recent: list[dict],
+    *,
+    dossier: dict | None = None,
+    knobs: dict | None = None,
+) -> object:
+    """Ask the model for a grounded, bounded persona + tactical knob patch from this session's dossier."""
+    system = (
+        "You reflect on a NOEMA character's last session dossier and propose small, evidence-grounded improvements. "
+        "Reply ONLY with JSON {\"trait_deltas\": {trait: number between -0.1 and 0.1}, "
+        "\"knob_deltas\": {optional bounded knob delta}, \"lesson\": one short sentence citing an observed fact, "
+        "\"lesson_seq\": integer sequence from valid_sequences, \"quirk\": optional new quirk}. "
+        "Traits: caution, curiosity, sociability, thrift. "
+        "Knobs: dwell_before_route, energy_reserve_floor, harvest_batch_target, scar_avoidance_weight, "
+        "social_outreach_cooldown, inspect_novelty_weight. Do not change name or role."
+    )
+    payload: dict = {
+        "persona": {k: persona[k] for k in ("name", "role", "traits", "quirk", "lessons")},
+        "session_actions": recent[-40:],
+    }
+    if dossier is not None:
+        payload["dossier"] = dossier
+    if knobs is not None:
+        payload["current_knobs"] = knobs
+    user = json.dumps(payload, sort_keys=True, default=str)[:6000]
     cloud = _cloud_reflect(system, user)
     if cloud is not None:
         return cloud
     if os.environ.get("NOEMA_REFLECT_LOCAL_FALLBACK", "0") != "1":
         return None  # skip this session's drift rather than load the Orin's model (D-015)
     try:
-        return adapter._chat(system, user, num_predict=200)
+        return adapter._chat(system, user, num_predict=240)
     except Exception:
         return None
 
