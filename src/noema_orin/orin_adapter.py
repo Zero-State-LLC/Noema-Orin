@@ -256,10 +256,13 @@ class OrinAdapter:
         return ActionProposal(action="MOVE", target_id=exits.get(goal) or sorted(exits.values())[0])
 
     def _hidden_verbs(self) -> set[str]:
-        """Planner-only verbs: neither the model nor the fallback may pick them (D-051, S11, D-059, D-067)."""
+        """Planner-only verbs: neither the model nor the fallback may pick them (D-051, S11, D-059, D-067, RFC-0141 §2)."""
         verbs = getattr(self, "verbs", ())
-        return ({"SUPPLY"} | ({"MESSAGE"} if "ORG_CREATE" in verbs else set())
-                | ({"ORG_OFFICE_ACT"} if "MESSAGE" in verbs and "ORG_CREATE" not in verbs else set()))
+        return (
+            {"SUPPLY", "CONTRACT_POST", "SANCTION", "TRADE"}
+            | ({"MESSAGE"} if "ORG_CREATE" in verbs else set())
+            | ({"ORG_OFFICE_ACT"} if "MESSAGE" in verbs and "ORG_CREATE" not in verbs else set())
+        )
 
     def _role_fallback(self, context, options):
         """Scripted choice that still honours the role: unique verbs first, then MOVE, then anything allowed."""
@@ -319,6 +322,12 @@ class OrinAdapter:
                         seen["culture"] = seen.get("culture", 0) + int(dt_obs["culture"])
                     if canonical.get("inherited_lines"):
                         seen["inherited"] = seen.get("inherited", 0) + len(canonical.get("inherited_lines") or [])
+            if hasattr(self.world_map, "observe_market_and_equipment"):
+                self.world_map.observe_market_and_equipment(
+                    room,
+                    canonical.get("self") or getattr(self, "self_id", None),
+                    canonical,
+                )
         if self.memory is not None:
             facts = facts_from(canonical)
             for kind, text in facts:
@@ -351,6 +360,37 @@ class OrinAdapter:
         welcome = self._welcome(canonical, options) if "ORG_CREATE" in self.verbs else None
         if welcome is not None:
             return welcome
+        # RFC-0141 §2: planner-only deterministic equipment, warden defense/sanction, civic contracts, and storefront management.
+        from .planner import home_org
+        from .shop_planner import (
+            plan_civic_contract,
+            plan_equipment_step,
+            plan_quartermaster_shop,
+            plan_warden_defense_and_sanction,
+        )
+
+        role_name = str(getattr(getattr(self, "health", None), "role", "") or "").rsplit("-", 1)[-1]
+        knobs_now = getattr(self, "policy_knobs", None) or {}
+        if role_name in ("surveyor", "archivist"):
+            warden_prop = plan_warden_defense_and_sanction(role_name, canonical, options, getattr(self, "cohort_ids", None))
+            if warden_prop is not None and hasattr(warden_prop, "action"):
+                self.dwell = 0
+                return warden_prop
+        if role_name in ("founder", "quartermaster", "custodian", "archivist", "speaker", "surveyor"):
+            equip_prop = plan_equipment_step(role_name, canonical, knobs_now)
+            if equip_prop is not None and hasattr(equip_prop, "action"):
+                self.dwell = 0
+                return equip_prop
+        if role_name == "quartermaster":
+            shop_prop = plan_quartermaster_shop(canonical, knobs_now)
+            if shop_prop is not None and hasattr(shop_prop, "action"):
+                self.dwell = 0
+                return shop_prop
+        if role_name == "founder":
+            contract_prop = plan_civic_contract(role_name, canonical, home_org(canonical))
+            if contract_prop is not None and hasattr(contract_prop, "action"):
+                self.dwell = 0
+                return contract_prop
         notice = next((o for o in options if o["action"] == "ORG_OFFICE_ACT"
                        and str((o.get("raw") or {}).get("authority_profile") or "PUBLISH_NOTICE") == "PUBLISH_NOTICE"), None)
         if notice is not None and "MESSAGE" in self.verbs and "ORG_CREATE" not in self.verbs:

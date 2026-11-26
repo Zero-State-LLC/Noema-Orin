@@ -36,6 +36,14 @@ CREATE TABLE IF NOT EXISTS room_lore(room_id TEXT, attractor_id TEXT, label TEXT
 CREATE TABLE IF NOT EXISTS room_pressure(room_id TEXT PRIMARY KEY, harvest_pressure REAL, protocol_strength REAL,
                                          seen_seq INTEGER);
 CREATE TABLE IF NOT EXISTS room_culture(room_id TEXT, line TEXT, seen_seq INTEGER, PRIMARY KEY(room_id, line));
+CREATE TABLE IF NOT EXISTS shop_stalls(stall_id TEXT PRIMARY KEY, room_id TEXT, owner_id TEXT, condition INTEGER,
+                                       open_listings INTEGER, seen_seq INTEGER);
+CREATE TABLE IF NOT EXISTS shop_listings(listing_id TEXT PRIMARY KEY, stall_id TEXT, room_id TEXT, owner_id TEXT,
+                                         listing_kind TEXT, offer_json TEXT, ask_json TEXT, fills_remaining INTEGER,
+                                         seen_seq INTEGER);
+CREATE TABLE IF NOT EXISTS equipment_state(player_id TEXT, item_id TEXT, archetype TEXT, category TEXT,
+                                           equip_slot TEXT, equipped_slot TEXT, condition INTEGER, max_condition INTEGER,
+                                           seen_seq INTEGER, PRIMARY KEY(player_id, item_id));
 """
 
 
@@ -374,3 +382,144 @@ class WorldMap(_Closable):
             eco_penalty = float(pressure_weight) * (float(hp) * 1.5 + float(scar_sum) * 6.0)
             scored.append((hops + eco_penalty, -int(seen_seq or 0), room_id))
         return min(scored)[2]
+
+    def observe_market_and_equipment(self, room_id: str | None, player_id: str | None, canonical: dict) -> dict:
+        """Record observed barter stalls, open shop listings, and self equipment state in shared/map.db (RFC-0141 §3)."""
+        import json
+
+        if not isinstance(canonical, dict):
+            return {"stalls": 0, "listings": 0, "equipment": 0}
+        seq = int(canonical.get("sequence") or 0)
+        loc = canonical.get("location") or {}
+        entities = [e for e in (loc.get("entities") or canonical.get("entities") or []) if isinstance(e, dict)]
+        listings = [l for l in (canonical.get("shop_listings") or []) if isinstance(l, dict) and l.get("listing_id")]
+        inv = [it for it in (canonical.get("inventory") or []) if isinstance(it, dict) and it.get("item_id")]
+
+        stalls = [
+            e for e in entities
+            if str(e.get("infra_type") or "").lower() == "barter_stall" and e.get("entity_id")
+        ]
+        listing_count_by_stall: dict[str, int] = {}
+        for l in listings:
+            sid = str(l.get("stall_id") or "")
+            if sid:
+                listing_count_by_stall[sid] = listing_count_by_stall.get(sid, 0) + 1
+
+        with self.db:
+            if room_id:
+                self.db.execute("DELETE FROM shop_stalls WHERE room_id=?", (room_id,))
+                self.db.executemany(
+                    "INSERT OR REPLACE INTO shop_stalls VALUES (?,?,?,?,?,?)",
+                    [
+                        (
+                            str(s["entity_id"]),
+                            room_id,
+                            str(s.get("owner_id") or ""),
+                            int(s.get("condition") if s.get("condition") is not None else 100),
+                            listing_count_by_stall.get(str(s["entity_id"]), 0),
+                            seq,
+                        )
+                        for s in stalls
+                    ],
+                )
+                self.db.execute("DELETE FROM shop_listings WHERE room_id=?", (room_id,))
+                self.db.executemany(
+                    "INSERT OR REPLACE INTO shop_listings VALUES (?,?,?,?,?,?,?,?,?)",
+                    [
+                        (
+                            str(l["listing_id"]),
+                            str(l.get("stall_id") or ""),
+                            room_id,
+                            str(l.get("owner_id") or ""),
+                            str(l.get("listing_kind") or "SELL_OFFER"),
+                            json.dumps(l.get("offer_asset") or {}, sort_keys=True),
+                            json.dumps(l.get("ask_asset") or {}, sort_keys=True),
+                            int(l.get("fills_remaining") or 0),
+                            seq,
+                        )
+                        for l in listings
+                    ],
+                )
+            if player_id:
+                self.db.execute("DELETE FROM equipment_state WHERE player_id=?", (player_id,))
+                self.db.executemany(
+                    "INSERT OR REPLACE INTO equipment_state VALUES (?,?,?,?,?,?,?,?,?)",
+                    [
+                        (
+                            player_id,
+                            str(it["item_id"]),
+                            str(it.get("archetype") or ""),
+                            str(it.get("category") or ""),
+                            str(it.get("equip_slot") or ""),
+                            str(it.get("equipped_slot") or ""),
+                            int(it.get("condition") or 0),
+                            int(it.get("max_condition") or 100),
+                            seq,
+                        )
+                        for it in inv
+                    ],
+                )
+        return {"stalls": len(stalls), "listings": len(listings), "equipment": len(inv)}
+
+    def observed_stalls(self) -> list[dict]:
+        rows = self.db.execute(
+            "SELECT stall_id, room_id, owner_id, condition, open_listings, seen_seq FROM shop_stalls ORDER BY seen_seq DESC"
+        ).fetchall()
+        return [
+            {"stall_id": r[0], "room_id": r[1], "owner_id": r[2], "condition": r[3], "open_listings": r[4], "seen_seq": r[5]}
+            for r in rows
+        ]
+
+    def observed_listings(self, *, room_id: str | None = None) -> list[dict]:
+        if room_id:
+            rows = self.db.execute(
+                "SELECT listing_id, stall_id, room_id, owner_id, listing_kind, offer_json, ask_json, fills_remaining, seen_seq "
+                "FROM shop_listings WHERE room_id=? ORDER BY seen_seq DESC",
+                (room_id,),
+            ).fetchall()
+        else:
+            rows = self.db.execute(
+                "SELECT listing_id, stall_id, room_id, owner_id, listing_kind, offer_json, ask_json, fills_remaining, seen_seq "
+                "FROM shop_listings ORDER BY seen_seq DESC"
+            ).fetchall()
+        return [
+            {
+                "listing_id": r[0],
+                "stall_id": r[1],
+                "room_id": r[2],
+                "owner_id": r[3],
+                "listing_kind": r[4],
+                "offer_json": r[5],
+                "ask_json": r[6],
+                "fills_remaining": r[7],
+                "seen_seq": r[8],
+            }
+            for r in rows
+        ]
+
+    def observed_equipment(self, player_id: str | None = None) -> list[dict]:
+        if player_id:
+            rows = self.db.execute(
+                "SELECT player_id, item_id, archetype, category, equip_slot, equipped_slot, condition, max_condition, seen_seq "
+                "FROM equipment_state WHERE player_id=?",
+                (player_id,),
+            ).fetchall()
+        else:
+            rows = self.db.execute(
+                "SELECT player_id, item_id, archetype, category, equip_slot, equipped_slot, condition, max_condition, seen_seq "
+                "FROM equipment_state"
+            ).fetchall()
+        return [
+            {
+                "player_id": r[0],
+                "item_id": r[1],
+                "archetype": r[2],
+                "category": r[3],
+                "equip_slot": r[4],
+                "equipped_slot": r[5],
+                "condition": r[6],
+                "max_condition": r[7],
+                "seen_seq": r[8],
+            }
+            for r in rows
+        ]
