@@ -246,7 +246,13 @@ class OrinAdapter:
                     prop = _proposal(opt, self.default_args, self.memory)
                     if prop is not None:
                         return prop
-        return self.fallback.decide(context)
+        last = self.fallback.decide(context)
+        if getattr(last, "action", None) in hidden:
+            # D-068: the generic adapter reads raw affordances, so it re-offered the founder's MESSAGE (183 sends).
+            from noema_client.types import ActionProposal
+
+            return ActionProposal(action="WAIT")
+        return last
 
     def _plan(self, context, options):
         """Remember what is observed, then route if this room offers none of the role's verbs."""

@@ -220,3 +220,7 @@ stuck agents: engine SHARE co-owns a structure, it does not move materials, and 
 ## D-067: planner-only verbs are hidden from the scripted fallback too (2026-11-26)
 
 After D-066, m01's fallback still sent MESSAGE to reach-maint3, tester and Cantor-Speaker each turn, because `_role_fallback` ignored the model's hidden set. `_hidden_verbs()` is now shared, so the fallback never picks SUPPLY, the founder's MESSAGE, or a speaker's ORG_OFFICE_ACT. Incident cleanup: model retires were not landing, so 22 duplicate vacant Notice offices were retired by a one-off operator script (21 + 1 probe). Home org is back to 4 offices, all occupied.
+
+## D-068: the generic fallback can't leak planner-only verbs (2026-11-26)
+
+D-067 filtered the role options, but when none remained `_role_fallback` handed off to FirstValidAffordanceAdapter, which reads raw affordances. m01 sent 183 MESSAGEs that way in 3.5h. A hidden verb from the generic adapter now becomes WAIT. No office creates since the D-066/067 deploy (0 in 250 turns), and the home org still has 4 offices.

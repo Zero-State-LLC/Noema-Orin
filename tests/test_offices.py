@@ -489,3 +489,17 @@ class FallbackHiddenTests(unittest.TestCase):
         a.fallback = F()
         opts = [{"action": "MESSAGE", "target_id": "player.reach-maint3", "raw": {}}]
         self.assertEqual(a._role_fallback({}, opts), "fallback-wait")
+
+    def test_generic_fallback_message_becomes_wait(self):
+        from noema_client.types import ActionProposal
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        a.verbs, a.recent, a.default_args, a.memory = set(role_for("founder")["verbs"]), [], {}, None
+
+        class F:
+            def decide(self, context):
+                return ActionProposal(action="MESSAGE", target_id="player.reach-maint3")
+
+        a.fallback = F()
+        self.assertEqual(a._role_fallback({}, []).action, "WAIT")
