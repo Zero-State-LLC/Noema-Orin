@@ -66,3 +66,8 @@
 - D-070 (#132) deployed to m04: supersede churn (15/30 turns, 103 canned relay-7 revisions) is now one per subject. Verified: 2 supersedes on 2 distinct subjects (relay-7, scar-conduit).
 - m05 is mostly fallback MOVE (16/29) and m03 is mostly idle. Look at these next if the 24h numbers stay flat.
 - Due ~2026-11-27 00:00Z: `fleet.sh 200 --save` custodian-energy re-measure.
+
+## 2026-11-26 13:14Z
+- D-071 (#134) rolled to all 6: the generic fallback is held to the role allow list. m05 had fallen back to ORG_MEMBER_REMOVE x4 and ORG_OFFICE_VACATE x2 on its own Notice office. Checked: still a member, and all 4 offices are OCCUPIED.
+- m05's remaining weakness: 209/400 turns are fallback MOVE because notices are planner-gated (one per fact). That is expected, but the speaker wanders. Option: have it idle (WAIT) at civic-exchange instead. Low priority.
+- Due ~2026-11-27 00:00Z: `fleet.sh 200 --save` custodian-energy re-measure.
