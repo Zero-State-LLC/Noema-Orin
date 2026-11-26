@@ -343,7 +343,13 @@ class WorldMap(_Closable):
         return [r for r, _ in ranked]
 
     def low_pressure_offered(
-        self, actions: set[str], *, exclude: str | None = None, near: str | None = None, pressure_weight: float = 0.7
+        self,
+        actions: set[str],
+        *,
+        exclude: str | None = None,
+        near: str | None = None,
+        pressure_weight: float = 0.7,
+        max_pressure: float | None = None,
     ) -> str | None:
         """Choose a room offering `actions` balancing hop distance against Deep Time harvest pressure & scars."""
         if not actions:
@@ -356,6 +362,8 @@ class WorldMap(_Closable):
             f"WHERE o.action IN ({marks}) AND o.room_id IS NOT ? GROUP BY o.room_id",
             (*sorted(actions), exclude),
         ).fetchall()
+        if max_pressure is not None:
+            rows = [r for r in rows if float(r[2]) < max_pressure]
         if not rows:
             return None
         dist = self.distances(near) if near else {}

@@ -430,15 +430,21 @@ class OrinAdapter:
                 and _can_afford_move(canonical)
                 and (not self.allowed or "MOVE" in self.allowed)
             ):
-                # Deep Time fallow rotation: step to a lower-pressure harvest room before fossilizing a scar.
-                alt_dir = route(
-                    canonical,
-                    self.world_map,
-                    {"HARVEST"},
-                    explorer=False,
-                    avoid_pressure=True,
-                    pressure_weight=scar_w,
+                # Deep Time fallow rotation: step ONLY to a room with strictly lower harvest pressure.
+                better = (
+                    self.world_map.low_pressure_offered(
+                        {"HARVEST"},
+                        exclude=room,
+                        near=room,
+                        pressure_weight=scar_w,
+                        max_pressure=here_pressure,
+                    )
+                    if hasattr(self.world_map, "low_pressure_offered")
+                    else None
                 )
+                hop = self.world_map.next_hop(room, better) if better else None
+                exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict)}
+                alt_dir = exits.get(hop) if hop else None
                 if alt_dir:
                     self.dwell = 0
                     return ActionProposal(action="MOVE", target_id=alt_dir)
@@ -653,7 +659,7 @@ class OrinAdapter:
         budgets_snap = {k: v for k, v in (canonical.get("resources") or {}).items()
                         if k in ("energy", "attention", "compute", "storage", "influence")}
         if hasattr(self, "turn_log"):
-            self.turn_log = (self.turn_log + [{
+            self.turn_log.append({
                 "seq": canonical.get("sequence"),
                 "room": (canonical.get("location") or {}).get("room_id"),
                 "action": getattr(proposal, "action", None),
@@ -661,7 +667,7 @@ class OrinAdapter:
                 "source": source,
                 "budgets": budgets_snap,
                 "consequence": canonical.get("last_consequence"),
-            }])[-40:]
+            })
         print(json.dumps({"turn": sum(self.stats.values()), "source": source,
                           "action": getattr(proposal, "action", None),
                           "target": getattr(proposal, "target_id", None),

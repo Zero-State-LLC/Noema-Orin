@@ -150,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
         if not getattr(client, "_credential", None):
             print(json.dumps({"member": ns.member, "role": role, "status": "NO_CREDENTIAL"}), flush=True)
             return 3
+        loop_breaks_before = int(adapter.stats.get("loop_break", 0))
         try:
             report = client.play(duration=ns.session_seconds, cooldown=cooldown, adapter=adapter)
         except (ConnectionError, EOFError, OSError) as exc:
@@ -182,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
             turn_log=list(getattr(adapter, "turn_log", [])),
             rejections=rej,
             stop_reason=line.get("stop_reason"),
-            loop_breaks=int(adapter.stats.get("loop_break", 0)),
+            loop_breaks=max(0, int(adapter.stats.get("loop_break", 0)) - loop_breaks_before),
             deep_time_seen=dict(getattr(adapter, "deep_time_seen", {})),
         )
         rsi_verdict = ratchet.evaluate_session(dossier, persona, knobs)
