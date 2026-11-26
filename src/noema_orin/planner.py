@@ -127,7 +127,17 @@ def _drop_held_focus(options: list[dict], held_track: str | None) -> list[dict]:
     return [{**o, "i": i} for i, o in enumerate(kept)] if len(kept) != len(options) else options
 
 
-def route(canonical: dict, world_map, verbs: set[str], *, explorer: bool, me: str | None = None) -> str | None:
+def route(
+    canonical: dict,
+    world_map,
+    verbs: set[str],
+    *,
+    explorer: bool,
+    me: str | None = None,
+    avoid_pressure: bool = False,
+    pressure_weight: float = 0.7,
+    seek_scars: bool = False,
+) -> str | None:
     """Exit direction to take, or None to decide in place."""
     loc = canonical.get("location") or {}
     here = loc.get("room_id")
@@ -138,12 +148,18 @@ def route(canonical: dict, world_map, verbs: set[str], *, explorer: bool, me: st
         goal = world_map.least_recent(sorted(r for r in exits if r))
         return exits.get(goal)
     goal = None
-    if me and hasattr(world_map, "work_for"):
+    if seek_scars and hasattr(world_map, "scarred_rooms"):
+        scarred = world_map.scarred_rooms(exclude=here, near=here)
+        if scarred:
+            goal = scarred[0]
+    if goal is None and me and hasattr(world_map, "work_for"):
         # S10: rooms where this agent itself saw role work (its own work queue), nearest first.
         rooms = {r for r, a, _t, _n in world_map.work_for(me) if a in verbs and r != here}
         dist = world_map.distances(here) if rooms else {}
         reach = sorted((dist[r], r) for r in rooms if r in dist)
         goal = reach[0][1] if reach else None
+    if goal is None and avoid_pressure and hasattr(world_map, "low_pressure_offered"):
+        goal = world_map.low_pressure_offered(verbs, exclude=here, near=here, pressure_weight=pressure_weight)
     if goal is None:
         goal = world_map.where_offered(verbs, exclude=here, near=here)
     if goal is None:
@@ -167,4 +183,25 @@ def facts_from(canonical: dict) -> list[tuple[str, str]]:
     cons = canonical.get("last_consequence")
     if cons:
         out.append(("consequence", str(cons)[:240]))
+    for scar in canonical.get("scars") or []:
+        if isinstance(scar, dict) and scar.get("scar_id"):
+            dom = scar.get("domain") or "economic"
+            strength = round(float(scar.get("strength") or 0.0), 2)
+            out.append(("scar", f"{name} bears a {dom} scar (strength {strength})"))
+    for lore in canonical.get("lore_attractors") or []:
+        if isinstance(lore, dict) and lore.get("label"):
+            basin = lore.get("basin") or "forming"
+            out.append(("lore", f"{name} lore attractor ({basin}): {lore['label']}"))
+    for line in canonical.get("culture_lines") or []:
+        if str(line or "").strip():
+            out.append(("culture", f"{name}: {str(line).strip()}"))
+    for line in canonical.get("inherited_lines") or []:
+        if str(line or "").strip():
+            out.append(("inherited", str(line).strip()))
+    for line in canonical.get("rumor_lines") or []:
+        if str(line or "").strip():
+            out.append(("rumor", str(line).strip()))
+    norms = canonical.get("active_norms") if isinstance(canonical.get("active_norms"), dict) else {}
+    if float(norms.get("harvest_pressure") or 0) >= 2:
+        out.append(("pressure", f"{name} harvest pressure {norms['harvest_pressure']}"))
     return out

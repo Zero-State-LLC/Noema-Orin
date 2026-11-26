@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS marks(src TEXT PRIMARY KEY, offset INTEGER);
 CREATE TABLE IF NOT EXISTS stuck(src TEXT PRIMARY KEY, zero_energy_streak INTEGER, ts REAL);
 CREATE TABLE IF NOT EXISTS cost(src TEXT, line INTEGER, ts REAL, calls INTEGER, fallbacks INTEGER, PRIMARY KEY(src, line));
 CREATE TABLE IF NOT EXISTS cost_marks(src TEXT PRIMARY KEY, calls_total INTEGER, fallbacks_total INTEGER);
+CREATE TABLE IF NOT EXISTS rsi_events(src TEXT, line INTEGER, ts REAL, member TEXT, verdict TEXT, fitness REAL, reason TEXT,
+  PRIMARY KEY(src, line));
 """
 IDLE = {"LOOK", "WAIT", "INSPECT", "MOVE"}
 STUCK_TURNS = 10
@@ -96,6 +98,13 @@ def collect(root: Path, db: sqlite3.Connection) -> int:
                             d.get("stop_detail"), role_n, idle_n, turns, drops,
                             json.dumps((d.get("rejections") or {}).get("by_verb_code") or {})))
                 added += 1
+                rsi = d.get("rsi")
+                if isinstance(rsi, dict) and rsi.get("verdict"):
+                    db.execute(
+                        "INSERT OR IGNORE INTO rsi_events VALUES (?,?,?,?,?,?,?)",
+                        (src, n, time.time(), d.get("member"), str(rsi.get("verdict")),
+                         float(rsi.get("fitness") or 0.0), str(rsi.get("reason") or "")[:200]),
+                    )
                 health = d.get("health") or {}
                 if isinstance(health, dict) and "workers_ai_calls" in health:
                     # health counters are cumulative per process; store the delta (reset on restart).
@@ -132,6 +141,11 @@ def digest(db: sqlite3.Connection, hours: float = 24) -> dict:
         member = src.removeprefix("noema-player@").removeprefix("noema-").removesuffix(".log")
         alerts.append(f"{member}: energy 0 for last {streak} turns (Noema#907)")
     alerts += cost_alerts(db, hours)
+    for member, reason in db.execute(
+        "SELECT member, reason FROM rsi_events WHERE ts >= ? AND verdict = 'ROLLED_BACK' ORDER BY ts DESC",
+        (since,),
+    ).fetchall():
+        alerts.append(f"{member}: rsi_rollback ({reason or 'regression'})")
     return {"window_hours": hours, "members": out, "alerts": alerts}
 
 

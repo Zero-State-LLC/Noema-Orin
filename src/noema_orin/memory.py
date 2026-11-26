@@ -29,6 +29,13 @@ CREATE TABLE IF NOT EXISTS positions(player_id TEXT PRIMARY KEY, room_id TEXT, e
                                      seen_seq INTEGER);
 CREATE TABLE IF NOT EXISTS work(player_id TEXT, room_id TEXT, action TEXT, target_id TEXT, need TEXT, seen_seq INTEGER,
                                 PRIMARY KEY(player_id, room_id, action, target_id));
+CREATE TABLE IF NOT EXISTS room_scars(room_id TEXT, scar_id TEXT, domain TEXT, strength REAL, confidence REAL,
+                                      seen_seq INTEGER, PRIMARY KEY(room_id, scar_id));
+CREATE TABLE IF NOT EXISTS room_lore(room_id TEXT, attractor_id TEXT, label TEXT, weight REAL, basin TEXT,
+                                     seen_seq INTEGER, PRIMARY KEY(room_id, attractor_id));
+CREATE TABLE IF NOT EXISTS room_pressure(room_id TEXT PRIMARY KEY, harvest_pressure REAL, protocol_strength REAL,
+                                         seen_seq INTEGER);
+CREATE TABLE IF NOT EXISTS room_culture(room_id TEXT, line TEXT, seen_seq INTEGER, PRIMARY KEY(room_id, line));
 """
 
 
@@ -94,12 +101,8 @@ class Memory(_Closable):
             (" OR ".join(terms), limit)).fetchall()
         return [{"fact": t, "room": r, "source_sequence": s} for t, r, s in rows]
 
-    def compact(self, *, keep_stale: int = 50) -> int:
-        """S20: drop superseded readings and old stale facts. Returns rows deleted.
-
-        "<Label> holds N <res> available to harvest." is a reading: only the newest per (room, label) is kept.
-        Stale facts beyond the newest `keep_stale` are dropped (current observation already won).
-        """
+    def compact(self, *, keep_stale: int = 50, keep_consequences: int = 500, max_relations: int = 2000) -> int:
+        """S20 + RSI hygiene: drop superseded readings, old stale facts, and bound consequence/relation growth."""
         import re
 
         pat = re.compile(r"^(.+?) holds [0-9.]+ (\w+) available to harvest\.$")
@@ -118,9 +121,19 @@ class Memory(_Closable):
             newest[key] = (seq, fid)
         stale = [fid for (fid,) in self.db.execute(
             "SELECT id FROM facts WHERE stale=1 ORDER BY source_sequence DESC LIMIT -1 OFFSET ?", (keep_stale,))]
-        ids = sorted(set(doomed) | set(stale))
+        old_cons = [fid for (fid,) in self.db.execute(
+            "SELECT id FROM facts WHERE kind='consequence' AND stale=0 ORDER BY coalesce(source_sequence,0) DESC, id DESC LIMIT -1 OFFSET ?",
+            (keep_consequences,))]
+        ids = sorted(set(doomed) | set(stale) | set(old_cons))
         with self.db:
             self.db.executemany("DELETE FROM facts WHERE id=?", [(i,) for i in ids])
+            rel_count = self.db.execute("SELECT count(*) FROM relations").fetchone()[0]
+            if rel_count > max_relations:
+                self.db.execute(
+                    "DELETE FROM relations WHERE rowid IN "
+                    "(SELECT rowid FROM relations ORDER BY rowid DESC LIMIT -1 OFFSET ?)",
+                    (max_relations,),
+                )
         return len(ids)
 
     def note_player(self, player_id: str, note: str, *, sign: int, sequence: int | None) -> None:
@@ -132,6 +145,19 @@ class Memory(_Closable):
         rows = self.db.execute("SELECT sign FROM relations WHERE player_id=?", (player_id,)).fetchall()
         pos, neg = sum(1 for (s,) in rows if s > 0), sum(1 for (s,) in rows if s < 0)
         return {"supporting": pos, "opposing": neg, "contested": bool(pos and neg)}
+
+    def relation_summary(self, player_ids: list[str], *, limit: int = 3) -> list[dict]:
+        """Compact social-memory summary for co-located peers to inject into _ask()."""
+        out: list[dict] = []
+        for pid in player_ids:
+            if not pid:
+                continue
+            rel = self.relations(pid)
+            if rel["supporting"] or rel["opposing"]:
+                out.append({"player": pid, **rel})
+            if len(out) >= limit:
+                break
+        return out
 
 
 class WorldMap(_Closable):
@@ -243,3 +269,100 @@ class WorldMap(_Closable):
                     nxt.append(dest)
             frontier = nxt
         return None
+
+    def observe_deep_time(self, room_id: str, canonical: dict) -> dict:
+        """Record Deep Time scars, lore attractors, harvest pressure, and culture lines for this room."""
+        if not room_id or not isinstance(canonical, dict):
+            return {"scars": 0, "lore": 0, "pressure": 0.0}
+        seq = int(canonical.get("sequence") or 0)
+        scars = [s for s in (canonical.get("scars") or []) if isinstance(s, dict) and s.get("scar_id")]
+        lore = [a for a in (canonical.get("lore_attractors") or []) if isinstance(a, dict) and a.get("attractor_id")]
+        norms = canonical.get("active_norms") if isinstance(canonical.get("active_norms"), dict) else {}
+        hp = float(norms.get("harvest_pressure") or 0.0)
+        ps = float(canonical.get("protocol_strength") or 0.0)
+        culture = [str(line).strip()[:200] for line in (canonical.get("culture_lines") or []) if str(line or "").strip()]
+        with self.db:
+            self.db.execute("DELETE FROM room_scars WHERE room_id=?", (room_id,))
+            self.db.executemany(
+                "INSERT OR REPLACE INTO room_scars VALUES (?,?,?,?,?,?)",
+                [
+                    (
+                        room_id,
+                        str(s["scar_id"]),
+                        str(s.get("domain") or "economic"),
+                        float(s.get("strength") or 0.0),
+                        float(s.get("reconstruction_confidence") or 0.0),
+                        seq,
+                    )
+                    for s in scars
+                ],
+            )
+            self.db.execute("DELETE FROM room_lore WHERE room_id=?", (room_id,))
+            self.db.executemany(
+                "INSERT OR REPLACE INTO room_lore VALUES (?,?,?,?,?,?)",
+                [
+                    (
+                        room_id,
+                        str(a["attractor_id"]),
+                        str(a.get("label") or "")[:120],
+                        float(a.get("weight") or 0.0),
+                        str(a.get("basin") or "forming"),
+                        seq,
+                    )
+                    for a in lore
+                ],
+            )
+            self.db.execute(
+                "INSERT INTO room_pressure VALUES (?,?,?,?) ON CONFLICT(room_id) DO UPDATE SET "
+                "harvest_pressure=excluded.harvest_pressure, protocol_strength=excluded.protocol_strength, seen_seq=excluded.seen_seq",
+                (room_id, hp, ps, seq),
+            )
+            self.db.execute("DELETE FROM room_culture WHERE room_id=?", (room_id,))
+            self.db.executemany(
+                "INSERT OR REPLACE INTO room_culture VALUES (?,?,?)",
+                [(room_id, line, seq) for line in culture],
+            )
+        return {"scars": len(scars), "lore": len(lore), "pressure": hp, "culture": len(culture)}
+
+    def room_pressure_for(self, room_id: str) -> float:
+        row = self.db.execute("SELECT harvest_pressure FROM room_pressure WHERE room_id=?", (room_id,)).fetchone()
+        return float(row[0]) if row and row[0] is not None else 0.0
+
+    def scarred_rooms(self, *, min_strength: float = 0.05, exclude: str | None = None, near: str | None = None) -> list[str]:
+        rows = self.db.execute(
+            "SELECT room_id, max(strength) FROM room_scars WHERE strength >= ? AND room_id IS NOT ? "
+            "GROUP BY room_id ORDER BY max(strength) DESC",
+            (min_strength, exclude),
+        ).fetchall()
+        if not rows:
+            return []
+        if near is None:
+            return [r for r, _ in rows]
+        dist = self.distances(near)
+        ranked = sorted(rows, key=lambda t: (dist.get(t[0], 999), -float(t[1]), t[0]))
+        return [r for r, _ in ranked]
+
+    def low_pressure_offered(
+        self, actions: set[str], *, exclude: str | None = None, near: str | None = None, pressure_weight: float = 0.7
+    ) -> str | None:
+        """Choose a room offering `actions` balancing hop distance against Deep Time harvest pressure & scars."""
+        if not actions:
+            return None
+        marks = ",".join("?" * len(actions))
+        rows = self.db.execute(
+            f"SELECT o.room_id, max(o.seen_seq), coalesce(p.harvest_pressure, 0.0), "
+            f"coalesce((SELECT sum(strength) FROM room_scars s WHERE s.room_id = o.room_id), 0.0) "
+            f"FROM offers o LEFT JOIN room_pressure p ON p.room_id = o.room_id "
+            f"WHERE o.action IN ({marks}) AND o.room_id IS NOT ? GROUP BY o.room_id",
+            (*sorted(actions), exclude),
+        ).fetchall()
+        if not rows:
+            return None
+        dist = self.distances(near) if near else {}
+        scored = []
+        for room_id, seen_seq, hp, scar_sum in rows:
+            hops = dist.get(room_id, 50) if near else 0
+            # Penalize rooms approaching scar formation (harvest_pressure >= 2) or active scars.
+            eco_penalty = float(pressure_weight) * (float(hp) * 1.5 + float(scar_sum) * 6.0)
+            scored.append((hops + eco_penalty, -int(seen_seq or 0), room_id))
+        return min(scored)[2]
