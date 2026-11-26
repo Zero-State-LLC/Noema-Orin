@@ -86,10 +86,15 @@ def plan_equipment_step(
     role: str,
     canonical: dict[str, Any],
     knobs: dict[str, Any] | None = None,
+    allowed_actions: frozenset[str] | set[str] | None = None,
 ) -> Any | None:
     """Deterministic equipment upkeep: equip loadout, recycle depleted cells, repair worn tools, consume emergency cell."""
     if role == "maintenance":
         return None
+    if allowed_actions is None:
+        from .roles import role_for
+
+        allowed_actions = frozenset(role_for(role)["allow"])
     knobs = knobs or {}
     repair_floor = max(10, min(50, int(knobs.get("tool_repair_floor", 25))))
     energy_floor = max(1, min(5, int(knobs.get("energy_reserve_floor", 2))))
@@ -101,18 +106,19 @@ def plan_equipment_step(
     compute = int(res.get("compute") or 0)
 
     # 1. Auto-equip operational role loadout item if its slot is empty.
-    for arch in loadout:
-        for it in inv:
-            if it.get("archetype") != arch or it.get("equipped_slot"):
-                continue
-            slot = it.get("equip_slot")
-            if int(it.get("condition") or 0) > 0 and slot and not eq.get(slot):
-                iid = str(it.get("item_id") or "")
-                if iid:
-                    return _proposal("EQUIP", target_id=iid, arguments={"item_id": iid, "entity_id": iid})
+    if "EQUIP" in allowed_actions:
+        for arch in loadout:
+            for it in inv:
+                if it.get("archetype") != arch or it.get("equipped_slot"):
+                    continue
+                slot = it.get("equip_slot")
+                if int(it.get("condition") or 0) > 0 and slot and not eq.get(slot):
+                    iid = str(it.get("item_id") or "")
+                    if iid:
+                        return _proposal("EQUIP", target_id=iid, arguments={"item_id": iid, "entity_id": iid})
 
     # 2. Emergency power_cell consumption when energy is at or below reserve floor.
-    if energy <= energy_floor:
+    if "USE_ITEM" in allowed_actions and energy <= energy_floor:
         cell = next(
             (it for it in inv if it.get("archetype") == "power_cell" and int(it.get("condition") or 0) > 0 and it.get("item_id")),
             None,
@@ -122,14 +128,14 @@ def plan_equipment_step(
             return _proposal("USE_ITEM", target_id=iid, arguments={"item_id": iid, "entity_id": iid})
 
     # 3. Recycle depleted_cell at an operational generator (compute >= 1).
-    if compute >= 1 and _room_has_ready_infra(canonical, "generator", min_condition=25):
+    if "RECHARGE" in allowed_actions and compute >= 1 and _room_has_ready_infra(canonical, "generator", min_condition=25):
         dep = next((it for it in inv if it.get("archetype") == "depleted_cell" and it.get("item_id")), None)
         if dep is not None:
             iid = str(dep["item_id"])
             return _proposal("RECHARGE", target_id=iid, arguments={"item_id": iid, "entity_id": iid})
 
-    # 4. Repair worn or broken carried tool/weapon/rig at an operational workshop.
-    if energy >= 2 and compute >= 1 and _room_has_ready_infra(canonical, "workshop", min_condition=25):
+    # 4. Repair worn or broken carried tool/weapon/rig at an operational workshop (only when role allows REPAIR).
+    if "REPAIR" in allowed_actions and energy >= 2 and compute >= 1 and _room_has_ready_infra(canonical, "workshop", min_condition=25):
         worn = [
             it for it in inv
             if it.get("archetype") != "depleted_cell"
@@ -143,7 +149,7 @@ def plan_equipment_step(
             return _proposal("REPAIR", target_id=iid, arguments={"item_id": iid, "entity_id": iid})
 
     # 5. Custodian fabricates power_cell or missing loadout tools at a ready workshop when materials are on hand.
-    if role == "custodian" and energy >= 3 and compute >= 2 and _room_has_ready_infra(canonical, "workshop", min_condition=50):
+    if "CRAFT" in allowed_actions and role == "custodian" and energy >= 3 and compute >= 2 and _room_has_ready_infra(canonical, "workshop", min_condition=50):
         lots = canonical.get("material_lots") or []
         by_mat: dict[str, int] = {}
         for lot in lots:
@@ -160,9 +166,31 @@ def plan_equipment_step(
     return None
 
 
+def _stall_energy_already_funded(
+    stall: dict[str, Any],
+    stall_id: str,
+    needed_energy: int,
+    recent_actions: list[dict[str, Any]] | None,
+) -> bool:
+    """True if observed stall escrow or an unconsumed recent energy stock already covers `needed_energy`."""
+    stall_res = stall.get("resources")
+    if isinstance(stall_res, dict) and int(stall_res.get("energy") or 0) >= needed_energy:
+        return True
+    for rec in reversed(recent_actions or []):
+        if rec.get("action") != "TRADE" or rec.get("target") != stall_id:
+            continue
+        phase = str(rec.get("phase") or "").lower()
+        if phase == "list":
+            return False
+        if phase == "stock":
+            return True
+    return False
+
+
 def plan_quartermaster_shop(
     canonical: dict[str, Any],
     knobs: dict[str, Any] | None = None,
+    recent_actions: list[dict[str, Any]] | None = None,
 ) -> Any | None:
     """Deterministic m02 Tallow-Quartermaster storefront stocking & listing planner (RFC-0141 §2.2)."""
     stall = _room_has_ready_infra(canonical, "barter_stall", min_condition=25)
@@ -204,32 +232,32 @@ def plan_quartermaster_shop(
             },
         )
 
-    # 2. Publish a CORE_SWAP listing if stall has no active CORE_SWAP and we have spare energy to seed BUY_ORDER or cell swap.
-    if "BUY_ORDER" not in open_kinds and energy >= prices["ore_buy_energy"] + 8:
-        # Stock energy first if no BUY_ORDER yet; planner alternates stock -> list cleanly.
-        return _proposal(
-            "TRADE",
-            target_id=stall_id,
-            arguments={
-                "phase": "stock",
-                "stall_id": stall_id,
-                "asset": {"kind": "RESOURCE", "resource": "energy", "amount": prices["ore_buy_energy"]},
-            },
-        )
-
-    if len(listings) < 3 and "BUY_ORDER" not in open_kinds and energy >= prices["ore_buy_energy"] + 4:
-        return _proposal(
-            "TRADE",
-            target_id=stall_id,
-            arguments={
-                "phase": "list",
-                "stall_id": stall_id,
-                "listing_kind": "BUY_ORDER",
-                "offer_asset": {"kind": "RESOURCE", "resource": "energy", "amount": prices["ore_buy_energy"]},
-                "ask_asset": {"kind": "LOT", "material": "FERROUS_ORE", "amount": 3},
-                "max_fills": 1,
-            },
-        )
+    # 2. Ensure a BUY_ORDER exists: fund energy once, then immediately publish the BUY_ORDER on the next turn.
+    if len(listings) < 3 and "BUY_ORDER" not in open_kinds:
+        funded = _stall_energy_already_funded(stall, stall_id, prices["ore_buy_energy"], recent_actions)
+        if funded:
+            return _proposal(
+                "TRADE",
+                target_id=stall_id,
+                arguments={
+                    "phase": "list",
+                    "stall_id": stall_id,
+                    "listing_kind": "BUY_ORDER",
+                    "offer_asset": {"kind": "RESOURCE", "resource": "energy", "amount": prices["ore_buy_energy"]},
+                    "ask_asset": {"kind": "LOT", "material": "FERROUS_ORE", "amount": 3},
+                    "max_fills": 1,
+                },
+            )
+        if energy >= prices["ore_buy_energy"] + 8:
+            return _proposal(
+                "TRADE",
+                target_id=stall_id,
+                arguments={
+                    "phase": "stock",
+                    "stall_id": stall_id,
+                    "asset": {"kind": "RESOURCE", "resource": "energy", "amount": prices["ore_buy_energy"]},
+                },
+            )
 
     return None
 

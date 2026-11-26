@@ -243,6 +243,61 @@ class Rfc0141FleetAndShopTests(unittest.TestCase):
             self.assertEqual(verdict["verdict"], "ROLLED_BACK")
             self.assertIn("unequipped_broken_tool_turns=12", verdict["reason"])
 
+    def test_codex_fixes_stock_once_then_list_and_repair_permission_and_turnlog(self):
+        # 1. Quartermaster stocks energy once, then immediately lists BUY_ORDER instead of draining reserve
+        canon_shop = {
+            "location": {"room_id": "room.civic-exchange", "entities": [{"entity_id": "entity.stall-1", "infra_type": "barter_stall", "condition": 95}]},
+            "resources": {"energy": 20, "compute": 10},
+            "inventory": [],
+            "shop_listings": [],
+        }
+        step1 = plan_quartermaster_shop(canon_shop, {"shop_margin_bias": 0}, recent_actions=[])
+        args1 = step1.arguments if hasattr(step1, "arguments") else step1["arguments"]
+        self.assertEqual(args1["phase"], "stock")
+
+        # After stocking 6 energy, quartermaster has 14 energy; next turn MUST list BUY_ORDER, not stock again
+        canon_shop["resources"]["energy"] = 14
+        step2 = plan_quartermaster_shop(
+            canon_shop,
+            {"shop_margin_bias": 0},
+            recent_actions=[{"action": "TRADE", "target": "entity.stall-1", "phase": "stock"}],
+        )
+        args2 = step2.arguments if hasattr(step2, "arguments") else step2["arguments"]
+        self.assertEqual(args2["phase"], "list")
+        self.assertEqual(args2["listing_kind"], "BUY_ORDER")
+
+        # 2. Non-custodian role with worn item at workshop must NOT propose policy-denied REPAIR
+        canon_worn = {
+            "location": {"room_id": "room.ws", "entities": [{"entity_id": "entity.ws-1", "infra_type": "workshop", "condition": 90}]},
+            "resources": {"energy": 20, "compute": 10},
+            "equipment": {"TOOL_SLOT": {"item_id": "item.cutter.1"}},
+            "inventory": [{"item_id": "item.cutter.1", "archetype": "plasma_cutter", "equip_slot": "TOOL_SLOT", "equipped_slot": "TOOL_SLOT", "condition": 15, "max_condition": 100}],
+        }
+        self.assertIsNone(plan_equipment_step("quartermaster", canon_worn, {"tool_repair_floor": 25}))
+        cust_prop = plan_equipment_step("custodian", canon_worn, {"tool_repair_floor": 25})
+        self.assertEqual(cust_prop.action if hasattr(cust_prop, "action") else cust_prop["action"], "REPAIR")
+
+    @unittest.skipUnless(_HAS_CLIENT, "needs noema-client")
+    def test_adapter_decide_records_unequipped_broken_tools_in_turn_log(self):
+        from noema_orin.orin_adapter import OrinAdapter
+
+        ad = OrinAdapter(base_url="http://localhost:11434", model="test", brief="test")
+        ad.allowed = frozenset(role_for("custodian")["allow"])
+        ad.verbs = set(role_for("custodian")["verbs"])
+        ad.health.role = "Rivet-custodian"
+        ctx = {
+            "canonical": {
+                "sequence": 42,
+                "location": {"room_id": "room.hub", "name": "Hub", "exits": [], "entities": []},
+                "resources": {"energy": 10, "attention": 8, "compute": 10, "storage": 16},
+                "inventory": [{"item_id": "item.broken.1", "archetype": "arc_welder", "condition": 0}],
+                "affordances": [{"action": "WAIT", "verb": "WAIT", "available": True}],
+            }
+        }
+        ad.decide(ctx)
+        self.assertEqual(len(ad.turn_log), 1)
+        self.assertEqual(ad.turn_log[0]["unequipped_broken_tools"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
