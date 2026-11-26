@@ -216,3 +216,7 @@ observations arrive without the founder's org in `organizations`, so `home_org` 
 lapsed. `shared/home_org` now pins org.reach-compact.34df3bb5, and the planner trusts the pin over the observation. The
 metrics digest alerts when an agent's last >=10 logged turns all show energy 0 (Noema#907). The Quartermaster cannot relieve
 stuck agents: engine SHARE co-owns a structure, it does not move materials, and TRADE stays denied to role agents.
+
+## D-067: planner-only verbs are hidden from the scripted fallback too (2026-11-26)
+
+After D-066, m01's fallback still sent MESSAGE to reach-maint3, tester and Cantor-Speaker each turn, because `_role_fallback` ignored the model's hidden set. `_hidden_verbs()` is now shared, so the fallback never picks SUPPLY, the founder's MESSAGE, or a speaker's ORG_OFFICE_ACT. Incident cleanup: model retires were not landing, so 22 duplicate vacant Notice offices were retired by a one-off operator script (21 + 1 probe). Home org is back to 4 offices, all occupied.

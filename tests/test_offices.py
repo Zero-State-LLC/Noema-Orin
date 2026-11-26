@@ -470,3 +470,22 @@ class RouteVerbTests(unittest.TestCase):
         c = {"location": {"room_id": "room.a", "exits": [{"to_room_id": "room.b", "direction": "east"},
                                                           {"to_room_id": "room.c", "direction": "west"}]}}
         self.assertEqual(route(c, m, _route_verbs({"REPAIR", "CONSTRUCT"}), explorer=False), "east")
+
+
+class FallbackHiddenTests(unittest.TestCase):
+    """D-067: the founder's fallback messaged maint and tester; planner-only verbs are hidden from it too."""
+
+    def test_founder_fallback_skips_message(self):
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        spec = role_for("founder")
+        a.verbs, a.recent, a.default_args, a.memory = set(spec["verbs"]), [], {}, None
+
+        class F:
+            def decide(self, context):
+                return "fallback-wait"
+
+        a.fallback = F()
+        opts = [{"action": "MESSAGE", "target_id": "player.reach-maint3", "raw": {}}]
+        self.assertEqual(a._role_fallback({}, opts), "fallback-wait")
