@@ -60,3 +60,9 @@
 - Watch (next 24h): SHOUT/BOARD/CONTRACT_POST/COMMEMORATE are model-choosable, not planner-gated. If any agent repeats one more than about 5 times per session, gate it like D-059 (one per fact).
 - Watch: RSI autonomous rollback writes `quarantine.jsonl`; `metrics.py` raises `rsi_rollback` alerts.
 - Due ~2026-11-27 00:00Z: `fleet.sh 200 --save` custodian-energy re-measure. RECHARGE may change the answer.
+
+## 2026-11-26 12:30Z
+- 20-min watch after #130: 0 SHOUT/BOARD/CONTRACT_POST/COMMEMORATE/ATTEST/GOVERNANCE across all 6 agents, so no spam. No quarantine.jsonl and no rsi_rollback alert yet.
+- D-070 (#132) deployed to m04: supersede churn (15/30 turns, 103 canned relay-7 revisions) is now one per subject. Verified: 2 supersedes on 2 distinct subjects (relay-7, scar-conduit).
+- m05 is mostly fallback MOVE (16/29) and m03 is mostly idle. Look at these next if the 24h numbers stay flat.
+- Due ~2026-11-27 00:00Z: `fleet.sh 200 --save` custodian-energy re-measure.
