@@ -38,3 +38,7 @@
 - Specs#467 merged, then engine Noema#957 deployed as Worker b7ca6c7c (pin #958 merged), then Orin #117 (D-061) and #118 (D-062) live.
 - Live: m02 sees "Build a generator for Reach Compact" with the vault at 36. The build hasn't happened yet: the generator costs the holder 8 energy and m02 runs at energy 1 to 3. With an empty hold WAIT rests only to 2, and cargo fuel gives +2 per cargo. This is the same energy ceiling as S19.
 - Check after 24h with `fleet.sh 200`, together with the custodian. If no treasury build has happened, the S19 fallback (cargo fuel +3) or a lower holder fuel share is the user's call.
+
+## 2026-11-26 00:22Z
+- D-066 incident closed: 22 duplicate Notice offices retired by operator script; home org = 4 offices, all occupied. D-067 (#124) deployed: fallback no longer picks planner-only verbs.
+- Next: watch m01 for zero creates; m02 first treasury build; 24h re-measure with `fleet.sh 200 --save` (custodian energy decision, fallback cargo fuel +3).
