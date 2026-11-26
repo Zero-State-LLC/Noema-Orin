@@ -530,3 +530,22 @@ class SupersedeOnceTests(unittest.TestCase):
         menu.append({"action": "WAIT", "raw": {}, "i": 5})
         self.assertEqual([o["action"] for o in _one_record_per_subject(menu, set())], ["RECONSTRUCT_SUPERSEDE", "WAIT"])
         self.assertEqual([o["action"] for o in _one_record_per_subject(menu, {"revised:entity.relay-7"})], ["WAIT"])
+
+
+class FallbackAllowlistTests(unittest.TestCase):
+    """D-071: the generic fallback cannot pick verbs outside the role's allow list."""
+
+    def test_speaker_never_leaves_org(self):
+        from noema_client.types import ActionProposal
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        spec = role_for("speaker")
+        a.verbs, a.allowed, a.recent, a.default_args, a.memory = set(spec["verbs"]), frozenset(spec["allow"]), [], {}, None
+
+        class F:
+            def decide(self, context):
+                return ActionProposal(action="ORG_MEMBER_REMOVE", target_id="org.x")
+
+        a.fallback = F()
+        self.assertEqual(a._role_fallback({}, []).action, "WAIT")
