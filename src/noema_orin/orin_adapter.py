@@ -187,9 +187,7 @@ class OrinAdapter:
         # D-051: SUPPLY is planner-only (need-gated, D-048). The model spent 20/30 turns supplying blind.
         # S11: the founder's MESSAGE is planner-only too (one welcome per non-cohort Player).
         # D-059: notices are planner-only (posted when a new fact exists).
-        verbs = getattr(self, "verbs", ())
-        hidden = ({"SUPPLY"} | ({"MESSAGE"} if "ORG_CREATE" in verbs else set())
-                  | ({"ORG_OFFICE_ACT"} if "MESSAGE" in verbs and "ORG_CREATE" not in verbs else set()))
+        hidden = self._hidden_verbs()
         options = [{**o, "i": i} for i, o in enumerate(o for o in options if o["action"] not in hidden)]
         if not options:
             return None
@@ -229,9 +227,17 @@ class OrinAdapter:
         goal = self.world_map.least_recent(sorted(r for r in exits if r)) if self.world_map is not None else None
         return ActionProposal(action="MOVE", target_id=exits.get(goal) or sorted(exits.values())[0])
 
+    def _hidden_verbs(self) -> set[str]:
+        """Planner-only verbs: neither the model nor the fallback may pick them (D-051, S11, D-059, D-067)."""
+        verbs = getattr(self, "verbs", ())
+        return ({"SUPPLY"} | ({"MESSAGE"} if "ORG_CREATE" in verbs else set())
+                | ({"ORG_OFFICE_ACT"} if "MESSAGE" in verbs and "ORG_CREATE" not in verbs else set()))
+
     def _role_fallback(self, context, options):
         """Scripted choice that still honours the role: unique verbs first, then MOVE, then anything allowed."""
         tried = {(r["action"], r.get("target")) for r in self.recent[-3:]}
+        hidden = self._hidden_verbs()
+        options = [o for o in options if o["action"] not in hidden]
         from .planner import SHARED
 
         for tier in (lambda o: o["action"] not in SHARED, lambda o: o["action"] == "MOVE", lambda o: True):
