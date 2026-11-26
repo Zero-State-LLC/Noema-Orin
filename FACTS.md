@@ -14,3 +14,4 @@ Project facts that were learned the hard way. Read before deploying.
 - Orin venv is `~/noema-players/.venv` (dot-venv). Deploy: rsync to `orin:noema-orin-src/`, `~/noema-players/.venv/bin/pip install --no-deps --force-reinstall .`, then `deploy/rolling-restart.sh --apply`. Restart only some units with `UNITS="noema-player@m03 ..."`. Never `pkill -f rolling-restart` over ssh: the pattern matches the ssh command itself and kills it.
 - `rolling-restart.sh` UNITS takes full unit names: `UNITS=noema-player@m01`, not `UNITS=m01` (fails "m01.service not found").
 - Office cleanup that the model won't land: `client.act(ActionProposal(action="ORG_OFFICE_RETIRE", ...))` with org_id/office_id args works; `run_macro("office retire ...")` does not. Retry on STALE_HEAD.
+- Orin venv runs noema-client 0.2.0 (from noema-client main, PR #54), required by Noema-Orin #136+. Rollback copy: `~/backups/noema_client-0.1.25*` on Orin. Test venv with 0.2.0: `~/venv-020`.
