@@ -232,3 +232,7 @@ fleet.sh 100: m06 (surveyor) had 0/100 role actions, and in 385 turns 257 were i
 ## D-070: one RECONSTRUCT_SUPERSEDE per subject (2026-11-26)
 
 After #130, m04 (archivist) spent half of each session on RECONSTRUCT_SUPERSEDE: 15 of 30 turns, plus BUDGET_EXCEEDED and STALE_HEAD rejections. The engine offered 103 revisions, all of relay-7 and all with the canned claim "Revised from accessible evidence.", so nothing new was added. Like D-055, `_one_record_per_subject` now offers one supersede per subject, and a done revision is remembered as `revised:<subject>` (kind `published`). Follow-up if needed: allow a re-revision when new evidence appears.
+
+## D-071: the generic fallback is held to the role allow list (2026-11-26)
+
+m05 (speaker) fell back to ORG_MEMBER_REMOVE (4 times, once POLICY_DENIED) and ORG_OFFICE_VACATE on its own Notice office (2 times). Both are off-role and destructive. FirstValidAffordanceAdapter reads raw affordances and ignores `allowed`. `_role_fallback` now turns any verb outside `allowed` into WAIT, alongside D-068's hidden-verb check.

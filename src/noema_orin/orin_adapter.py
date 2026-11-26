@@ -275,7 +275,11 @@ class OrinAdapter:
                     if prop is not None:
                         return prop
         last = self.fallback.decide(context)
-        if getattr(last, "action", None) in hidden:
+        act = getattr(last, "action", None)
+        allowed = getattr(self, "allowed", None)
+        # D-071: the generic adapter ignores the role; m05 (speaker) fell back to ORG_MEMBER_REMOVE (leave the
+        # Compact) and ORG_OFFICE_VACATE (quit its Notice office). Off-role verbs become WAIT too.
+        if act in hidden or (allowed and act not in allowed):
             # D-068: the generic adapter reads raw affordances, so it re-offered the founder's MESSAGE (183 sends).
             from noema_client.types import ActionProposal
 
