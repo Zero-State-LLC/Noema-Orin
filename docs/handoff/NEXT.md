@@ -71,3 +71,9 @@
 - D-071 (#134) rolled to all 6: the generic fallback is held to the role allow list. m05 had fallen back to ORG_MEMBER_REMOVE x4 and ORG_OFFICE_VACATE x2 on its own Notice office. Checked: still a member, and all 4 offices are OCCUPIED.
 - m05's remaining weakness: 209/400 turns are fallback MOVE because notices are planner-gated (one per fact). That is expected, but the speaker wanders. Option: have it idle (WAIT) at civic-exchange instead. Low priority.
 - Due ~2026-11-27 00:00Z: `fleet.sh 200 --save` custodian-energy re-measure.
+
+## 2026-11-26 14:25Z: Wave 4 (#136, #137) rolled
+- Orin noema-client upgraded 0.1.25 -> 0.2.0 (#136 needs ClientPolicy; 1 test failed on 0.1.25). 211 tests OK on 0.2.0, and live observe works.
+- Canary m02+m06 ran 8 min with no tracebacks (m02 did a treasury CONSTRUCT), then rolled m01/m03/m04/m05.
+- Watch: shop_planner (stall stocking/listing, equipment upkeep) and the RSI `unequipped_broken_tool_turns >= 12` rollback.
+- Due ~2026-11-27 00:00Z: `fleet.sh 200 --save` custodian-energy re-measure.
