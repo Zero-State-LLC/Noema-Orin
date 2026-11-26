@@ -329,8 +329,21 @@ class OrinAdapter:
             self.memories = self.memory.recall(" ".join([str(loc.get("name") or "")] + sorted(self.verbs)))
             self.stats_mem += len(self.memories)
         if _depleted(canonical):
+            # RFC-0136: if an active generator offers RECHARGE here, prefer +4 energy over WAIT +2.
+            rech = next((o for o in options if o["action"] == "RECHARGE"), None)
+            if rech is not None:
+                self.dwell = 0
+                return _proposal(rech, self.default_args, self.memory)
             self.dwell = 0
             return ActionProposal(action="WAIT")  # engine #907/#910: WAIT at energy 0 rests +2 energy
+        # RFC-0136: when below energy reserve floor and an active generator offers RECHARGE, top up (+4, 0 cargo burned).
+        energy_now = (canonical.get("resources") or {}).get("energy")
+        energy_floor = int((getattr(self, "policy_knobs", None) or {}).get("energy_reserve_floor", 3))
+        if isinstance(energy_now, (int, float)) and energy_now <= energy_floor:
+            rech = next((o for o in options if o["action"] == "RECHARGE"), None)
+            if rech is not None:
+                self.dwell = 0
+                return _proposal(rech, self.default_args, self.memory)
         welcome = self._welcome(canonical, options) if "ORG_CREATE" in self.verbs else None
         if welcome is not None:
             return welcome
