@@ -554,3 +554,16 @@ class FallbackAllowlistTests(unittest.TestCase):
 
         a.fallback = F()
         self.assertEqual(a._role_fallback({}, []).action, "WAIT")
+
+
+class AgreementOnceTests(unittest.TestCase):
+    """D-072: one AGREEMENT_FORM per party, none once offered."""
+
+    def test_one_per_party(self):
+        from noema_orin.orin_adapter import _one_record_per_subject
+
+        menu = [{"action": "AGREEMENT_FORM", "target_id": "player.Cantor-Speaker",
+                 "raw": {"player_id": "player.Cantor-Speaker", "agreement_type": t}, "i": i}
+                for i, t in enumerate(("TRADE", "ACCESS", "TRADE"))]
+        self.assertEqual(len(_one_record_per_subject(menu, set())), 1)
+        self.assertEqual(_one_record_per_subject(menu, {"agreement:player.Cantor-Speaker"}), [])

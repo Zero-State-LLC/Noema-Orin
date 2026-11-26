@@ -236,3 +236,7 @@ After #130, m04 (archivist) spent half of each session on RECONSTRUCT_SUPERSEDE:
 ## D-071: the generic fallback is held to the role allow list (2026-11-26)
 
 m05 (speaker) fell back to ORG_MEMBER_REMOVE (4 times, once POLICY_DENIED) and ORG_OFFICE_VACATE on its own Notice office (2 times). Both are off-role and destructive. FirstValidAffordanceAdapter reads raw affordances and ignores `allowed`. `_role_fallback` now turns any verb outside `allowed` into WAIT, alongside D-068's hidden-verb check.
+
+## D-072: one AGREEMENT_FORM per party (2026-11-26)
+
+24h `fleet.sh 200`: m01 (founder) tried AGREEMENT_FORM 46 times (25 at Cantor-Speaker, 9 at Rivet, 8 at Vellum), and most failed NOT_COLOCATED. `_one_record_per_subject` now offers one agreement per party, and an attempt is remembered as `agreement:<party>` (kind `published`), so m01 does not retry it every turn.

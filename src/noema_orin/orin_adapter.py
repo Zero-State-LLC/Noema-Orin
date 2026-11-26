@@ -699,6 +699,11 @@ class OrinAdapter:
         if (str(getattr(proposal, "action", "") or "").upper() == "RECONSTRUCT_SUPERSEDE" and subject
                 and self.memory is not None):
             self.memory.remember("revised:" + str(subject), kind="published", room=None, sequence=None)
+        if str(getattr(proposal, "action", "") or "").upper() == "AGREEMENT_FORM" and self.memory is not None:
+            args = getattr(proposal, "arguments", None) or {}
+            party = args.get("player_id") or getattr(proposal, "target_id", None)
+            if party:
+                self.memory.remember(f"agreement:{party}", kind="published", room=None, sequence=None)
         if str(getattr(proposal, "action", "") or "").upper() == "FOCUS" and track:
             self.held_track = str(track)  # D-049: don't re-offer the same track
         canonical = (context.get("canonical") or {})
@@ -778,6 +783,13 @@ def _one_record_per_subject(menu: list[dict], published: set[str]) -> list[dict]
         elif o["action"] == "RECONSTRUCT_SUPERSEDE" and subject:
             # D-070: 103 revise offers, all relay-7, same canned claim; m04 superseded ~15x/session. One per subject.
             key = "revised:" + str(subject)
+            if key in seen:
+                continue
+            seen.add(key)
+        elif o["action"] == "AGREEMENT_FORM":
+            # D-072: m01 tried 46 agreements in 200 turns (25 at Cantor), mostly NOT_COLOCATED. One offer per party.
+            party = raw.get("player_id") or o.get("target_id")
+            key = f"agreement:{party}"
             if key in seen:
                 continue
             seen.add(key)
