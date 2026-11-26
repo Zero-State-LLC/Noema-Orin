@@ -31,9 +31,9 @@ def opt(action, target, label=None, **raw):
 class CatalogTests(unittest.TestCase):
     def test_catalog_never_grants_denied_authority(self):
         profiles = {p for _n, p in CATALOG.values()}
-        self.assertIn("OPERATE_RESOURCE_ACCOUNT", profiles)  # D-047: seated; TRADE stays client-denied
+        self.assertIn("OPERATE_RESOURCE_ACCOUNT", profiles)  # D-047 / RFC-0141: seated; P2P trade stays client-denied
         self.assertNotIn("GRANT_ACCESS", profiles)
-        self.assertIn("TRADE", DENY_ALWAYS)
+        self.assertIn("TRADE_PROPOSE", DENY_ALWAYS)
         self.assertIn("ORG_OFFICE_RETIRE", role_for("founder")["allow"])
 
     def test_missing_offices_in_catalog_order(self):
@@ -197,7 +197,9 @@ class QuartermasterAndIdleTests(unittest.TestCase):
         self.assertEqual((p.action, p.arguments.get("class")), ("CONSTRUCT", "storage_bay"))
 
     def test_quartermaster_never_offered_trade(self):
-        self.assertNotIn("TRADE", role_for("quartermaster")["allow"])
+        # RFC-0141 §2: P2P TRADE_PROPOSE stays denied; storefront TRADE is strictly planner-only (_hidden_verbs).
+        self.assertNotIn("TRADE_PROPOSE", role_for("quartermaster")["allow"])
+        self.assertIn("TRADE", self._qm()._hidden_verbs())
 
     def _seated(self, storage=10, custodian_here=True):
         a = self._qm()
@@ -536,6 +538,9 @@ class FallbackAllowlistTests(unittest.TestCase):
     """D-071: the generic fallback cannot pick verbs outside the role's allow list."""
 
     def test_speaker_never_leaves_org(self):
+        from importlib.util import find_spec
+        if not find_spec("noema_client"):
+            self.skipTest("needs noema-client")
         from noema_client.types import ActionProposal
         from noema_orin.orin_adapter import OrinAdapter
 

@@ -20,9 +20,37 @@ def build_policy(role: str):
     from noema_client.policy import ClientPolicy
 
     spec = role_for(role)
-    return ClientPolicy(allow_trade=False, allow_access=False, allow_contest=False,
-                        allowed_actions=list(spec["allow"]), denied_actions=list(DENY_ALWAYS),
-                        max_consecutive_failures=3)
+    if spec.get("operator"):
+        return ClientPolicy(
+            allow_trade=False,
+            allow_trade_p2p=False,
+            allow_shop_fulfill=False,
+            allow_shop_manage=False,
+            allow_agreement=False,
+            allow_access=False,
+            allow_contest=False,
+            allow_contest_declare=False,
+            allow_contest_defend=False,
+            allow_items=False,
+            allowed_actions=list(spec["allow"]),
+            denied_actions=list(DENY_ALWAYS) + ["TRADE", "CONTEST_DEFEND"],
+            max_consecutive_failures=3,
+        )
+    return ClientPolicy(
+        allow_trade=False,
+        allow_trade_p2p=False,
+        allow_shop_fulfill=True,
+        allow_shop_manage=(role == "quartermaster"),
+        allow_agreement=True,
+        allow_access=False,
+        allow_contest=False,
+        allow_contest_declare=False,
+        allow_contest_defend=(role in ("surveyor", "archivist", "founder", "custodian")),
+        allow_items=True,
+        allowed_actions=list(spec["allow"]),
+        denied_actions=list(DENY_ALWAYS),
+        max_consecutive_failures=3,
+    )
 
 
 def stagger(members: list[str], member: str, cooldown: float, turn_gap: float) -> tuple[float, float]:

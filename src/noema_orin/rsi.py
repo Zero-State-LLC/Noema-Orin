@@ -23,6 +23,7 @@ CANARY_WINDOW_SESSIONS = 3
 REGRESSION_TOLERANCE = 0.08
 MAX_REJECTION_RATE = 0.15
 MAX_ZERO_ENERGY_STREAK = 10
+MAX_UNEQUIPPED_BROKEN_TOOL_TURNS = 12
 
 # Strictly bounded tactical knobs per role: (default, min, max, is_int).
 KNOB_SPECS: dict[str, tuple[float, float, float, bool]] = {
@@ -32,6 +33,10 @@ KNOB_SPECS: dict[str, tuple[float, float, float, bool]] = {
     "scar_avoidance_weight": (0.7, 0.0, 1.0, False),
     "social_outreach_cooldown": (12, 6, 30, True),
     "inspect_novelty_weight": (0.6, 0.0, 1.0, False),
+    # RFC-0141 §3: equipment, battery, and storefront margin tactical knobs.
+    "tool_repair_floor": (25, 10, 50, True),
+    "battery_reserve_target": (1, 0, 3, True),
+    "shop_margin_bias": (0, -1, 2, True),
 }
 
 
@@ -169,6 +174,11 @@ def build_session_dossier(
             zero_streak += 1
         else:
             break
+    broken_tool_turns = sum(
+        1
+        for t in turn_log
+        if int(t.get("unequipped_broken_tools") or 0) > 0 or bool(t.get("unequipped_broken_tool"))
+    )
     social_count = sum(
         1 for t in turn_log if str(t.get("action") or "").upper() in {"MESSAGE", "SHOUT", "BOARD", "ORG_OFFICE_ACT", "ATTEST"}
     )
@@ -201,6 +211,7 @@ def build_session_dossier(
         "rejections_by_code": dict(rej_map or {}),
         "loop_break_rate": round(min(1.0, loop_breaks / total), 4) if total else 0.0,
         "zero_energy_streak": zero_streak,
+        "unequipped_broken_tool_turns": broken_tool_turns,
         "unique_rooms": len(rooms),
         "social_events": social_count,
         "impact_rate": round(min(1.0, (impact_events + len(rooms) * 0.25) / max(1, total)), 4) if total else 0.0,
@@ -290,6 +301,7 @@ class RsiRatchet:
         """
         fitness = compute_fitness(dossier)
         zero_streak = int(dossier.get("zero_energy_streak") or 0)
+        broken_tool_turns = int(dossier.get("unequipped_broken_tool_turns") or 0)
         rej_rate = float(dossier.get("rejection_rate") or 0.0)
         cand = self.state.get("candidate")
 
@@ -305,13 +317,19 @@ class RsiRatchet:
         cand_scores = list(cand.get("scores") or []) + [fitness]
         cand["scores"] = cand_scores
         baseline = float(self.state.get("baseline_fitness") or 0.0)
-        hard_fail = zero_streak >= MAX_ZERO_ENERGY_STREAK or rej_rate > MAX_REJECTION_RATE
+        hard_fail = (
+            zero_streak >= MAX_ZERO_ENERGY_STREAK
+            or broken_tool_turns >= MAX_UNEQUIPPED_BROKEN_TOOL_TURNS
+            or rej_rate > MAX_REJECTION_RATE
+        )
         mean_cand = round(sum(cand_scores) / len(cand_scores), 4)
 
         if hard_fail or (len(cand_scores) >= CANARY_WINDOW_SESSIONS and mean_cand < baseline - REGRESSION_TOLERANCE):
             reason = (
                 f"zero_energy_streak={zero_streak}"
                 if zero_streak >= MAX_ZERO_ENERGY_STREAK
+                else f"unequipped_broken_tool_turns={broken_tool_turns}"
+                if broken_tool_turns >= MAX_UNEQUIPPED_BROKEN_TOOL_TURNS
                 else f"rejection_rate={rej_rate}"
                 if rej_rate > MAX_REJECTION_RATE
                 else f"fitness_regression({mean_cand}<{round(baseline - REGRESSION_TOLERANCE, 4)})"
