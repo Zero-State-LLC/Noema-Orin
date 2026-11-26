@@ -224,3 +224,7 @@ After D-066, m01's fallback still sent MESSAGE to reach-maint3, tester and Canto
 ## D-068: the generic fallback can't leak planner-only verbs (2026-11-26)
 
 D-067 filtered the role options, but when none remained `_role_fallback` handed off to FirstValidAffordanceAdapter, which reads raw affordances. m01 sent 183 MESSAGEs that way in 3.5h. A hidden verb from the generic adapter now becomes WAIT. No office creates since the D-066/067 deploy (0 in 250 turns), and the home org still has 4 offices.
+
+## D-069: FOCUS no longer pins the surveyor in place (2026-11-26)
+
+fleet.sh 100: m06 (surveyor) had 0/100 role actions, and in 385 turns 257 were idle_skip WAITs at energy 75-80. Every room offers `focus <track>`, so `_offered_here` was always true and idle_skip WAITed "beside role work" it already holds. FOCUS is now exempt from that stay check (STAY_EXEMPT), so the explorer walks least-recent exits, charting the Reach as its mission says.

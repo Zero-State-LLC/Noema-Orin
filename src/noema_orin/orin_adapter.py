@@ -447,7 +447,7 @@ class OrinAdapter:
             canonical = context.get("canonical") or {}
             goal = self.supply if (self.supply and _hold_empty(canonical)) else self.verbs
             direction = None
-            if _offered_here(canonical, set(goal)):
+            if _offered_here(canonical, set(goal) - STAY_EXEMPT):
                 # S4: the role verb is here, only unaffordable now (filtered from options). WAIT refuels in place;
                 # m03 walked away from relay-quarter REPAIR at energy 3 every time it arrived.
                 pass
@@ -588,6 +588,8 @@ HARVEST_MAX = 8  # D-032: leaves hold room; cargo MOVE costs +1 regardless of am
 SPEND_READY = 5  # D-050: cargo MOVE 2 + REPAIR 3 (engine COSTS)
 # D-052: CONSTRUCT is offered in every room, so routing on it walks to whichever room was seen last.
 UBIQUITOUS = frozenset({"CONSTRUCT", "BUILD"})
+# D-069: FOCUS is offered in every room; holding it already, m06 WAITed in place 257/385 turns at energy 80.
+STAY_EXEMPT = frozenset({"FOCUS", "COMMIT.FOCUS"})
 
 
 def _route_verbs(verbs) -> set[str]:
