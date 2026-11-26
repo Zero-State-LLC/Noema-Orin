@@ -503,3 +503,16 @@ class FallbackHiddenTests(unittest.TestCase):
 
         a.fallback = F()
         self.assertEqual(a._role_fallback({}, []).action, "WAIT")
+
+
+class SurveyorWalksTests(unittest.TestCase):
+    """D-069: FOCUS offered everywhere must not pin the surveyor in place."""
+
+    def test_focus_offer_does_not_hold(self):
+        from noema_orin.orin_adapter import STAY_EXEMPT, _offered_here
+
+        c = {"affordances": [{"action": "FOCUS", "operation": "FOCUS", "available": True}]}
+        spec = role_for("surveyor")
+        self.assertFalse(_offered_here(c, set(spec["verbs"]) - STAY_EXEMPT))
+        c["affordances"].append({"action": "CONNECT", "operation": "CONNECT", "available": True})
+        self.assertTrue(_offered_here(c, set(spec["verbs"]) - STAY_EXEMPT))
