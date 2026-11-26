@@ -42,3 +42,8 @@
 ## 2026-11-26 00:22Z
 - D-066 incident closed: 22 duplicate Notice offices retired by operator script; home org = 4 offices, all occupied. D-067 (#124) deployed: fallback no longer picks planner-only verbs.
 - Next: watch m01 for zero creates; m02 first treasury build; 24h re-measure with `fleet.sh 200 --save` (custodian energy decision, fallback cargo fuel +3).
+
+## 2026-11-26 04:05Z
+- D-068 (#126) deployed to m01: the generic fallback's MESSAGE (183 sends since D-067) now becomes WAIT. Zero office creates since the 00:22Z deploy; home org still has 4 offices.
+- m02: 2 treasury CONSTRUCTs landed (energy 9->1, `built` facts include generator and storage_bay). Vault is 29.
+- Due ~2026-11-27 00:00Z: `fleet.sh 200 --save` custodian-energy re-measure. Fallback plan: cargo fuel +3.
