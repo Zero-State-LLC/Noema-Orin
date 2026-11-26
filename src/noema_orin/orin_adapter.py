@@ -646,6 +646,9 @@ class OrinAdapter:
                 and self.memory is not None):
             # S12: one public record per subject; the other private drafts of it stay private.
             self.memory.remember(str(subject), kind="published", room=None, sequence=None)
+        if (str(getattr(proposal, "action", "") or "").upper() == "RECONSTRUCT_SUPERSEDE" and subject
+                and self.memory is not None):
+            self.memory.remember("revised:" + str(subject), kind="published", room=None, sequence=None)
         if str(getattr(proposal, "action", "") or "").upper() == "FOCUS" and track:
             self.held_track = str(track)  # D-049: don't re-offer the same track
         canonical = (context.get("canonical") or {})
@@ -719,6 +722,12 @@ def _one_record_per_subject(menu: list[dict], published: set[str]) -> list[dict]
             seen.add(subject)
         elif o["action"] == "RECONSTRUCT" and subject and subject in published:
             continue
+        elif o["action"] == "RECONSTRUCT_SUPERSEDE" and subject:
+            # D-070: 103 revise offers, all relay-7, same canned claim; m04 superseded ~15x/session. One per subject.
+            key = "revised:" + str(subject)
+            if key in seen:
+                continue
+            seen.add(key)
         kept.append(o)
     return kept if len(kept) == len(menu) else [{**o, "i": i} for i, o in enumerate(kept)]
 

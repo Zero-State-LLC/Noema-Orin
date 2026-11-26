@@ -518,3 +518,15 @@ class SurveyorWalksTests(unittest.TestCase):
         self.assertFalse(_offered_here(c, set(spec["verbs"]) - STAY_EXEMPT))
         c["affordances"].append({"action": "CONNECT", "operation": "CONNECT", "available": True})
         self.assertTrue(_offered_here(c, set(spec["verbs"]) - STAY_EXEMPT))
+
+
+class SupersedeOnceTests(unittest.TestCase):
+    """D-070: one RECONSTRUCT_SUPERSEDE per subject, none once revised."""
+
+    def test_one_per_subject(self):
+        from noema_orin.orin_adapter import _one_record_per_subject
+
+        menu = [{"action": "RECONSTRUCT_SUPERSEDE", "raw": {"subject_ref": "entity.relay-7"}, "i": i} for i in range(5)]
+        menu.append({"action": "WAIT", "raw": {}, "i": 5})
+        self.assertEqual([o["action"] for o in _one_record_per_subject(menu, set())], ["RECONSTRUCT_SUPERSEDE", "WAIT"])
+        self.assertEqual([o["action"] for o in _one_record_per_subject(menu, {"revised:entity.relay-7"})], ["WAIT"])
