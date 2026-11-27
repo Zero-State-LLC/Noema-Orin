@@ -1,0 +1,40 @@
+{
+  "format": "noema-lifecycles/1",
+  "_note": "Gates are headed entries in DECISIONS.md; their status is the text after the last comma of the heading. The order below is read from the existing gates; CI checks states only, not moves.",
+  "kinds": {
+    "gate": {
+      "title": "Gate",
+      "entries": {
+        "file": "DECISIONS.md",
+        "heading": "^## (?P<id>G-\\d+): .*, (?P<status>[A-Z][A-Z_ ]+)$"
+      },
+      "declared": "BLOCKED / NOT_COMPUTABLE → APPROVED (status after the comma in each `## G-NNN` heading of DECISIONS.md)",
+      "states": [
+        "BLOCKED",
+        "NOT_COMPUTABLE",
+        "APPROVED"
+      ],
+      "aliases": {
+        "BLOCKED": [
+          "blocked"
+        ],
+        "NOT_COMPUTABLE": [
+          "not_computable"
+        ],
+        "APPROVED": [
+          "approved"
+        ]
+      },
+      "next": {
+        "BLOCKED": [
+          "APPROVED"
+        ],
+        "NOT_COMPUTABLE": [
+          "BLOCKED",
+          "APPROVED"
+        ],
+        "APPROVED": []
+      }
+    }
+  }
+}

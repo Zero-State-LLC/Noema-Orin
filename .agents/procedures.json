@@ -1,0 +1,69 @@
+{
+  "format": "noema-procedures/1",
+  "_note": "Source of truth for generated Markdown blocks. The Hermes skills under .hermes/skills are vendored from mattpocock/skills and pinned in skills-lock.json: they are listed here, never rendered or edited (`npx skills` owns them).",
+  "blocks": [
+    {
+      "file": "docs/agents/triage-labels.md",
+      "name": "triage",
+      "render": "triage"
+    }
+  ],
+  "triage": {
+    "states": {
+      "needs-triage": {
+        "role": "needs-triage",
+        "meaning": "Maintainer needs to evaluate this issue",
+        "next": [
+          {
+            "to": "needs-info",
+            "when": "the reporter must add information"
+          },
+          {
+            "to": "ready-for-agent",
+            "when": "it is fully specified for an AFK agent"
+          },
+          {
+            "to": "ready-for-human",
+            "when": "it needs human implementation"
+          },
+          {
+            "to": "wontfix",
+            "when": "it will not be actioned"
+          }
+        ]
+      },
+      "needs-info": {
+        "role": "needs-info",
+        "meaning": "Waiting on reporter for more information",
+        "next": [
+          {
+            "to": "needs-triage",
+            "when": "the reporter replies"
+          }
+        ]
+      },
+      "ready-for-agent": {
+        "role": "ready-for-agent",
+        "meaning": "Fully specified, ready for an AFK agent",
+        "terminal": "the issue closes when the work is done."
+      },
+      "ready-for-human": {
+        "role": "ready-for-human",
+        "meaning": "Requires human implementation",
+        "terminal": "the issue closes when the work is done."
+      },
+      "wontfix": {
+        "role": "wontfix",
+        "meaning": "Will not be actioned",
+        "terminal": "the issue closes."
+      }
+    }
+  },
+  "vendored": [
+    {
+      "lock": "skills-lock.json",
+      "dir": ".hermes/skills",
+      "source": "mattpocock/skills"
+    }
+  ]
+}

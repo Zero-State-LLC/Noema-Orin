@@ -35,6 +35,7 @@ Agent work is a state machine (`.agents/machine.json`): `python3 .agents/machine
 - **Any state → ESCALATED** when CI, tests or the request itself look wrong: Something looks wrong; report it instead of working around it. Then: back when reported; work can continue · ORIENT when task dropped.
 - **Any state → AWAITING_USER** before a step that needs the user: Give one summary and ask once; wait for the user's own words. Then: back when the user says no or redirects.
 - No standing grant in this repo (unlike Noema and Noema-Specs).
+- Triage labels and the G-NNN gates in DECISIONS.md are machines too: `python3 .agents/docs.py`. Vendored Hermes skills stay as pinned in `skills-lock.json`.
 
 <!-- agent-machine:end -->
 

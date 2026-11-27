@@ -311,7 +311,8 @@
       "python3 .agents/machine.py check"
     ],
     "notes": [
-      "No standing grant in this repo (unlike Noema and Noema-Specs)."
+      "No standing grant in this repo (unlike Noema and Noema-Specs).",
+      "Triage labels and the G-NNN gates in DECISIONS.md are machines too: `python3 .agents/docs.py`. Vendored Hermes skills stay as pinned in `skills-lock.json`."
     ],
     "states": {
       "ORIENT": {
