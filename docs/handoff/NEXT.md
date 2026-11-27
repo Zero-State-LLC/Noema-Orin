@@ -191,3 +191,8 @@
 - #4: blocked on a human device-code approval at noema.guru/connect for the isolated world attach (details on #4). The client is now 0.2.0, so re-pin `official_client.py` first.
 - #6: still blocked on a Noema-Specs canonical decision for spec 014 (G-001). Operator approval cannot substitute for that.
 - Ship command: always `sleep 20 && gh pr checks --watch --fail-fast` and merge only on rc=0.
+
+## 2026-11-27 15:17Z: all gated issues closed under operator approval
+- #4 closed by #210 (D-081): `official_isolated.OfficialIsolatedClient` wraps noema-client 0.2.0. A real isolated-world LOOK from the Orin was ok and settled in 272 ms, receipt `docs/evidence/t4-isolated-20261127T1512Z.json`. It used the Admin-minted tester token instead of a device code.
+- #6 closed by #211 (D-082) after Specs#479 (ADR-013) scoped spec 014 to a non-canonical `offline.spark.*` chamber. No Spark host is reachable, so there is no chamber run. The CLI `offline-spark` stays REFUSED until one exists.
+- Parent #7 closed. Next: C5 soak result (m06), then fleet-wide enablement.
