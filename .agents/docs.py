@@ -37,6 +37,7 @@ have been fixed (remove them). Standard library only; Python 3.10+.
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 import re
 import shlex
@@ -438,6 +439,14 @@ def entries(kind: dict[str, Any], text: str | None = None) -> dict[str, str]:
     return {m.group("id"): m.group("status").strip() for m in re.finditer(e["heading"], text, re.M)}
 
 
+_ITEM = re.compile(r"^\s*[-*] \[([ xX])\] (.+?)\s*$", re.M)
+
+
+def checklist_items(text: str) -> dict[str, bool]:
+    """Checklist item text -> done."""
+    return {m.group(2): m.group(1).lower() == "x" for m in _ITEM.finditer(text)}
+
+
 def documents(kind: dict[str, Any]) -> dict[str, Path]:
     files = sorted(ROOT.glob(kind["files"]))
     return {p.name: p for p in files if not any(fnmatch.fnmatch(str(p.relative_to(ROOT)), x) for x in kind.get("exclude", []))}
@@ -460,6 +469,9 @@ def lifecycle_violations(lc: dict[str, Any], since: str | None = None) -> list[d
     for kid, kind in lc.get("kinds", {}).items():
         if "entries" in kind:
             out += _entry_violations(kid, kind, since)
+            continue
+        if "checklist" in kind:
+            out += _checklist_violations(kid, kind, since)
             continue
         docs = documents(kind)
         index = index_rows(kind)
@@ -499,6 +511,24 @@ def lifecycle_violations(lc: dict[str, Any], since: str | None = None) -> list[d
     return out
 
 
+def _checklist_violations(kid: str, kind: dict[str, Any], since: str | None) -> list[dict[str, str]]:
+    """Items are open -> done. Only an exact-text item going from done back to open is a backward move."""
+    rel = kind["checklist"]
+    path = ROOT / rel
+    if not path.is_file():
+        return [{"key": f"{kid}:missing", "detail": f"{rel} missing"}]
+    if not since:
+        return []
+    prev = subprocess.run(["git", "show", f"{since}:{rel}"], cwd=ROOT, capture_output=True, text=True)
+    if prev.returncode != 0:
+        return []
+    before, now = checklist_items(prev.stdout), checklist_items(path.read_text(encoding="utf-8"))
+    return [
+        {"key": f"{kid}:unchecked:{hashlib.sha256(item.encode()).hexdigest()[:12]}", "detail": f"{rel}: done item reopened: {item[:90]!r}"}
+        for item, done in now.items() if not done and before.get(item) is True
+    ]
+
+
 def _entry_violations(kid: str, kind: dict[str, Any], since: str | None) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
     rel = kind["entries"]["file"]
@@ -524,6 +554,11 @@ def _entry_violations(kid: str, kind: dict[str, Any], since: str | None) -> list
 def report(lc: dict[str, Any]) -> str:
     lines = []
     for kid, kind in lc.get("kinds", {}).items():
+        if "checklist" in kind:
+            items = checklist_items((ROOT / kind["checklist"]).read_text(encoding="utf-8"))
+            done = sum(items.values())
+            lines.append(f"{kind['title']}: done {done}, open {len(items) - done}   [{kind['declared']}]")
+            continue
         if "entries" in kind:
             counts_e: dict[str, int] = {}
             for raw in entries(kind).values():
