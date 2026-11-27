@@ -160,6 +160,8 @@ def validate_procedures(procs: dict[str, Any]) -> list[str]:
             errs.append(f"{v['dir']}: {name} is in {v['lock']} but not installed")
         for name in sorted(dirs - set(lock)):
             errs.append(f"{v['dir']}: {name} is installed but not pinned in {v['lock']}")
+    for mirror in procs.get("mirrors", []):
+        errs += _mirror_errors(procs, mirror)
     t = procs.get("triage")
     if t:
         labels = set(t["states"])
@@ -178,6 +180,39 @@ def validate_procedures(procs: dict[str, Any]) -> list[str]:
             errs.append(f"{path.relative_to(ROOT)}: no agent-machine:{name} block")
         elif cur != block.strip("\n") + "\n":
             errs.append(f"{path.relative_to(ROOT)}: {name} block is out of date: run `python3 .agents/docs.py render --write`")
+    return errs
+
+
+def section(text: str, heading: str | None) -> str | None:
+    if heading is None:
+        return text
+    m = re.search(rf"^{re.escape(heading)}\s*$", text, re.M)
+    if not m:
+        return None
+    rest = text[m.end():]
+    nxt = re.search(r"^## ", rest, re.M)
+    return rest[: nxt.start()] if nxt else rest
+
+
+def _mirror_errors(procs: dict[str, Any], mirror: dict[str, Any]) -> list[str]:
+    """A hand-written doc (for example a skill shipped to players) must stay aligned with machine data."""
+    path = ROOT / mirror["file"]
+    where_ = f"{mirror['file']}{' ' + mirror['section'] if mirror.get('section') else ''}"
+    body = section(path.read_text(encoding="utf-8"), mirror.get("section")) if path.is_file() else None
+    if body is None:
+        return [f"{where_}: missing (mirror of .agents/procedures.json)"]
+    src = procs
+    for part in (mirror.get("steps") or mirror.get("mentions")).split("."):
+        src = src[part]
+    errs = []
+    if mirror.get("steps"):
+        got = [re.sub(r"^\d+\.\s+", "", ln).strip() for ln in body.splitlines() if re.match(r"^\d+\.\s", ln)]
+        if got != list(src):
+            errs.append(f"{where_}: numbered steps {got} != {mirror['steps']} {list(src)}")
+    else:
+        for token in src:
+            if token.lower() not in body.lower():
+                errs.append(f"{where_}: does not mention {token!r} ({mirror['mentions']})")
     return errs
 
 
@@ -332,6 +367,8 @@ def lifecycle_violations(lc: dict[str, Any], since: str | None = None) -> list[d
             ref = f"{kid}:{fname}"
             if raw is None and fname in index:  # the index alone may carry the status (e.g. RFC-0001)
                 raw = index[fname]
+            if raw is None and kind.get("default"):  # format says a bare record is in this state
+                raw = kind["default"]
             state = normalize(raw, kind)
             if raw is None:
                 out.append({"key": f"{ref}:no_status", "detail": "no status in the file or its index"})
@@ -396,7 +433,7 @@ def report(lc: dict[str, Any]) -> str:
         counts: dict[str, int] = {}
         index = index_rows(kind)
         for fname, path in documents(kind).items():
-            raw = status_text(path.read_text(encoding="utf-8"), kind["status"]) or index.get(fname)
+            raw = status_text(path.read_text(encoding="utf-8"), kind["status"]) or index.get(fname) or kind.get("default")
             st = normalize(raw, kind) or "(unrecognized)"
             counts[st] = counts.get(st, 0) + 1
         order = kind["states"] + ["(unrecognized)"]

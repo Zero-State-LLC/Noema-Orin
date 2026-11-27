@@ -35,6 +35,56 @@
         ],
         "APPROVED": []
       }
+    },
+    "adr": {
+      "title": "ADR",
+      "files": "docs/adr/[0-9]*.md",
+      "declared": "proposed → accepted → deprecated / superseded by ADR-NNNN; Status is optional and a bare ADR records an accepted decision (domain-modeling ADR-FORMAT.md)",
+      "status": [
+        "^status:\\s*(.+)$",
+        "^\\s*[-*]?\\s*\\*\\*Status:?\\*\\*:?\\s*(.+)$"
+      ],
+      "default": "accepted",
+      "states": [
+        "proposed",
+        "accepted",
+        "deprecated",
+        "superseded"
+      ],
+      "aliases": {
+        "proposed": [
+          "proposed"
+        ],
+        "accepted": [
+          "accepted"
+        ],
+        "deprecated": [
+          "deprecated"
+        ],
+        "superseded": [
+          "superseded"
+        ]
+      },
+      "next": {
+        "proposed": [
+          "accepted",
+          "superseded"
+        ],
+        "accepted": [
+          "deprecated",
+          "superseded"
+        ],
+        "deprecated": [
+          "superseded"
+        ],
+        "superseded": []
+      },
+      "links": {
+        "superseded": {
+          "pattern": "ADR-(\\d+)",
+          "file_prefix": "{:04d}-"
+        }
+      }
     }
   }
 }
