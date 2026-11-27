@@ -224,6 +224,12 @@ def main(argv: list[str] | None = None) -> int:
             stop.wait(cooldown)
             continue
         line = report.as_dict()
+        if adapter.transition_log is not None:
+            # C1 (#196): label this session's logged turns from the client's results. Must never end the loop.
+            try:
+                adapter.transition_log.record_outcomes(report)
+            except Exception as exc:
+                print(json.dumps({"member": ns.member, "transition_log_error": type(exc).__name__}), flush=True)
         try:
             compacted = adapter.memory.compact() if adapter.memory is not None else 0
         except Exception:  # compaction must never end a session loop

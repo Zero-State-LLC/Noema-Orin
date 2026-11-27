@@ -4,6 +4,9 @@ One JSON line per decided turn: the full canonical observation the Controller ac
 proposal it returned. The next line of the same session is the resulting observation, so
 `iter_transitions` yields (observation, action, next_observation) triples.
 
+When a session ends, `record_outcomes` appends one outcome row per decided turn from the client's own
+turn results (accepted, or rejected with its code), and `iter_outcomes` joins them back to the turns.
+
 Boundaries:
 - Off unless `NOEMA_TRANSITION_LOG=1`. Merging this code captures nothing.
 - Telemetry, not evidence (AGENTS.md): every row is labelled TELEMETRY and nothing here is a claim.
@@ -29,6 +32,9 @@ _SEGMENT_RE = re.compile(r"^transitions-(\d{6})\.jsonl\.gz$")
 # Key names that must never reach disk, whatever depth they appear at. Observations should not carry
 # these; this is a backstop for "no tokens or private prompts in telemetry".
 _SECRET_KEY_RE = re.compile(r"token|secret|passw|credential|authorization|api[_-]?key|cookie|bearer|prompt", re.IGNORECASE)
+
+OUTCOME_KIND = "outcome"  # rows without a "kind" are turn rows (everything written before C1)
+MAX_CODE_CHARS = 80
 
 DEFAULT_MAX_MB = 16
 DEFAULT_KEEP = 32
@@ -60,6 +66,7 @@ class TransitionLog:
         self.keep = max(1, int(keep))
         self.session: str | None = None
         self.turn = 0
+        self._actions: list[str] = []  # this session's logged actions, in turn order
 
     @classmethod
     def from_env(cls, mind: Path, env: Mapping[str, str] | None = None) -> "TransitionLog | None":
@@ -77,6 +84,7 @@ class TransitionLog:
         """Start a new run of consecutive turns. Rows are only ever paired within one session."""
         self.session = os.urandom(6).hex()
         self.turn = 0
+        self._actions = []
         return self.session
 
     def append(self, *, canonical: Mapping[str, Any], proposal: Any, source: str) -> None:
@@ -101,14 +109,46 @@ class TransitionLog:
         }
         if dropped[0]:
             row["redacted_keys"] = dropped[0]
-        line = (json.dumps(row, sort_keys=True, separators=(",", ":"), default=str) + "\n").encode("utf-8")
+        self._write([row])
+        self._actions.append(str(getattr(proposal, "action", "") or "").upper())
+        self.turn += 1
+
+    def record_outcomes(self, report: Any) -> int:
+        """Label this session's logged turns from the client's turn results (C1, #196).
+
+        `report` is what `client.play()` returned. Every decided turn yields one result that carries a
+        proposal, in order; entries without one (the ENTER_WORLD result, a tripped breaker) are not
+        decided turns. Labelling stops at the first result whose action differs from the logged one,
+        so an outcome is never guessed. Returns the number of turns labelled.
+        """
+        if self.session is None:
+            return 0
+        results = [t for t in (report or []) if getattr(t, "proposal", None) is not None]
+        rows = []
+        for turn, (logged, result) in enumerate(zip(self._actions, results)):
+            if str(getattr(result.proposal, "action", "") or "").upper() != logged:
+                break
+            row = {"v": SCHEMA_VERSION, "kind": OUTCOME_KIND, "label": "TELEMETRY", "session": self.session,
+                   "turn": turn, "ok": bool(getattr(result, "ok", False))}
+            if not row["ok"]:
+                error = getattr(getattr(result, "result", None), "error", None) or {}
+                failure = getattr(getattr(result, "failure", None), "value", None)
+                row["code"] = str(error.get("code") or getattr(result, "reason", None) or failure or "?")[:MAX_CODE_CHARS]
+                if failure:
+                    row["failure"] = str(failure)[:MAX_CODE_CHARS]
+            rows.append(row)
+        if rows:
+            self._write(rows)
+        return len(rows)
+
+    def _write(self, rows: list[dict]) -> None:
+        data = "".join(json.dumps(row, sort_keys=True, separators=(",", ":"), default=str) + "\n" for row in rows).encode("utf-8")
         fd = _open_private(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
         try:
-            os.write(fd, line)
+            os.write(fd, data)
             size = os.fstat(fd).st_size
         finally:
             os.close(fd)
-        self.turn += 1
         if size >= self.max_bytes:
             self._rotate()
 
@@ -164,6 +204,24 @@ def iter_transitions(mind: Path) -> Iterator[tuple[dict, dict, dict]]:
     """
     prev = None
     for row in _rows(mind):
+        if row.get("kind") == OUTCOME_KIND:
+            continue
         if prev is not None and row.get("session") == prev.get("session") and row.get("turn") == prev.get("turn", -2) + 1:
             yield prev["obs"], prev["action"], row["obs"]
         prev = row
+
+
+def iter_outcomes(mind: Path) -> Iterator[tuple[dict, dict, dict | None]]:
+    """Yield (observation, action, outcome) for every logged turn, including a session's last.
+
+    `outcome` is `{"ok": True}`, or `{"ok": False, "code": ..., "failure": ...}` with the client's own
+    rejection code, or None when no result was recorded for that turn (transport drop, crash, a
+    session logged before C1, or a pruned segment). None means unknown, never accepted.
+    """
+    outcomes = {}
+    for row in _rows(mind):
+        if row.get("kind") == OUTCOME_KIND:
+            outcomes[(row.get("session"), row.get("turn"))] = {k: row[k] for k in ("ok", "code", "failure") if k in row}
+    for row in _rows(mind):
+        if row.get("kind") != OUTCOME_KIND:
+            yield row["obs"], row["action"], outcomes.get((row.get("session"), row.get("turn")))
