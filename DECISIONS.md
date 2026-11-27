@@ -303,3 +303,9 @@ Operator statement, verbatim: "approve spec". It was given in reply to the publi
 - **Credentials:** the run used an Admin-minted controller token (the D-010/D-011 system-actor pattern) seeded into a temporary config home, so `connect()` did not start device enrollment, plus a fresh 1 h Admin JWT. Both were passed over stdin, never stored on the Orin, and never in the model context or the receipt.
 - **Observed:** `docs/evidence/t4-isolated-20261127T1512Z.json`: on the Orin, prepare 1.18 s, LOOK `ok=true settled=true` in 272 ms, one submission.
 - **Unchanged:** isolated-world evidence only. No live-world attach, production enrollment or PSR-1 claim. G-001 and G-003 stand.
+
+## D-082: T6 offline Spark target under ADR-013 (2026-11-27, operator-approved)
+
+- **Decided:** Noema-Specs [ADR-013](https://github.com/Zero-State-LLC/Noema-Specs/blob/main/docs/adr/0013-offline-spark-research-chamber-scope.md) (Specs#479) resolves the spec 014 writer-authority defect by scoping. Spark is the sole writer of a separate, non-canonical `offline.spark.*` chamber only, and the hosted Platform authority is unchanged. This satisfies `G-001`'s precondition for building the offline path.
+- **Built:** `noema_orin.offline_spark` admits only `offline.spark.<suffix>` worlds at literal loopback or private-LAN origins with opaque `spark_` tokens. It refuses hosted origins, worlds and JWTs, and the hosted wrapper refuses chamber worlds, origins and tokens. Both directions fail closed, there is no cross-profile fallback, and it writes no world state. Receipts carry `evidence_scope=OFFLINE_SPARK_RESEARCH` and `promotable=false`, and `assert_not_promotable` rejects them as hosted, STUDY or PSR-1 evidence.
+- **Unchanged:** the synthetic CLI `--profile offline-spark` still emits `REFUSED`/`BLOCKED_SPEC_DEFECT` (frozen receipt contract) until a reachable chamber exists. No Spark host is reachable from this network today, so no chamber run is claimed. G-003 stands.
