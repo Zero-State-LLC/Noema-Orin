@@ -5,6 +5,7 @@ role-verb rate. Re-running is idempotent: rows are keyed by (log file, line numb
 """
 
 import argparse
+import contextlib
 import json
 import os
 import sqlite3
@@ -167,16 +168,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--digest", action="store_true", help="print a 24h digest after collecting")
     ap.add_argument("--hours", type=float, default=24)
     ns = ap.parse_args(argv)
-    db = open_db(ns.root)
-    added = collect(ns.root, db)
-    if ns.digest:
-        d = digest(db, ns.hours)
-        print(json.dumps({"digest": d}, sort_keys=True))
-        os.makedirs(ns.root / "shared", exist_ok=True)
-        (ns.root / "shared" / "digest.json").write_text(json.dumps(d, indent=1, sort_keys=True))
-    else:
-        print(json.dumps({"metrics_added": added}))
-    db.close()
+    with contextlib.closing(open_db(ns.root)) as db:
+        added = collect(ns.root, db)
+        if ns.digest:
+            d = digest(db, ns.hours)
+            print(json.dumps({"digest": d}, sort_keys=True))
+            os.makedirs(ns.root / "shared", exist_ok=True)
+            (ns.root / "shared" / "digest.json").write_text(json.dumps(d, indent=1, sort_keys=True))
+        else:
+            print(json.dumps({"metrics_added": added}))
     return 0
 
 
