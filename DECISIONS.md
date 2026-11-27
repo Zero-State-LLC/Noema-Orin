@@ -24,11 +24,13 @@ The operator approved a separate T4a slice at [spec #12](https://github.com/Zero
 
 Spec 014 is SPECULATIVE. Its statement that Spark is the sole WorldState writer conflicts with `Noema-Specs/CONTEXT.md` for the hosted Platform. Before offline execution or any promotion, record a canonical decision that explicitly scopes Spark to a non-canonical offline chamber, defines its identity and interfaces, and states what evidence can and cannot be promoted. Do not edit the source spec in this repository or call the defect resolved.
 
-## G-002: Physical hardware evidence (model chosen in D-009; decisions on Workers AI since D-016), NOT_COMPUTABLE
+## G-002: Physical hardware evidence (model chosen in D-009; decisions on Workers AI since D-016), OBSERVED
 
 Exact Orin model, memory, JetPack/L4T version, storage, power supply/profile, reachable network, compatible quantization and model license are not confirmed here. Measure these before choosing a model or promising throughput. An offline fake-client test proves only orchestration logic.
 
-**Since 2026-11-23 (recorded 2026-11-26):** D-009 runs `qwen2.5:3b` on the Orin; D-015 and D-016 moved session reflection and per-turn decisions to Workers AI, with the local model as fallback only. No on-device measurements of the items above are recorded in this repository yet, so this gate stays NOT_COMPUTABLE.
+**Since 2026-11-23 (recorded 2026-11-26):** D-009 runs `qwen2.5:3b` on the Orin; D-015 and D-016 moved session reflection and per-turn decisions to Workers AI, with the local model as fallback only. No on-device measurements of the items above were recorded in this repository at that time.
+
+**OBSERVED 2026-11-27 (operator approval to close #5):** `python -m noema_orin.qualify` on the physical board produced `claim_label=OBSERVED` receipts, archived at `docs/evidence/qualify-orin-20261127T1457Z.json` (and `docs/metrics/qualify-20261127T1130Z.json`): Jetson Orin Nano Super, L4T R39.2.2, CUDA 13.2, 8 GB RAM, `qwen2.5:3b` Q4_K_M on CUDA llama.cpp at 20.6-21.8 tok/s, bge-small f16 embed p95 12 ms, INA3221 average 5.6-5.8 W. `model_load_s` and `command_latency_ms` remain NOT_COMPUTABLE in the harness and are not claimed. This closes G-002 only. G-001 and G-003 are unchanged.
 
 ## G-003: Hosted live admission and campaign (live system actors since D-009–D-011), BLOCKED
 
