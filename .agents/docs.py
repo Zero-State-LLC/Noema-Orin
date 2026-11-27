@@ -126,7 +126,12 @@ def render_triage(t: dict[str, Any]) -> str:
         "| -------------------------- | -------------------- | ------- |",
     ]
     out += [f"| `{s['role']}` | `{label}` | {s['meaning']} |" for label, s in t["states"].items()]
-    out += ["", "Each open issue carries exactly one triage label. It moves like this:", ""]
+    out += [
+        "",
+        "Each triaged issue carries exactly one state label; an unlabeled issue is untriaged and goes to "
+        "`needs-triage` first. The maintainer can override any move. Otherwise:",
+        "",
+    ]
     for label, s in t["states"].items():
         if s.get("next"):
             out.append(f"- `{label}` → " + " · ".join(f"`{n['to']}` when {n['when']}" for n in s["next"]))
@@ -135,7 +140,7 @@ def render_triage(t: dict[str, Any]) -> str:
     out += [
         "",
         "Label strings live in `.agents/procedures.json` (`triage`); edit them there. "
-        "`python3 .agents/docs.py triage-audit` lists open issues that break the rule.",
+        "`python3 .agents/docs.py triage-audit` lists untriaged issues and issues with conflicting state labels.",
         "",
     ]
     return "\n".join(out)
@@ -606,12 +611,17 @@ def triage_audit(procs: dict[str, Any]) -> str:
     if data.returncode != 0:
         raise DocsError(f"gh api failed: {data.stderr.strip()[:200]}")
     issues = [i for page in json.loads(data.stdout) for i in page if "pull_request" not in i]
-    bad = []
+    untriaged, conflicts = [], []
     for i in issues:
         mine = sorted(lbl["name"] for lbl in i["labels"] if lbl["name"] in labels)
-        if len(mine) != 1:
-            bad.append(f"#{i['number']} {', '.join(mine) or '(no triage label)'}: {i['title'][:70]}")
-    return f"{repo}: {len(issues)} open issues, {len(bad)} not in exactly one triage state" + ("".join(f"\n  {b}" for b in bad))
+        line = f"#{i['number']} {', '.join(mine) or '(no state label)'}: {i['title'][:70]}"
+        if not mine:
+            untriaged.append(line)
+        elif len(mine) > 1:
+            conflicts.append(line)
+    out = f"{repo}: {len(issues)} open issues, {len(conflicts)} with conflicting state labels, {len(untriaged)} untriaged"
+    out += "".join(f"\n  CONFLICT {c}" for c in conflicts) + "".join(f"\n  untriaged {u}" for u in untriaged)
+    return out
 
 
 def main(argv: list[str]) -> int:

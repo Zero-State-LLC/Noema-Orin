@@ -23,9 +23,9 @@ Agent work is a state machine (`.agents/machine.json`): `python3 .agents/machine
 - ORIENT → LIVE_ATTACH_PREFLIGHT when the task is a live attach.
 - VERIFY → IMPLEMENT when checks fail.
 - REVIEW → IMPLEMENT when changes requested or CI red.
-- **INTENT**: Work from an approved issue.
-- **SPEC**: Scope it in a `SPEC-*.md`.
-- **PLAN**: Plan under `execplan/`. Use behavior-first vertical-slice tickets with explicit blockers.
+- **INTENT**: The operator's instruction or approval, recorded as a `D-NNN` entry in `DECISIONS.md`.
+- **SPEC**: Publish a `Spec:` issue (`to-spec`); the first slices also kept a `SPEC-*.md`.
+- **PLAN**: Break the spec into `T-n` ticket issues with blocking edges (`to-tickets`): behavior-first vertical slices with explicit blockers. The first slices also kept an `execplan/`.
 - **IMPLEMENT**: Write failing tests before implementation.
 - **VERIFY**: `go REVIEW` runs `bash scripts/check.sh`, `python3 .agents/machine.py check`.
 - **REVIEW**: Code review.
