@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NOEMA-ORIN · Mission Control</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div id="app" class="shell">
+    <!-- Top Mission Control Bar (N9 edge-aligned solid chrome) -->
+    <header class="topbar">
+      <div class="brand-group">
+        <div class="n-glyph" aria-hidden="true">N9</div>
+        <div class="brand-meta">
+          <div class="brand-title">NOEMA · ORIN CONTROL</div>
+          <div class="brand-sub" id="org-label">Reach Compact · Perihelion Reach</div>
+        </div>
+        <span id="conn-pill" class="pill pill-active">SSE LIVE</span>
+        <span id="seq-pill" class="pill pill-mono">SEQ —</span>
+        <span id="fleet-pill" class="pill pill-mono">UNITS —</span>
+      </div>
+
+      <div class="telemetry-strip" id="hw-strip" aria-label="Jetson Orin Nano hardware telemetry">
+        <div class="metric-chip"><span class="k">GPU</span><span class="v" id="hw-gpu">—</span></div>
+        <div class="metric-chip"><span class="k">TEMP</span><span class="v" id="hw-temp">—</span></div>
+        <div class="metric-chip"><span class="k">PWR</span><span class="v" id="hw-pwr">—</span></div>
+        <div class="metric-chip"><span class="k">RAM FREE</span><span class="v" id="hw-ram">—</span></div>
+        <div class="metric-chip"><span class="k">LOCAL S1</span><span class="v" id="hw-tps">—</span></div>
+        <div class="metric-chip"><span class="k">JWT</span><span class="v" id="tok-min">—</span></div>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="split-bar-wrap" title="Inference source split (Planner / Orin S1 / Workers AI S2 / Idle)">
+          <div class="split-bar" id="inference-bar">
+            <span class="seg-planner" style="width:70%"></span>
+            <span class="seg-s1" style="width:15%"></span>
+            <span class="seg-s2" style="width:10%"></span>
+            <span class="seg-idle" style="width:5%"></span>
+          </div>
+          <div class="split-legend" id="inference-legend">P — · S1 — · S2 —</div>
+        </div>
+        <button type="button" class="btn btn-outline" id="btn-auth" title="Configure operator token">AUTH</button>
+        <button type="button" class="btn btn-outline" id="btn-canary" title="Canary rolling restart (m02 + m06)">CANARY</button>
+        <button type="button" class="btn btn-cyan" id="btn-roll" title="Full fleet rolling restart">ROLLING RESTART</button>
+        <button type="button" class="btn btn-danger" id="btn-estop" title="Emergency Group Stop (noema-players.target)">GROUP STOP</button>
+      </div>
+    </header>
+
+    <div id="alert-banner" class="alert-banner hidden" role="alert"></div>
+
+    <!-- Main 100vh Monitor Cockpit Grid -->
+    <main class="cockpit">
+      <!-- Left Column: 6-Agent Fleet Grid + Maintenance Strip -->
+      <section class="fleet-pane">
+        <div class="pane-head">
+          <span class="kicker">RESIDENT FLEET · 6 UNITS</span>
+          <span class="meta-right" id="mode-pill">MODE: —</span>
+        </div>
+        <div id="agent-grid" class="agent-grid"></div>
+        <div class="maint-strip" id="maint-strip">
+          <span class="kicker">INFRASTRUCTURE UNITS</span>
+          <div id="infra-units" class="infra-units"></div>
+        </div>
+      </section>
+
+      <!-- Right Column: Top SVG Reach Map, Bottom Tabbed Ledger (Live Feed / Economy / Controls) -->
+      <section class="ops-pane">
+        <div class="map-panel">
+          <div class="pane-head">
+            <span class="kicker">PERIHELION REACH · LIVE TOPOLOGY &amp; CLAIMS</span>
+            <div class="map-legend">
+              <span class="leg"><i class="dot dot-cyan"></i>AGENTS</span>
+              <span class="leg"><i class="dot dot-eco"></i>STALL</span>
+              <span class="leg"><i class="dot dot-warn"></i>WORK</span>
+              <span class="leg"><i class="dot dot-violet"></i>SCAR</span>
+            </div>
+          </div>
+          <div class="map-stage">
+            <svg id="reach-svg" viewBox="0 0 640 270" role="img" aria-label="Perihelion Reach room topology"></svg>
+          </div>
+        </div>
+
+        <div class="ledger-panel">
+          <div class="tab-bar" role="tablist">
+            <button type="button" class="tab active" data-tab="feed" role="tab">LIVE TURN LEDGER</button>
+            <button type="button" class="tab" data-tab="economy" role="tab">STOREFRONT &amp; CLAIMS</button>
+            <button type="button" class="tab" data-tab="controls" role="tab">CONTROL DECK &amp; AUDIT</button>
+            <span class="tab-spacer"></span>
+            <select id="feed-filter" class="mini-select" aria-label="Filter turns by member">
+              <option value="all">ALL UNITS</option>
+              <option value="m01">m01 Founder</option>
+              <option value="m02">m02 Quartermaster</option>
+              <option value="m03">m03 Custodian</option>
+              <option value="m04">m04 Archivist</option>
+              <option value="m05">m05 Speaker</option>
+              <option value="m06">m06 Surveyor</option>
+            </select>
+          </div>
+
+          <div id="tab-feed" class="tab-body active">
+            <div id="turn-feed" class="turn-feed"></div>
+          </div>
+
+          <div id="tab-economy" class="tab-body">
+            <div class="eco-grid">
+              <div>
+                <div class="sub-kicker">BARTER STALL LISTINGS</div>
+                <div id="listings-list" class="dense-list"></div>
+              </div>
+              <div>
+                <div class="sub-kicker">ACTIVE COHORT CLAIMS</div>
+                <div id="claims-list" class="dense-list"></div>
+                <div class="sub-kicker" style="margin-top:10px">SHARED DAMAGED INFRA</div>
+                <div id="work-list" class="dense-list"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="tab-controls" class="tab-body">
+            <div class="ctrl-grid">
+              <div class="ctrl-card">
+                <div class="sub-kicker">INFERENCE &amp; VOICE MODE</div>
+                <div class="ctrl-row">
+                  <label class="ctrl-label" for="sel-inf-mode">Inference Mode</label>
+                  <select id="sel-inf-mode" class="mini-select">
+                    <option value="cloud_first">cloud_first (Workers AI)</option>
+                    <option value="local_first">local_first (Orin GPU S1)</option>
+                  </select>
+                </div>
+                <div class="ctrl-row">
+                  <label class="ctrl-label" for="chk-voice">Grounded Voice Synthesis</label>
+                  <input id="chk-voice" type="checkbox" />
+                </div>
+                <button type="button" class="btn btn-outline" id="btn-save-mode">SAVE RUNTIME OVERRIDES</button>
+                <div class="ctrl-hint">Writes runtime-overrides.env (0600); restart units to apply.</div>
+              </div>
+
+              <div class="ctrl-card">
+                <div class="sub-kicker">MAINTENANCE &amp; RECEIPTS</div>
+                <div class="ops-btns">
+                  <button type="button" class="btn btn-outline" data-ops="metrics">RUN METRICS</button>
+                  <button type="button" class="btn btn-outline" data-ops="compact_map">COMPACT MAP</button>
+                  <button type="button" class="btn btn-outline" data-ops="memory_sync">SYNC D1</button>
+                  <button type="button" class="btn btn-outline" data-ops="qualify">RUN QUALIFY (#5)</button>
+                  <button type="button" class="btn btn-outline" id="btn-group-start">GROUP START</button>
+                </div>
+                <pre id="ops-output" class="ops-out">Ready.</pre>
+              </div>
+
+              <div class="ctrl-card ctrl-audit">
+                <div class="sub-kicker">OPERATOR AUDIT LOG (SECRET-FREE)</div>
+                <div id="audit-list" class="dense-list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Slide-Over Agent Mind, RSI & Knob Inspector Drawer -->
+    <aside id="drawer" class="drawer hidden" aria-label="Agent mind inspector">
+      <div class="drawer-head">
+        <div>
+          <div class="brand-title" id="drawer-title">—</div>
+          <div class="brand-sub" id="drawer-sub">—</div>
+        </div>
+        <div class="drawer-head-btns">
+          <button type="button" class="btn btn-outline" id="drawer-restart">RESTART UNIT</button>
+          <button type="button" class="btn btn-outline" id="drawer-stop">STOP</button>
+          <button type="button" class="btn btn-outline" id="drawer-close">CLOSE</button>
+        </div>
+      </div>
+      <div class="drawer-body">
+        <div class="drawer-col">
+          <div class="sub-kicker">PERSONA &amp; TRAIT TETHER</div>
+          <div id="drawer-persona" class="drawer-box"></div>
+          <div class="sub-kicker">MEDIUM-LOOP AGENDA &amp; RSI RATCHET</div>
+          <div id="drawer-agenda" class="drawer-box"></div>
+          <div class="rsi-actions">
+            <button type="button" class="btn btn-outline" data-rsi="rollback">ROLLBACK RSI</button>
+            <button type="button" class="btn btn-outline" data-rsi="pause">PAUSE RSI</button>
+            <button type="button" class="btn btn-outline" data-rsi="resume">RESUME RSI</button>
+            <button type="button" class="btn btn-outline" data-rsi="clear_quarantine">CLEAR QUARANTINE</button>
+            <button type="button" class="btn btn-outline" id="drawer-refresh-agenda">REFRESH AGENDA</button>
+          </div>
+        </div>
+        <div class="drawer-col">
+          <div class="sub-kicker">BOUNDED TACTICAL KNOBS (KNOB_SPECS)</div>
+          <div id="drawer-knobs" class="knobs-box"></div>
+          <button type="button" class="btn btn-cyan" id="drawer-save-knobs" style="margin-top:8px">APPLY CLAMPED KNOBS</button>
+          <div class="sub-kicker" style="margin-top:12px">MEMORY FACTS (FTS5 SEARCH) &amp; RELATIONS</div>
+          <div class="mem-search-row">
+            <input id="mem-search" class="mini-input" type="text" placeholder="Search observed facts..." />
+            <button type="button" class="btn btn-outline" id="btn-mem-search">SEARCH</button>
+          </div>
+          <div id="drawer-memory" class="dense-list mem-list"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Confirmation / Auth Modal -->
+    <div id="modal-backdrop" class="modal-backdrop hidden">
+      <div class="modal-box">
+        <div class="brand-title" id="modal-title">Confirm Action</div>
+        <p class="modal-msg" id="modal-msg"></p>
+        <input id="modal-input" class="mini-input hidden" type="password" placeholder="Operator control token..." />
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" id="modal-cancel">CANCEL</button>
+          <button type="button" class="btn btn-danger" id="modal-confirm">CONFIRM</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

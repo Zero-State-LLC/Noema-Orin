@@ -1,0 +1,23 @@
+[Unit]
+Description=NOEMA Orin Native Always-On Mission Control Dashboard (D-077)
+After=network-online.target noema-players.target
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/noema-orin/dashboard.env
+EnvironmentFile=-%h/.config/noema-orin/runtime-overrides.env
+Environment=PYTHONUNBUFFERED=1
+Environment=NOEMA_DASHBOARD_HOST=127.0.0.1
+Environment=NOEMA_DASHBOARD_PORT=8787
+Environment=NOEMA_DASHBOARD_ALLOW_LOCAL_CONTROL=1
+WorkingDirectory=%h/noema-players
+ExecStart=%h/noema-players/.venv/bin/python -m noema_orin.dashboard --host ${NOEMA_DASHBOARD_HOST} --port ${NOEMA_DASHBOARD_PORT}
+MemoryHigh=64M
+MemoryMax=96M
+CPUQuota=30%
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=default.target

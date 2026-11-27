@@ -7,6 +7,8 @@ PartOf=noema-players.target
 EnvironmentFile=%h/.config/noema-orin/%i.env
 # Cloud reflection endpoint (D-015); optional so players still start without it.
 EnvironmentFile=-%h/.config/noema-orin/memory-sync.env
+# Dashboard-managed inference/voice mode overrides (D-077); never holds tokens.
+EnvironmentFile=-%h/.config/noema-orin/runtime-overrides.env
 Environment=PYTHONUNBUFFERED=1
 StandardOutput=append:%h/noema-players/logs/%N.log
 StandardError=append:%h/noema-players/logs/%N.log
