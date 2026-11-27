@@ -38,6 +38,7 @@ class RoleHealthTracker:
     active_turns: int = 0
     idle_turns: int = 0
     workers_ai_calls: int = 0
+    local_s1_calls: int = 0
     planner_turns: int = 0
     ollama_fallbacks: int = 0
     error_count: int = 0
@@ -53,6 +54,7 @@ class RoleHealthTracker:
         had_error: bool = False,
         used_planner: bool = False,
         used_local: bool | None = None,
+        used_local_s1: bool = False,
     ) -> None:
         norm = verb.strip().upper()
         if norm in {"LOOK", "WAIT"}:
@@ -61,6 +63,9 @@ class RoleHealthTracker:
             self.active_turns += 1
         if used_planner:
             self.planner_turns += 1
+        elif used_local_s1:
+            # T10/#164: intentional local Orin GPU System-1 call (not an error fallback).
+            self.local_s1_calls += 1
         elif used_workers_ai:
             self.workers_ai_calls += 1
         elif used_local is None or used_local:
@@ -77,7 +82,7 @@ class RoleHealthTracker:
     def summary(self) -> dict[str, object]:
         total = self.active_turns + self.idle_turns
         idle_ratio = round(self.idle_turns / total, 3) if total else 0.0
-        total_llm = self.workers_ai_calls + self.ollama_fallbacks
+        total_llm = self.workers_ai_calls + self.local_s1_calls + self.ollama_fallbacks
         fallback_ratio = round(self.ollama_fallbacks / total_llm, 3) if total_llm else 0.0
         return {
             "role": self.role,
@@ -86,6 +91,7 @@ class RoleHealthTracker:
             "idle_turns": self.idle_turns,
             "idle_ratio": idle_ratio,
             "workers_ai_calls": self.workers_ai_calls,
+            "local_s1_calls": self.local_s1_calls,
             "planner_turns": self.planner_turns,
             "ollama_fallbacks": self.ollama_fallbacks,
             "fallback_ratio": fallback_ratio,

@@ -53,6 +53,8 @@ class OrinAdapter:
         self._attested_targets: set[str] = set()
         self._last_social_turn: int = -999
         self.last_cycle: int | None = None
+        self.last_playbook_state: str | None = None
+        self.agenda_manager = None
 
     def _effective_social_cooldown(self) -> int:
         knobs = getattr(self, "policy_knobs", None) or {}
@@ -97,15 +99,46 @@ class OrinAdapter:
 
         self.system = SYSTEM_PROMPT + " Role: " + brief
 
-    def _chat(self, system: str, user: str, num_predict: int = 400, tier: str | None = None) -> dict:
-        """Cloud decision model when configured (D-016), local Ollama only as fallback.
+    def _chat(
+        self,
+        system: str,
+        user: str,
+        num_predict: int = 400,
+        tier: str | None = None,
+        *,
+        response_format: dict | None = None,
+    ) -> dict:
+        """System-1 local Orin GPU (`NOEMA_INFERENCE_MODE=local_first`) or Workers AI primary (`cloud_first`).
 
-        The circuit breaker skips Workers AI for its cooldown after repeated failures, so a
-        cloud outage costs one 20s timeout per threshold, not one per turn.
+        In `local_first` mode (T10/#164), routine choices run locally on `llama-server` with constrained
+        JSON-schema decoding (`$0` marginal cost); Workers AI acts as System-2 escalation/failover.
         """
         import time
 
+        from .llm_client import call_llama_server
+
+        mode = os.environ.get("NOEMA_INFERENCE_MODE", "cloud_first").strip().lower()
         now = time.time()
+        self._last_local_s1 = False
+        self._last_local = False
+
+        if mode == "local_first" and tier != "escalate":
+            local_url = os.environ.get("NOEMA_LOCAL_LLM_BASE", self.base_url)
+            local_model = os.environ.get("NOEMA_LOCAL_LLM_MODEL", self.model)
+            local_out = call_llama_server(
+                base_url=local_url,
+                model=local_model,
+                system=system,
+                user=user,
+                response_format=response_format,
+                max_tokens=max(num_predict, 60),
+                timeout=min(self.timeout, 15.0),
+            )
+            if local_out is not None:
+                self._last_remote = False
+                self._last_local_s1 = True
+                return local_out
+
         cloud = None
         if self.breaker.allow_remote(now):
             cloud = _cloud_call("/chat", system, user, max_tokens=max(num_predict, 80), timeout=20, tier=tier)
@@ -119,6 +152,19 @@ class OrinAdapter:
             return cloud
         if os.environ.get("NOEMA_DECIDE_LOCAL_FALLBACK", "1") != "1":
             return {}
+        if response_format is not None:
+            llama_fb = call_llama_server(
+                base_url=self.base_url,
+                model=self.model,
+                system=system,
+                user=user,
+                response_format=response_format,
+                max_tokens=max(num_predict, 60),
+                timeout=min(self.timeout, 20.0),
+            )
+            if llama_fb is not None:
+                self._last_local = True
+                return llama_fb
         payload = {"model": self.model, "stream": False, "format": "json",
                    "options": {"temperature": 0.4, "num_ctx": self.num_ctx, "num_predict": num_predict},
                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
@@ -281,13 +327,23 @@ class OrinAdapter:
                        "over LOOK, INSPECT and WAIT. Use `memories` (facts you observed earlier). "
                        "Vary your actions; never pick the same option three times in a row. "
                        "Reply ONLY with JSON {\"choice\": <index>, \"why\": \"<6 words>\"}. Do not echo the input.")
+        from .llm_client import build_choice_schema
         from .model_tier import tier_for
 
         tier = tier_for(menu)
         self._last_tier = tier
         self.stats_tier = getattr(self, "stats_tier", {})
         self.stats_tier[tier] = self.stats_tier.get(tier, 0) + 1
-        data = self._chat(instruction, user, num_predict=60, tier=tier)
+        if os.environ.get("NOEMA_INFERENCE_MODE", "cloud_first").strip().lower() == "local_first":
+            data = self._chat(
+                instruction,
+                user,
+                num_predict=60,
+                tier=tier,
+                response_format=build_choice_schema(len(menu)),
+            )
+        else:
+            data = self._chat(instruction, user, num_predict=60, tier=tier)
         idx = data.get("choice")
         if type(idx) is not int or not 0 <= idx < len(menu):
             return None
@@ -401,358 +457,35 @@ class OrinAdapter:
                     self.memory.remember(str(cls), kind="built", room=room, sequence=seq)
             self.memories = self.memory.recall(" ".join([str(loc.get("name") or "")] + sorted(self.verbs)))
             self.stats_mem += len(self.memories)
-        from .shop_planner import _room_has_ready_infra
-
-        gen_ready = _room_has_ready_infra(canonical, "generator", min_condition=25) is not None
-        if _depleted(canonical):
-            # RFC-0136 + T3/#157: only pick RECHARGE when an operational generator stands here.
-            rech = next((o for o in options if o["action"] == "RECHARGE"), None) if gen_ready else None
-            if rech is not None:
-                self.dwell = 0
-                return _proposal(rech, self.default_args, self.memory)
-            self.dwell = 0
-            return ActionProposal(action="WAIT")  # engine #907/#910: WAIT at energy 0 rests +2 energy
-        # RFC-0136: when below energy reserve floor and an active generator offers RECHARGE, top up (+4, 0 cargo burned).
-        energy_now = (canonical.get("resources") or {}).get("energy")
-        energy_floor = self._effective_energy_floor()
-        if isinstance(energy_now, (int, float)) and energy_now <= energy_floor:
-            rech = next((o for o in options if o["action"] == "RECHARGE"), None) if gen_ready else None
-            if rech is not None:
-                self.dwell = 0
-                return _proposal(rech, self.default_args, self.memory)
-            # D-074: RECHARGE (+4) exists only where an active generator stands (civic-exchange). m06 idled at
-            # energy <=1 in 6 other rooms on 32% of turns. Walk there when the energy covers the hops.
-            here_room = (canonical.get("location") or {}).get("room_id")
-            wm = self.world_map
-            if (wm is not None and here_room and hasattr(wm, "where_offered") and _can_afford_move(canonical)
-                    and (not self.allowed or "MOVE" in self.allowed) and "RECHARGE" in (self.allowed or {"RECHARGE"})):
-                goal = wm.where_offered({"RECHARGE"}, exclude=here_room, near=here_room)
-                hops = (wm.distances(here_room) or {}).get(goal) if goal and hasattr(wm, "distances") else None
-                if goal and hops and energy_now > hops:
-                    hop = wm.next_hop(here_room, goal)
-                    exits = {e.get("to_room_id"): e.get("direction") for e in (canonical.get("location") or {}).get("exits") or []
-                             if isinstance(e, dict)}
-                    if exits.get(hop):
-                        self.dwell = 0
-                        return ActionProposal(action="MOVE", target_id=exits[hop])
-        welcome = self._welcome(canonical, options) if "ORG_CREATE" in self.verbs else None
-        if welcome is not None:
-            return welcome
-        # RFC-0141 §2: planner-only deterministic equipment, warden defense/sanction, civic contracts, and storefront management.
-        from .planner import home_org
-        from .shop_planner import (
-            founder_needs_exchange_visit,
-            plan_civic_contract,
-            plan_equipment_step,
-            plan_founder_governance_and_commemorate,
-            plan_quartermaster_shop,
-            plan_warden_defense_and_sanction,
-            quartermaster_needs_shop_visit,
-        )
+        from .playbooks import PlaybookContext, run_role_playbook
 
         role_name = str(getattr(getattr(self, "health", None), "role", "") or "").rsplit("-", 1)[-1]
         knobs_now = getattr(self, "policy_knobs", None) or {}
-        if role_name in ("surveyor", "archivist"):
-            warden_prop = plan_warden_defense_and_sanction(role_name, canonical, options, getattr(self, "cohort_ids", None))
-            if warden_prop is not None and hasattr(warden_prop, "action"):
-                self.dwell = 0
-                return warden_prop
-        if role_name in ("founder", "quartermaster", "custodian", "archivist", "speaker", "surveyor"):
-            equip_prop = plan_equipment_step(
-                role_name,
-                canonical,
-                knobs_now,
-                allowed_actions=getattr(self, "allowed", None) or None,
+        traits_now = getattr(self, "persona_traits", None) or {}
+        mgr = getattr(self, "agenda_manager", None)
+        if mgr is not None and seq is not None and mgr.needs_refresh(sum(self.stats.values()), int(seq)):
+            mgr.refresh(
+                role=role_name,
+                canonical=canonical,
                 world_map=self.world_map,
-            )
-            if equip_prop is not None and hasattr(equip_prop, "action"):
-                self.dwell = 0
-                return equip_prop
-        if role_name == "archivist" and any(o["action"] == "COMMEMORATE" for o in options):
-            commemorated = (
-                {str(r[0]) for r in self.memory.db.execute("SELECT text FROM facts WHERE kind='commemorated'").fetchall()}
-                if self.memory is not None
-                else set()
-            )
-            for scar in canonical.get("scars") or []:
-                if not isinstance(scar, dict) or not scar.get("scar_id"):
-                    continue
-                sid = str(scar["scar_id"])
-                if (scar.get("fossilized") or float(scar.get("strength") or 0.0) >= 0.85) and sid not in commemorated:
-                    if self.memory is not None:
-                        self.memory.remember(sid, kind="commemorated", room=room, sequence=seq)
-                    self.dwell = 0
-                    return ActionProposal(action="COMMEMORATE", target_id=sid, arguments={"scar_id": sid, "target_id": sid})
-        if role_name == "quartermaster":
-            shop_prop = plan_quartermaster_shop(canonical, knobs_now, recent_actions=getattr(self, "recent", None))
-            if shop_prop is not None and hasattr(shop_prop, "action"):
-                self.dwell = 0
-                return shop_prop
-            if (
-                self.world_map is not None
-                and room
-                and _can_afford_move(canonical)
-                and (not self.allowed or "MOVE" in self.allowed)
-                and quartermaster_needs_shop_visit(canonical, self.world_map, knobs_now)
-            ):
-                hop = self.world_map.next_hop(room, "room.civic-exchange")
-                exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict)}
-                if hop in exits:
-                    self.dwell = 0
-                    return ActionProposal(action="MOVE", target_id=exits[hop])
-        if role_name == "founder":
-            home_id = home_org(canonical)
-            gov_prop = plan_founder_governance_and_commemorate(canonical, home_id, self.memory, options)
-            if gov_prop is not None and hasattr(gov_prop, "action"):
-                self.dwell = 0
-                return gov_prop
-            contract_prop = plan_civic_contract(role_name, canonical, home_id, world_map=self.world_map)
-            if contract_prop is not None and hasattr(contract_prop, "action"):
-                self.dwell = 0
-                return contract_prop
-            if (
-                self.world_map is not None
-                and room
-                and _can_afford_move(canonical)
-                and (not self.allowed or "MOVE" in self.allowed)
-                and founder_needs_exchange_visit(canonical, home_id, self.world_map)
-            ):
-                hop = self.world_map.next_hop(room, "room.civic-exchange")
-                exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict)}
-                if hop in exits:
-                    self.dwell = 0
-                    return ActionProposal(action="MOVE", target_id=exits[hop])
-        notice = next((o for o in options if o["action"] == "ORG_OFFICE_ACT"
-                       and str((o.get("raw") or {}).get("authority_profile") or "PUBLISH_NOTICE") == "PUBLISH_NOTICE"), None)
-        if notice is not None and "MESSAGE" in self.verbs and "ORG_CREATE" not in self.verbs:
-            # D-059 (S13) + T6/#160: deterministic grounded notice or market/contract TRADE_NOTICE digest.
-            p = _proposal(notice, self.default_args, self.memory, world_map=self.world_map, canonical=canonical)
-            if p is not None:
-                self.dwell = 0
-                return p
-        # T6/#160: m05 Speaker publishes grounded market/contract BOARD digest when available, else patrols Herald loop.
-        if role_name == "speaker" and self._social_outreach_ready():
-            board_opt = next((o for o in options if o["action"] == "BOARD"), None)
-            if board_opt is not None and self.world_map is not None:
-                digest_txt = grounded_market_and_contract_digest(self.memory, self.world_map, canonical, org_name="Reach Compact")
-                if digest_txt:
-                    self.dwell = 0
-                    return ActionProposal(action="BOARD", target_id=board_opt.get("target_id"), arguments={"text": digest_txt})
-            if (
-                self.world_map is not None
-                and room
-                and room != "room.civic-exchange"
-                and _can_afford_move(canonical)
-                and (not self.allowed or "MOVE" in self.allowed)
-                and not self.world_map.observed_listings(room_id="room.civic-exchange")
-            ):
-                hop = self.world_map.next_hop(room, "room.civic-exchange")
-                exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict)}
-                if hop in exits:
-                    self.dwell = 0
-                    return ActionProposal(action="MOVE", target_id=exits[hop])
-        # D-047/D-048 (RFC-0133): the seated quartermaster serves before gathering: cargo to the custodian or to a
-        # stuck peer (see _needs_supply), at most once per peer per 10 turns; then harvest into the treasury.
-        custodian = self.role_handles.get("custodian")
-        served = {r.get("target") for r in getattr(self, "recent", [])[-10:] if r["action"] == "SUPPLY"}
-        sup_pair = None
-        for o in options:
-            if "SUPPLY" in self.verbs and o["action"] == "SUPPLY" and o.get("target_id") not in served:
-                if _needs_supply(o, custodian, self.world_map, self.cohort_ids):
-                    ok_sup, sup_amt = _can_supply(o, canonical)
-                    if ok_sup:
-                        sup_pair = (o, sup_amt)
-                        break
-        if sup_pair is not None:
-            sup, sup_amt = sup_pair
-            self.dwell = 0
-            p = _proposal(sup, self.default_args, self.memory)
-            if p is not None:
-                p.arguments = {**(p.arguments or {}), "amount": sup_amt}
-                if self.memory is not None and p.target_id:
-                    self.memory.note_player(str(p.target_id), "supplied cargo from treasury", sign=1, sequence=seq)
-            return p
-        # Deep Time multi-controller scar coalition: custodian/speaker/surveyor contribute independent ATTEST
-        # evidence when standing in a room with an active public scar so Vellum-Archivist can weaken it (>=3 controllers).
-        if (
-            "ATTEST" in self.verbs
-            and "RECONSTRUCT" not in self.verbs
-            and (canonical.get("scars") or [])
-        ):
-            attested = getattr(self, "_attested_targets", set())
-            att_opt = next(
-                (o for o in options if o["action"] == "ATTEST" and str(o.get("target_id") or "") not in attested),
-                None,
-            )
-            if att_opt is not None:
-                self.dwell = 0
-                if not hasattr(self, "_attested_targets"):
-                    self._attested_targets = set()
-                self._attested_targets.add(str(att_opt.get("target_id") or ""))
-                return _proposal(att_opt, self.default_args, self.memory)
-        vault = next((o for o in options if "SUPPLY" in self.verbs and o["action"] == "HARVEST"
-                      and (o.get("raw") or {}).get("acting_for")), None)
-        tbuild = next((o for o in options if "SUPPLY" in self.verbs and o["action"] in ("CONSTRUCT", "BUILD")
-                       and (o.get("raw") or {}).get("acting_for")
-                       and str((o.get("raw") or {}).get("class") or "") in self.builds), None)
-        treasury_floor = self._effective_treasury_floor()
-        if tbuild is not None and _vault_storage(canonical) >= treasury_floor:
-            # D-061 (RFC-0133 amendment 1): build the Compact's generator / storage bay from vault cargo once the vault
-            # keeps a supply reserve; the holder pays only fuel.
-            self.dwell = 0
-            return _proposal(tbuild, self.default_args, self.memory)
-        if ("SUPPLY" in self.verbs and _vault_storage(canonical) >= treasury_floor
-                and _treasury_build_waiting(canonical, self.builds) and _wait_refuels(canonical.get("resources") or {})):
-            # D-062: the treasury build is offered but the holder lacks fuel (generator 8 energy). Live m02 sat at
-            # energy 1-3 and never saw it as available. WAIT here until it is; walking spends the energy it needs.
-            self.dwell = 0
-            return ActionProposal(action="WAIT")
-        fuel = self._fuel_for_build(canonical, options) if "SUPPLY" in self.verbs else None
-        if fuel is not None:
-            self.dwell = 0
-            return fuel
-        step = _toward_needy_custodian(canonical, custodian, self.world_map) if "SUPPLY" in self.verbs else None
-        if step is not None and _can_afford_move(canonical):
-            # S7: the vault holds cargo and the custodian (by its own recorded position) is short and elsewhere.
-            # SUPPLY needs the same room, so walk there before harvesting more.
-            self.dwell = 0
-            return ActionProposal(action="MOVE", target_id=step)
-        if vault is not None:
-            knobs = getattr(self, "policy_knobs", None) or {}
-            scar_w = float(knobs.get("scar_avoidance_weight", 0.7))
-            here_pressure = (
-                self.world_map.room_pressure_for(room)
-                if self.world_map is not None and room and hasattr(self.world_map, "room_pressure_for")
-                else 0.0
-            )
-            if (
-                scar_w >= 0.5
-                and here_pressure >= 3.0
-                and self.world_map is not None
-                and _can_afford_move(canonical)
-                and (not self.allowed or "MOVE" in self.allowed)
-            ):
-                # Deep Time fallow rotation: step ONLY to a room with strictly lower harvest pressure.
-                better = (
-                    self.world_map.low_pressure_offered(
-                        {"HARVEST"},
-                        exclude=room,
-                        near=room,
-                        pressure_weight=scar_w,
-                        max_pressure=here_pressure,
-                    )
-                    if hasattr(self.world_map, "low_pressure_offered")
-                    else None
-                )
-                hop = self.world_map.next_hop(room, better) if better else None
-                exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict)}
-                alt_dir = exits.get(hop) if hop else None
-                if alt_dir:
-                    self.dwell = 0
-                    return ActionProposal(action="MOVE", target_id=alt_dir)
-            self.dwell = 0
-            p = _proposal(vault, self.default_args, self.memory)
-            if p is not None:
-                p.arguments = {**(p.arguments or {}), "amount": _vault_harvest_amount(vault, canonical)}
-            return p
-        goal_verbs = self.verbs
-        if self.supply and _hold_empty(canonical):
-            goal_verbs = self.supply  # gather materials before repair/construct (engine cargo rule)
-        if _starved_for_attention(canonical, goal_verbs):
-            self.dwell = 0
-            return ActionProposal(action="WAIT")  # engine: WAIT restores attention +2 (cap 8)
-        att = (canonical.get("resources") or {}).get("attention")
-        if isinstance(att, (int, float)) and att < 2 and "RECONSTRUCT" in goal_verbs:
-            # D-045: every archivist verb costs attention 2, and moving between rooms doesn't restore it.
-            self.dwell = 0
-            return ActionProposal(action="WAIT")
-        if (
-            "RECONSTRUCT" in goal_verbs
-            and isinstance(att, (int, float))
-            and att >= 4
-            and not has_role_verb(options, goal_verbs)
-        ):
-            # D-046: RECONSTRUCT needs evidence (LIVE_INSPECT). With no reconstruction on offer, INSPECT an
-            # entity not inspected lately instead of walking on.
-            seen = {r.get("target") for r in self.recent[-self._inspect_novelty_window():] if r["action"] == "INSPECT"}
-            seen |= self._published_subjects()  # D-073: evidence for an already-published subject is wasted
-            insp = next((o for o in options if o["action"] == "INSPECT" and o.get("target_id") not in seen), None)
-            if insp is not None:
-                self.dwell = 0
-                return _proposal(insp, self.default_args, self.memory)
-        here = has_role_verb(options, goal_verbs) or _offered_here(canonical, goal_verbs, done=self._published_subjects())
-        energy = (canonical.get("resources") or {}).get("energy")
-        if (self.supply and not _hold_empty(canonical) and not here and isinstance(energy, (int, float))
-                and energy < SPEND_READY):
-            # D-050: carrying materials but too weak to walk (2 with cargo) and still REPAIR (3) on arrival.
-            # m03 wandered at energy 1-5, burning its cargo as fuel and repairing nothing. WAIT here first.
-            self.dwell = 0
-            return ActionProposal(action="WAIT")
-        if (not here and self.world_map is not None and not _wait_refuels(canonical.get("resources") or {})
-                and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)):
-            # D-034: energy 1 + empty hold. WAIT gives nothing, so spend the 1 walking toward the goal;
-            # arriving at 0 gets lockout rest (+2) right where the role verb is.
-            direction = route(
-                canonical,
-                self.world_map,
-                _route_verbs(goal_verbs),
-                explorer=self.explorer,
+                traits=traits_now,
+                current_seq=int(seq),
+                turn_count=sum(self.stats.values()),
                 me=getattr(self, "self_id", None),
-                current_seq=seq,
             )
-            if direction:
-                self.dwell = 0
-                return ActionProposal(action="MOVE", target_id=direction)
-        if self.builds and _hold_ready(canonical):
-            pick = next((o for o in options if o["action"] == "CONSTRUCT"
-                         and str((o.get("raw") or {}).get("class") or "") in self.builds), None)
-            if pick is not None:
-                return _proposal(pick, self.default_args, self.memory)  # build the role's own space (D-018)
-            blocked = [a for a in canonical.get("affordances") or [] if isinstance(a, dict)
-                       and str(a.get("operation") or "").upper() == "CONSTRUCT" and a.get("available") is False
-                       and str(a.get("class") or "") in self.builds
-                       and "materials" not in str(a.get("reason") or "")]
-            if blocked and "HARVEST" in (self.verbs | set(self.supply or ())):
-                # D-043: enough cargo for a role build, short only on energy. WAIT burns cargo +2 energy;
-                # harvesting more would spend the energy the build needs.
-                self.dwell = 0
-                return ActionProposal(action="WAIT")
-        if self.supply and _hold_empty(canonical):
-            # D-039: empty hold and a supply verb is offered: gather. The model kept choosing MOVE here.
-            pick = next((o for o in options if o["action"] in self.supply), None)
-            if pick is not None:
-                self.dwell = 0
-                return _proposal(pick, self.default_args, self.memory)
-        elif self.supply:
-            # D-040: materials aboard and a spend verb (REPAIR/RESTORE/...) is offered: spend them here.
-            pick = next((o for o in options if o["action"] in self.verbs and o["action"] not in self.supply), None)
-            if pick is not None:
-                self.dwell = 0
-                return _proposal(pick, self.default_args, self.memory)
-        dwell_limit = self._effective_dwell_limit()
-        if self.world_map is None or here or self.dwell < dwell_limit or (self.allowed and "MOVE" not in self.allowed):
-            self.dwell = self.dwell + 1 if not here else 0
-            return None
-        if not _can_afford_move(canonical):
-            return ActionProposal(action="WAIT")  # WAIT burns cargo for energy; a refused MOVE wastes a turn
-        knobs = getattr(self, "policy_knobs", None) or {}
-        avoid_p = "SUPPLY" in self.verbs and float(knobs.get("scar_avoidance_weight", 0.7)) >= 0.5
-        seek_s = "RECONSTRUCT" in self.verbs
-        direction = route(
-            canonical,
-            self.world_map,
-            _route_verbs(goal_verbs),
-            explorer=self.explorer,
-            me=getattr(self, "self_id", None),
-            avoid_pressure=avoid_p,
-            pressure_weight=float(knobs.get("scar_avoidance_weight", 0.7)),
-            seek_scars=seek_s,
-            current_seq=seq,
+        ctx = PlaybookContext(
+            adapter=self,
+            canonical=canonical,
+            options=options,
+            role_name=role_name,
+            room_id=room,
+            seq=seq,
+            knobs=knobs_now,
+            traits=traits_now,
         )
-        if not direction:
-            return None
-        self.dwell = 0
-        return ActionProposal(action="MOVE", target_id=direction)
+        res = run_role_playbook(ctx)
+        self.last_playbook_state = res.state if res is not None else None
+        return res.proposal if res is not None else None
 
     def _record_social_evidence(self, canonical: dict, seq) -> None:
         """Record observed co-located peer / rumor evidence into memory.db relations table."""
@@ -906,6 +639,13 @@ class OrinAdapter:
             and self.self_id
         ):
             self.world_map.claim_target(str(tgt_id), str(self.self_id), act_upper, int(canonical.get("sequence") or 0))
+        if getattr(self, "agenda_manager", None) is not None:
+            self.agenda_manager.mark_progress(
+                canonical=canonical,
+                action=act_upper,
+                target_id=str(tgt_id) if tgt_id else None,
+                current_seq=int(canonical.get("sequence") or 0),
+            )
         cyc = canonical.get("cycle")
         if isinstance(cyc, int) and cyc > 0:
             self.last_cycle = cyc
@@ -914,10 +654,12 @@ class OrinAdapter:
             used_workers_ai=bool(getattr(self, "_last_remote", False)),
             used_planner=source in ("planner", "idle_skip", "guard"),
             used_local=bool(getattr(self, "_last_local", False)),
+            used_local_s1=bool(getattr(self, "_last_local_s1", False)),
             source_sequence=int(canonical.get("sequence") or 0),
         )
         self._last_remote = False
         self._last_local = False
+        self._last_local_s1 = False
         budgets_snap = {k: v for k, v in (canonical.get("resources") or {}).items()
                         if k in ("energy", "attention", "compute", "storage", "influence")}
         if hasattr(self, "turn_log"):

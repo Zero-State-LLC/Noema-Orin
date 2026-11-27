@@ -1,0 +1,28 @@
+[Unit]
+Description=NOEMA Orin Shared CUDA llama-server (System-1 Local Inference, T10/#164)
+After=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/noema-orin/llama-server.env
+# Defaults fit comfortably inside Jetson Orin Nano 8GB unified RAM (~2.7 GiB total).
+Environment=NOEMA_GGUF_MODEL=%h/models/Qwen2.5-3B-Instruct-Q4_K_M.gguf
+Environment=NOEMA_LLAMA_PORT=8081
+ExecStart=/usr/local/bin/llama-server \
+  --model ${NOEMA_GGUF_MODEL} \
+  --host 127.0.0.1 \
+  --port ${NOEMA_LLAMA_PORT} \
+  --n-gpu-layers 99 \
+  --ctx-size 8192 \
+  --parallel 2 \
+  --cache-reuse 256 \
+  -ctk q8_0 \
+  -ctv q8_0 \
+  --metrics
+Restart=on-failure
+RestartSec=10
+MemoryHigh=3200M
+MemoryMax=3800M
+
+[Install]
+WantedBy=noema-players.target
