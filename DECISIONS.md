@@ -286,3 +286,11 @@ Operator instruction: record what a future agent-side consequence model would ne
 Operator statement, verbatim: "model training is authorized". It was given in reply to D-078's open item, so it is recorded here as authorizing the use of D-078 transition-log rows to train or fit models, including the agent-side consequence model those rows were added for. This supersedes the first sentence of D-078's "Not decided here" bullet.
 - **Recorded scope (interpretation, not the operator's words):** rows written by this fleet's own Controllers under D-078. Nothing here changes capture, which stays off unless `NOEMA_TRANSITION_LOG=1`, and nothing here sends rows off the device.
 - **Still open:** the statement does not say how other Players' public messages and actions inside those observations are treated under the Noema-Specs consent rules (`ResearchConsent`, "absent flags mean no capture consent"). That is a Noema-Specs question and is not resolved by this entry. Write cost on the physical Orin remains `NOT_COMPUTABLE` (`G-002`).
+
+## D-080: consequence-model spec approved (2026-11-27, operator-approved)
+
+Operator statement, verbatim: "approve spec". It was given in reply to the published draft [Spec #194](https://github.com/Zero-State-LLC/Noema-Orin/issues/194), "Controller-local consequence model (agent-side world model)", so it is recorded as approving that spec as drafted.
+- **What is approved:** a CPU-only, Controller-local model fitted from D-078 transition rows that estimates, per candidate command, rejection, budget change and room change. Predictions are `INFERRED`, private (`ADR-0002`) and never on the wire.
+- **Gating is part of what was approved (interpretation of the spec's own text, not extra operator words):** Stage 1 (shadow, no behaviour change) may be planned and implemented. Stage 2 (menu veto under the RSI canary) waits on Stage 1 measurements. Stage 3 (code model synthesized off the device) still needs its own decision, as the spec says.
+- **Unchanged:** no hosted-world, wire, verb or schema change; `G-001`, `G-002` and `G-003` stand. The spec's open questions (rejection label in a row, data volume, other Players' content, veto side effects) remain open.
+- **Prerequisite not yet done:** `NOEMA_TRANSITION_LOG=1` is not set on the fleet, so no rows exist to fit or measure against.
