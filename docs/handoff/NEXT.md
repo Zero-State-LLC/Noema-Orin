@@ -125,3 +125,8 @@
 - Noema#937 (x402): research posted on the PR. Noema-Specs COMPLEXITY-DOCTRINE has a "Future-economy hard deferral" that lists x402, USDC and wallets, the PSR campaign repeats it, and paying agents need `third_party_agent_compatibility_at_scale` (BLOCKED on PSR-1, Specs#363 open). It stays parked. Unblocking needs a superseding direction packet from the owner after PSR-1.
 - T10 live as a canary: llama-server (CUDA) runs as `noema-llama-server` (enabled, 3.3 GB RAM still free). Only m06 is `local_first`, from 10:14Z. 0 tracebacks. Model calls are rare (most turns are planner), so the server has seen few requests.
 - Next: after about 2h, compare m06 `local_s1_calls` and role% against cloud. If it's clean, add local_first to m03/m05 (m05 is the heaviest model user at 45%). Rollback is to restore `m06.env.bak-pre-local` and restart.
+
+## 2026-11-27 11:29Z: local S1 on m03/m05/m06
+- m06 ran local_first for 75 min: 0 tracebacks, local_s1_calls 13, and llama-server predicted 413 tokens in total. Model calls are rare because about 80% of turns are planner/idle_skip/fallback, so the cost saving is small but real.
+- Added m03 and m05 at 11:06Z. After 20 min: 0 tracebacks, m05 role 20/20, m03 12/20, 3.2 GB RAM free.
+- Next: if it's clean after about 6h, add m01/m02/m04 (backups are `mXX.env.bak-pre-local`). Phase 3 T12 (TRT embedder) and T14 (qualify, closes #5 / G-002) remain. T14 can run now that llama-server exists: `python -m noema_orin.qualify`.
