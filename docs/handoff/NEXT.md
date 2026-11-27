@@ -105,3 +105,8 @@
 - D-075 (#151) rolled fleet-wide: the "Ollama fallbacks 140%" alert was a metric bug, since scripted fallback turns were counted as local-model calls. First full sessions after: ollama_fallbacks = 0 on all 6 (Workers AI calls 0-22 per session). The 24h alert clears as old rows age out.
 - fleet.sh 200 at 06:17Z: role 232/1200 (was 211). m06 63/200 (was 10) after D-074.
 - idle_rate alerts (0.68-0.93) count WAIT/LOOK/MOVE as idle. That is expected given energy-limited roles, not a fault.
+
+## 2026-11-27 08:36Z
+- #153 (close SQLite connections in memory_sync/metrics) was merged at 07:29Z but not deployed. Now rolled fleet-wide: 220 tests OK on Orin, all 6 units restarted 08:27-08:34Z, 0 tracebacks.
+- fleet.sh 30 right after: role 47/180. m03 REFINE 7 + REPAIR 6. m05 MESSAGE 15. m01/m04 idle, which is expected (org settled, subjects published).
+- Watch: m06 shows energy <=1 on 40% of turns in this short window (it was 0% after D-074). The window spans the restart, so re-check with `fleet.sh 100`. If it stays above 20%, look at the D-074 generator-walk path.
