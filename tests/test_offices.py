@@ -580,3 +580,52 @@ class ArchivistRoamsTests(unittest.TestCase):
         verbs = set(role_for("archivist")["verbs"])
         self.assertTrue(_offered_here(c, verbs))
         self.assertFalse(_offered_here(c, verbs, done={"entity.relay-7"}))
+
+
+@unittest.skipUnless(_HAS_CLIENT, "needs noema_client")
+class RouteToRechargeTests(unittest.TestCase):
+    """D-074: low energy and no RECHARGE here, so walk toward the generator room when energy covers it."""
+
+    def _a(self):
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        spec = role_for("surveyor")
+        a.allowed, a.cohort_ids, a.role_handles = frozenset(spec["allow"]), set(), {}
+        a.builds, a.supply, a.verbs = (), None, set(spec["verbs"])
+        a.memory, a.dwell, a.explorer, a.default_args, a.stats_mem, a.recent = None, 0, True, {}, 0, []
+
+        class WM:
+            def where_offered(self, acts, exclude=None, near=None):
+                return "room.civic" if "RECHARGE" in acts else None
+
+            def distances(self, start):
+                return {start: 0, "room.mid": 1, "room.civic": 2}
+
+            def next_hop(self, start, goal):
+                return "room.mid"
+
+            def __getattr__(self, name):  # observe/record_* and other writes are no-ops here
+                if name in ("locate", "record_work", "work_for"):
+                    raise AttributeError(name)
+                return lambda *a, **k: None
+
+        a.world_map = WM()
+        return a
+
+    def test_walks_toward_generator(self):
+        a = self._a()
+        c = {"resources": {"energy": 3, "storage": 16, "attention": 8},
+             "location": {"room_id": "room.far", "exits": [{"to_room_id": "room.mid", "direction": "east"}]},
+             "affordances": []}
+        p = a._plan({"canonical": c}, [])
+        self.assertEqual((p.action, p.target_id), ("MOVE", "east"))
+
+    def test_too_weak_to_walk_stays(self):
+        a = self._a()
+        c = {"resources": {"energy": 2, "storage": 16, "attention": 8},
+             "location": {"room_id": "room.far", "exits": [{"to_room_id": "room.mid", "direction": "east"}]},
+             "affordances": []}
+        p = a._plan({"canonical": c}, [])
+        # energy 2 == hops 2: arriving empty is worse than resting here
+        self.assertFalse(p is not None and (p.action, p.target_id) == ("MOVE", "east"))

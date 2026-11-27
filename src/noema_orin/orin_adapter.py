@@ -357,6 +357,21 @@ class OrinAdapter:
             if rech is not None:
                 self.dwell = 0
                 return _proposal(rech, self.default_args, self.memory)
+            # D-074: RECHARGE (+4) exists only where an active generator stands (civic-exchange). m06 idled at
+            # energy <=1 in 6 other rooms on 32% of turns. Walk there when the energy covers the hops.
+            here_room = (canonical.get("location") or {}).get("room_id")
+            wm = self.world_map
+            if (wm is not None and here_room and hasattr(wm, "where_offered") and _can_afford_move(canonical)
+                    and (not self.allowed or "MOVE" in self.allowed) and "RECHARGE" in (self.allowed or {"RECHARGE"})):
+                goal = wm.where_offered({"RECHARGE"}, exclude=here_room, near=here_room)
+                hops = (wm.distances(here_room) or {}).get(goal) if goal and hasattr(wm, "distances") else None
+                if goal and hops and energy_now > hops:
+                    hop = wm.next_hop(here_room, goal)
+                    exits = {e.get("to_room_id"): e.get("direction") for e in (canonical.get("location") or {}).get("exits") or []
+                             if isinstance(e, dict)}
+                    if exits.get(hop):
+                        self.dwell = 0
+                        return ActionProposal(action="MOVE", target_id=exits[hop])
         welcome = self._welcome(canonical, options) if "ORG_CREATE" in self.verbs else None
         if welcome is not None:
             return welcome
