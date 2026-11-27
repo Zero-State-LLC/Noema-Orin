@@ -458,6 +458,7 @@ class DashboardStateReader:
                     "last_role_action": log_sum["last_role_action"],
                     "idle_rate": m_dig.get("idle_rate", 0.0),
                     "stale_head_rate": m_dig.get("stale_head_rate", 0.0),
+                    "consequence": m_dig.get("consequence"),  # C4 (#199): INFERRED shadow accuracy; None when shadow is off
                     "turns_24h": m_dig.get("turns", 0),
                     "rejections": (last_sess.get("rejections") or {}).get("by_verb_code") or {},
                     "rsi_status": rsi_status,

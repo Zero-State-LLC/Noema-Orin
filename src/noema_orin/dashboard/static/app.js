@@ -268,6 +268,9 @@ function buildCard(a) {
   const rates = el("span");
   room.append(roomName, rates);
   const actLine = el("div", { class: "card-action" });
+  // C4 (#199): shadow-mode accuracy of the consequence model. Read-only, hidden when the member has none.
+  const shadow = el("div", { class: "card-action card-shadow", title: "Consequence model, shadow mode, last 24h. INFERRED estimates; they do not change what the agent does." });
+  shadow.hidden = true;
 
   const budgets = el("div", { class: "budgets-row" });
   const meters = { eng: makeMeter("ENG"), att: makeMeter("ATT"), cmp: makeMeter("CMP"), crg: makeMeter("CRG") };
@@ -281,8 +284,8 @@ function buildCard(a) {
     controlUnit(a.unit, "restart");
   };
   foot.append(tracks, rstBtn);
-  card.append(top, health, room, actLine, budgets, foot);
-  return { card, handle, roleLine, badges, pct, sparkLine, since, roomName, rates, actLine, meters, tracks, badgeKey: "", trackKey: "" };
+  card.append(top, health, room, actLine, shadow, budgets, foot);
+  return { card, handle, roleLine, badges, pct, sparkLine, since, roomName, rates, actLine, shadow, meters, tracks, badgeKey: "", trackKey: "" };
 }
 
 function updateCard(c, a, pulsed) {
@@ -320,6 +323,13 @@ function updateCard(c, a, pulsed) {
   setText(c.rates, `24h ROLE ${Math.round((a.role_action_rate || 0) * 100)}% · STALE ${Math.round((a.stale_head_rate || 0) * 100)}%`);
   const stepTxt = a.active_step ? ` · goal:${a.active_step.goal_kind}` : "";
   setText(c.actLine, `${a.last_action || "—"} ${a.last_target || ""} [${a.last_source || "—"}]${stepTxt}`);
+  const cq = a.consequence;
+  const hasShadow = !!cq && typeof cq === "object";
+  if (c.shadow.hidden === hasShadow) c.shadow.hidden = !hasShadow;
+  if (hasShadow) {
+    const share = (v) => (typeof v === "number" ? Math.round(v * 100) + "%" : "N/C");
+    setText(c.shadow, `SHADOW INFERRED · ${cq.predictions || 0} pred · reject P ${share(cq.rejection_precision)} R ${share(cq.rejection_recall)} · none ${share(cq.no_prediction_share)}`);
+  }
 
   const cargoUsed = typeof b.storage === "number" ? 16 - b.storage : null;
   setMeter(c.meters.eng, b.energy, 16, lowE ? "low" : "");

@@ -166,6 +166,30 @@ class DashboardEndToEndTests(unittest.TestCase):
         other: dict[str, int] = {}
         self.assertEqual(self.reader.poll_new_turns(other), [])
 
+    def test_c4_snapshot_carries_shadow_accuracy_only_for_members_that_have_it(self):
+        log = self.root / "logs" / "noema-player@m03.log"
+        with log.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"member": "m03", "role": "custodian", "actions": 10, "stop_reason": "duration_elapsed",
+                                 "consequence": {"label": "INFERRED", "turns": 10, "no_prediction": 2, "by_verb": {
+                                     "REPAIR": {"turns": 10, "predicted": 8, "tp": 3, "fp": 1, "fn": 1, "tn": 3}}}}) + "\n")
+        db = open_metrics_db(self.root)
+        try:
+            collect_metrics(self.root, db)
+        finally:
+            db.close()
+        snap = self.reader.snapshot()
+        m03 = next(a for a in snap["agents"] if a["member"] == "m03")
+        m01 = next(a for a in snap["agents"] if a["member"] == "m01")
+        self.assertEqual(m03["consequence"]["label"], "INFERRED")
+        self.assertEqual(m03["consequence"]["rejection_precision"], 0.75)
+        self.assertEqual(m03["consequence"]["predictions"], 8)
+        self.assertIsNone(m01["consequence"])  # shadow off for m01: no data, not zeros
+        repo = Path(__file__).resolve().parents[1]
+        app_js = (repo / "src/noema_orin/dashboard/static/app.js").read_text(encoding="utf-8")
+        self.assertIn("a.consequence", app_js)
+        self.assertIn("INFERRED", app_js)
+        self.assertNotIn("innerHTML", app_js)
+
     def test_d2_d3_http_server_enforces_auth_and_audited_safe_controls(self):
         srv = create_dashboard_server(
             host="127.0.0.1",
