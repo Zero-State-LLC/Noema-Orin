@@ -296,3 +296,10 @@ Operator statement, verbatim: "approve spec". It was given in reply to the publi
 - **Gating is part of what was approved (interpretation of the spec's own text, not extra operator words):** Stage 1 (shadow, no behaviour change) may be planned and implemented. Stage 2 (menu veto under the RSI canary) waits on Stage 1 measurements. Stage 3 (code model synthesized off the device) still needs its own decision, as the spec says.
 - **Unchanged:** no hosted-world, wire, verb or schema change; `G-001`, `G-002` and `G-003` stand. The spec's open questions (rejection label in a row, data volume, other Players' content, veto side effects) remain open.
 - **Prerequisite not yet done:** `NOEMA_TRANSITION_LOG=1` is not set on the fleet, so no rows exist to fit or measure against.
+
+## D-081: T4 isolated official-client integration (2026-11-27, operator-approved)
+
+- **Decided:** the operator granted the approval #4 waits on ("approval is granted where needed", "you can handle all of this"). `noema_orin.official_isolated.OfficialIsolatedClient` wraps pinned `noema-client` 0.2.0 (`89a1fcac`) `NoemaClient(isolated=True)` behind the CommandClient seam. It admits only `test.hosted-canonical.<suffix>` worlds, refuses Perihelion, non-hosted origins, non-JWT Admin tokens and other client versions, accepts only the fixed LOOK proposal, and treats a client rejection as a failed handoff.
+- **Credentials:** the run used an Admin-minted controller token (the D-010/D-011 system-actor pattern) seeded into a temporary config home, so `connect()` did not start device enrollment, plus a fresh 1 h Admin JWT. Both were passed over stdin, never stored on the Orin, and never in the model context or the receipt.
+- **Observed:** `docs/evidence/t4-isolated-20261127T1512Z.json`: on the Orin, prepare 1.18 s, LOOK `ok=true settled=true` in 272 ms, one submission.
+- **Unchanged:** isolated-world evidence only. No live-world attach, production enrollment or PSR-1 claim. G-001 and G-003 stand.
