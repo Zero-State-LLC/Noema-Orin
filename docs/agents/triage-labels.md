@@ -11,7 +11,7 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 | `ready-for-human` | `ready-for-human` | Requires human implementation |
 | `wontfix` | `wontfix` | Will not be actioned |
 
-Each open issue carries exactly one triage label. It moves like this:
+Each triaged issue carries exactly one state label; an unlabeled issue is untriaged and goes to `needs-triage` first. The maintainer can override any move. Otherwise:
 
 - `needs-triage` → `needs-info` when the reporter must add information · `ready-for-agent` when it is fully specified for an AFK agent · `ready-for-human` when it needs human implementation · `wontfix` when it will not be actioned
 - `needs-info` → `needs-triage` when the reporter replies
@@ -19,7 +19,7 @@ Each open issue carries exactly one triage label. It moves like this:
 - `ready-for-human`: the issue closes when the work is done.
 - `wontfix`: the issue closes.
 
-Label strings live in `.agents/procedures.json` (`triage`); edit them there. `python3 .agents/docs.py triage-audit` lists open issues that break the rule.
+Label strings live in `.agents/procedures.json` (`triage`); edit them there. `python3 .agents/docs.py triage-audit` lists untriaged issues and issues with conflicting state labels.
 <!-- agent-machine:triage:end -->
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.

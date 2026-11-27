@@ -21,6 +21,7 @@ Two sources of truth live beside the agent workflow machine:
     python3 .agents/docs.py step --evidence "…"   finish the current step
     python3 .agents/docs.py step --user-said "…"  finish a step that needs the user's own words
     python3 .agents/docs.py escalate --evidence "…"
+    python3 .agents/docs.py resolve --user-said "…"  clear an escalated procedure once the user has resolved it
     python3 .agents/docs.py triage-audit          open issues not in exactly one triage state (gh)
 
 Runbooks ("runbooks" in procedures.json) are machines that sit beside the
@@ -37,6 +38,7 @@ have been fixed (remove them). Standard library only; Python 3.10+.
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 import re
 import shlex
@@ -125,7 +127,12 @@ def render_triage(t: dict[str, Any]) -> str:
         "| -------------------------- | -------------------- | ------- |",
     ]
     out += [f"| `{s['role']}` | `{label}` | {s['meaning']} |" for label, s in t["states"].items()]
-    out += ["", "Each open issue carries exactly one triage label. It moves like this:", ""]
+    out += [
+        "",
+        "Each triaged issue carries exactly one state label; an unlabeled issue is untriaged and goes to "
+        "`needs-triage` first. The maintainer can override any move. Otherwise:",
+        "",
+    ]
     for label, s in t["states"].items():
         if s.get("next"):
             out.append(f"- `{label}` → " + " · ".join(f"`{n['to']}` when {n['when']}" for n in s["next"]))
@@ -134,7 +141,7 @@ def render_triage(t: dict[str, Any]) -> str:
     out += [
         "",
         "Label strings live in `.agents/procedures.json` (`triage`); edit them there. "
-        "`python3 .agents/docs.py triage-audit` lists open issues that break the rule.",
+        "`python3 .agents/docs.py triage-audit` lists untriaged issues and issues with conflicting state labels.",
         "",
     ]
     return "\n".join(out)
@@ -359,12 +366,21 @@ def run_cmd(procs: dict[str, Any], argv: list[str]) -> str:
         if find_procedure(procs, name) is None:
             known = list(procs.get("skills", {})) + list(procs.get("runbooks", {}))
             raise DocsError(f"unknown procedure {name!r}; known: {', '.join(known)}")
+        if run and run.get("escalated"):
+            raise DocsError(f"{run['procedure']} is escalated; clear it with `resolve --user-said \"…\"`, then run again")
         if run and not run.get("done"):
             raise DocsError(f"{run['procedure']} is still running; finish it (`step`) or `escalate` first")
         _save_run({"procedure": name, "step": 0, "started": _now(), "log": []})
         return where(procs)
     if not run:
         raise DocsError("no procedure running")
+    if cmd == "resolve":
+        if not run.get("escalated"):
+            raise DocsError("nothing to resolve: the procedure is not escalated")
+        if not user_said.strip():
+            raise DocsError("resolve needs the user's own words: --user-said \"…\"")
+        _save_run(None)
+        return f"{run['procedure']} resolved ({user_said!r}); start it again with `run {run['procedure']}` if needed."
     if cmd == "escalate":
         if not evidence:
             raise DocsError("escalate needs --evidence")
@@ -374,7 +390,7 @@ def run_cmd(procs: dict[str, Any], argv: list[str]) -> str:
         return where(procs)
     if cmd == "step":
         if run.get("escalated"):
-            raise DocsError("procedure is escalated; resolve it with the user, then `run` again")
+            raise DocsError("procedure is escalated; once the user has resolved it: `resolve --user-said \"…\"`")
         proc = find_procedure(procs, run["procedure"])
         assert proc is not None
         steps = steps_of(proc)
@@ -438,9 +454,22 @@ def entries(kind: dict[str, Any], text: str | None = None) -> dict[str, str]:
     return {m.group("id"): m.group("status").strip() for m in re.finditer(e["heading"], text, re.M)}
 
 
+_ITEM = re.compile(r"^\s*[-*] \[([ xX])\] (.+?)\s*$", re.M)
+
+
+def checklist_items(text: str) -> dict[str, bool]:
+    """Checklist item text -> done."""
+    return {m.group(2): m.group(1).lower() == "x" for m in _ITEM.finditer(text)}
+
+
 def documents(kind: dict[str, Any]) -> dict[str, Path]:
-    files = sorted(ROOT.glob(kind["files"]))
-    return {p.name: p for p in files if not any(fnmatch.fnmatch(str(p.relative_to(ROOT)), x) for x in kind.get("exclude", []))}
+    globs = kind["files"] if isinstance(kind["files"], list) else [kind["files"]]
+    files = sorted({p for g in globs for p in ROOT.glob(g)})
+    return {
+        (p.name if p.name != "spec.md" or p.parent.name == "specify" else f"{p.parent.name}/{p.name}"): p
+        for p in files
+        if not any(fnmatch.fnmatch(str(p.relative_to(ROOT)), x) for x in kind.get("exclude", []))
+    }
 
 
 def index_rows(kind: dict[str, Any]) -> dict[str, str]:
@@ -461,6 +490,9 @@ def lifecycle_violations(lc: dict[str, Any], since: str | None = None) -> list[d
         if "entries" in kind:
             out += _entry_violations(kid, kind, since)
             continue
+        if "checklist" in kind:
+            out += _checklist_violations(kid, kind, since)
+            continue
         docs = documents(kind)
         index = index_rows(kind)
         for fname, path in docs.items():
@@ -475,7 +507,7 @@ def lifecycle_violations(lc: dict[str, Any], since: str | None = None) -> list[d
                 out.append({"key": f"{ref}:no_status", "detail": "no status in the file or its index"})
             elif state is None:
                 out.append({"key": f"{ref}:unknown_status", "detail": f"status {raw[:80]!r} is not a {kind['title']} state ({', '.join(kind['states'])})"})
-            if index:
+            if kind.get("index"):
                 if fname not in index:
                     out.append({"key": f"{ref}:not_in_index", "detail": f"missing from {kind['index']['file']}"})
                 else:
@@ -487,6 +519,22 @@ def lifecycle_violations(lc: dict[str, Any], since: str | None = None) -> list[d
                 targets = [need["file_prefix"].format(int(t) if t.isdigit() else t) for t in re.findall(need["pattern"], raw)]
                 if not targets or not all(any(n.startswith(t) for n in docs) for t in targets):
                     out.append({"key": f"{ref}:missing_successor", "detail": f"{state} must name an existing successor ({need['pattern']})"})
+            for req in kind.get("requires", []):
+                if state not in req["when"]:
+                    continue
+                m = re.search(req["field"], path.read_text(encoding="utf-8"), re.M)
+                if not m:
+                    continue
+                other = lc["kinds"][req["kind"]]
+                target = Path(m.group(1)).name
+                tdocs = documents(other)
+                if target not in tdocs:
+                    out.append({"key": f"{ref}:requires_missing:{target}", "detail": f"names {req['kind']} {target}, which does not exist"})
+                    continue
+                tstate = normalize(status_text(tdocs[target].read_text(encoding="utf-8"), other["status"]), other)
+                order = other["states"]
+                if tstate is None or order.index(tstate) < order.index(req["min_state"]):
+                    out.append({"key": f"{ref}:requires:{target}", "detail": f"is {state} but its {req['kind']} {target} is {tstate} (needs {req['min_state']})"})
             if since and state:
                 old = subprocess.run(["git", "show", f"{since}:{path.relative_to(ROOT)}"], cwd=ROOT, capture_output=True, text=True)
                 if old.returncode == 0:
@@ -497,6 +545,24 @@ def lifecycle_violations(lc: dict[str, Any], since: str | None = None) -> list[d
             if fname not in docs:
                 out.append({"key": f"{kid}:{fname}:index_without_file", "detail": f"{kind['index']['file']} lists a file that does not exist"})
     return out
+
+
+def _checklist_violations(kid: str, kind: dict[str, Any], since: str | None) -> list[dict[str, str]]:
+    """Items are open -> done. Only an exact-text item going from done back to open is a backward move."""
+    rel = kind["checklist"]
+    path = ROOT / rel
+    if not path.is_file():
+        return [{"key": f"{kid}:missing", "detail": f"{rel} missing"}]
+    if not since:
+        return []
+    prev = subprocess.run(["git", "show", f"{since}:{rel}"], cwd=ROOT, capture_output=True, text=True)
+    if prev.returncode != 0:
+        return []
+    before, now = checklist_items(prev.stdout), checklist_items(path.read_text(encoding="utf-8"))
+    return [
+        {"key": f"{kid}:unchecked:{hashlib.sha256(item.encode()).hexdigest()[:12]}", "detail": f"{rel}: done item reopened: {item[:90]!r}"}
+        for item, done in now.items() if not done and before.get(item) is True
+    ]
 
 
 def _entry_violations(kid: str, kind: dict[str, Any], since: str | None) -> list[dict[str, str]]:
@@ -524,6 +590,11 @@ def _entry_violations(kid: str, kind: dict[str, Any], since: str | None) -> list
 def report(lc: dict[str, Any]) -> str:
     lines = []
     for kid, kind in lc.get("kinds", {}).items():
+        if "checklist" in kind:
+            items = checklist_items((ROOT / kind["checklist"]).read_text(encoding="utf-8"))
+            done = sum(items.values())
+            lines.append(f"{kind['title']}: done {done}, open {len(items) - done}   [{kind['declared']}]")
+            continue
         if "entries" in kind:
             counts_e: dict[str, int] = {}
             for raw in entries(kind).values():
@@ -571,12 +642,17 @@ def triage_audit(procs: dict[str, Any]) -> str:
     if data.returncode != 0:
         raise DocsError(f"gh api failed: {data.stderr.strip()[:200]}")
     issues = [i for page in json.loads(data.stdout) for i in page if "pull_request" not in i]
-    bad = []
+    untriaged, conflicts = [], []
     for i in issues:
         mine = sorted(lbl["name"] for lbl in i["labels"] if lbl["name"] in labels)
-        if len(mine) != 1:
-            bad.append(f"#{i['number']} {', '.join(mine) or '(no triage label)'}: {i['title'][:70]}")
-    return f"{repo}: {len(issues)} open issues, {len(bad)} not in exactly one triage state" + ("".join(f"\n  {b}" for b in bad))
+        line = f"#{i['number']} {', '.join(mine) or '(no state label)'}: {i['title'][:70]}"
+        if not mine:
+            untriaged.append(line)
+        elif len(mine) > 1:
+            conflicts.append(line)
+    out = f"{repo}: {len(issues)} open issues, {len(conflicts)} with conflicting state labels, {len(untriaged)} untriaged"
+    out += "".join(f"\n  CONFLICT {c}" for c in conflicts) + "".join(f"\n  untriaged {u}" for u in untriaged)
+    return out
 
 
 def main(argv: list[str]) -> int:
@@ -609,7 +685,7 @@ def main(argv: list[str]) -> int:
         if argv[0] == "where":
             print(where(procs))
             return 0
-        if argv[0] in ("run", "step", "escalate"):
+        if argv[0] in ("run", "step", "escalate", "resolve"):
             print(run_cmd(procs, argv))
             return 0
         if argv[0] == "triage-audit":

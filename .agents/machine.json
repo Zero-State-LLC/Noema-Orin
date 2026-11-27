@@ -329,17 +329,17 @@
       },
       "INTENT": {
         "do_extra": [
-          "Work from an approved issue."
+          "The operator's instruction or approval, recorded as a `D-NNN` entry in `DECISIONS.md`."
         ]
       },
       "SPEC": {
         "do_extra": [
-          "Scope it in a `SPEC-*.md`."
+          "Publish a `Spec:` issue (`to-spec`); the first slices also kept a `SPEC-*.md`."
         ]
       },
       "PLAN": {
         "do_extra": [
-          "Plan under `execplan/`. Use behavior-first vertical-slice tickets with explicit blockers."
+          "Break the spec into `T-n` ticket issues with blocking edges (`to-tickets`): behavior-first vertical slices with explicit blockers. The first slices also kept an `execplan/`."
         ]
       },
       "IMPLEMENT": {

@@ -303,8 +303,11 @@ def read_state(m: Machine) -> dict[str, Any]:
     if path.is_file():
         data = json.loads(path.read_text(encoding="utf-8"))
         if data.get("state") in m.states:
+            if "stack" not in data:  # older state files kept a single resume state
+                data["stack"] = [data["resume"]] if data.get("resume") else []
+            data["resume"] = data["stack"][-1] if data["stack"] else None
             return data
-    return {"state": m.initial, "previous": None, "resume": None, "since": None}
+    return {"state": m.initial, "previous": None, "resume": None, "stack": [], "since": None}
 
 
 def _write_state(data: dict[str, Any], event: dict[str, Any]) -> None:
@@ -349,12 +352,15 @@ def go(m: Machine, target: str, *, evidence: str = "", user_said: str = "", no_r
         raise MachineError(f"no transition {sid} -> {target}; from {sid} you can go to: {options}")
     if not dest:
         raise MachineError(f"{sid} -> back: no state to resume")
-    # A global exit (STOPPED, ESCALATED, AWAITING_USER) remembers where to come back to.
-    resume = cur.get("resume")
-    if any(e is g for g in m.global_exits) and not resume:
-        resume = sid
-    if e.to == RESUME or dest == m.initial:
-        resume = None
+    # A global exit (STOPPED, ESCALATED, AWAITING_USER) pushes where to come back to; `back` pops one
+    # level, so IMPLEMENT -> AWAITING_USER -> ESCALATED -> back returns to AWAITING_USER, not IMPLEMENT.
+    stack = list(cur.get("stack") or [])
+    if any(e is g for g in m.global_exits):
+        stack.append(sid)
+    if e.to == RESUME and stack:
+        stack.pop()
+    if dest == m.initial:
+        stack = []
     g, ran = e.guard, []
     kind = g.get("kind", "none")
     if kind == "attest" and not evidence.strip():
@@ -377,7 +383,7 @@ def go(m: Machine, target: str, *, evidence: str = "", user_said: str = "", no_r
                     raise MachineError(f"{sid} -> {dest} blocked: `{cmd}` exited {proc.returncode}")
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     _write_state(
-        {"state": dest, "previous": sid, "resume": resume, "since": now},
+        {"state": dest, "previous": sid, "resume": stack[-1] if stack else None, "stack": stack, "since": now},
         {"ts": now, "from": sid, "to": dest, "guard": kind, "evidence": evidence, "user_said": user_said, "ran": ran, "skipped_checks": no_run},
     )
     return dest
@@ -454,7 +460,7 @@ def main(argv: list[str]) -> int:
             print(path.read_text(encoding="utf-8").rstrip() if path.is_file() else "(no transitions yet)")
             return 0
         if cmd == "reset":
-            _write_state({"state": m.initial, "previous": None, "resume": None, "since": None}, {"ts": datetime.now(timezone.utc).isoformat(), "reset": True})
+            _write_state({"state": m.initial, "previous": None, "resume": None, "stack": [], "since": None}, {"ts": datetime.now(timezone.utc).isoformat(), "reset": True})
             print(f"-> {m.initial}")
             return 0
         if cmd == "allowed" and len(argv) > 1:
