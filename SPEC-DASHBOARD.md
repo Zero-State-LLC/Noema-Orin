@@ -1,6 +1,6 @@
 # `SPEC-DASHBOARD`: Native Always-On Mission Control Dashboard (`D-077`)
 
-**Status:** Accepted (`D-077`, 2026-11-27)  
+**Status:** Accepted (`D-077`, 2026-11-27)
 **Design System:** Hallmark `noema-ledger-dark` Workbench (`.hallmark/log.json`, aligned with `Noema-Specs/docs/VISUAL-DESIGN.md`).
 
 ## Problem Statement
