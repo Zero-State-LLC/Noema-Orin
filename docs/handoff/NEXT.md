@@ -167,3 +167,8 @@
 - Fix: a system unit runs xinit + `deploy/jetson/kiosk.py` (WebKit2GTK, already on the image) on vt1, enabled at boot. Verified from a capture of :0 that the full dashboard is live at 3840x2160.
 - Embed server unit trimmed (`-b/-ub 512 -np 1`). RAM is about 1.5 GB available with all services up.
 - Widening at about 17:30Z goes ahead regardless of RAM (shared servers): m01/m02/m04 local_first, embedder on m03/m05.
+
+## 2026-11-27 13:43Z: local_first + semantic memory fleet-wide
+- All 6 agents run local_first S1 (llama-server qwen2.5-3b) with the bge-small embedder. Done early because the shared servers add almost no RAM.
+- 15 min after: 0 tracebacks, embeddings m01 38 / m02 48 / m03 32 / m04 38 / m05 18 / m06 132. fleet.sh 20: m02 11/20, m03 12/20, m05 20/20. m01 is idle as before (org settled). 1.2 GB available.
+- Watch: RAM floor. If available stays under 1 GB, set `NOEMA_KIOSK_RELOAD_S` lower or stop the kiosk (`sudo systemctl stop noema-dashboard-kiosk`). Rollback per agent: restore `mXX.env.bak-pre-local`.
