@@ -180,3 +180,8 @@
 - Legibility: role share over the last 50 turns as a big number + sparkline + "last role action N turns ago"; feed collapses repeats (xN) with a ROLE ONLY toggle (kiosk default); alerts tiered crit/warn/expected (idle_rate muted); RAM bar warns under 1 GiB; S1/min and EMB/min chips; fanned agent pins on the map; kiosk hides operator controls.
 - Known: "cost: Ollama fallbacks 1681/1525" is pre-D-075 history (last real fallback 06:19Z). It ages out of the 24h window at about 06:19Z on 11-28. No action needed.
 - Merged #192 (D-078 opt-in transition log, off by default). It's your call whether to set `NOEMA_TRANSITION_LOG=1`.
+
+## 2026-11-27 14:55Z: C3/C4 deployed, C5 canary on m06
+- #204 (consequence model in shadow) and #205 (shadow accuracy in the digest/dashboard) are rolled fleet-wide: 308 tests OK, all 6 active. Both are inert unless the flags are set.
+- C5 (#200) canary: m06 has `NOEMA_TRANSITION_LOG=1` + `NOEMA_CONSEQUENCE_SHADOW=1` (backup `m06.env.bak-pre-c5`). In the first 10 min: 3 rows (about 48 KB/row, because the full canonical observation is stored), 0 errors, m06 RSS 31 MB (ceiling 160M).
+- Watch: bytes/row is high. At about 6 agents x 250 turns/h that is roughly 70 MB/h before gzip rotation. The rotation cap (16 MB x 32 segments) bounds it at about 512 MB per agent. Check after the 1h soak, then decide on fleet-wide enablement.
