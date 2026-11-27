@@ -120,3 +120,8 @@
 ## 2026-11-27 09:20Z: Phase 2+3 (#171, #172) rolled fleet-wide
 - 255 tests OK on Orin. Canary m03+m06 ran 7 min with 0 tracebacks, then rolled m01/m02/m04/m05/maint. All 6 active, 0 tracebacks.
 - Inference is still `cloud_first`: `NOEMA_INFERENCE_MODE` is unset and no llama-server unit is installed. The T10 local-first switch, T12 TRT embedder and T14 qualify run all need the physical board setup in `deploy/jetson/` (model download, unit install). That is the next hands-on slice.
+
+## 2026-11-27 10:26Z: open-decision research + local S1 canary
+- Noema#937 (x402): research posted on the PR. Noema-Specs COMPLEXITY-DOCTRINE has a "Future-economy hard deferral" that lists x402, USDC and wallets, the PSR campaign repeats it, and paying agents need `third_party_agent_compatibility_at_scale` (BLOCKED on PSR-1, Specs#363 open). It stays parked. Unblocking needs a superseding direction packet from the owner after PSR-1.
+- T10 live as a canary: llama-server (CUDA) runs as `noema-llama-server` (enabled, 3.3 GB RAM still free). Only m06 is `local_first`, from 10:14Z. 0 tracebacks. Model calls are rare (most turns are planner), so the server has seen few requests.
+- Next: after about 2h, compare m06 `local_s1_calls` and role% against cloud. If it's clean, add local_first to m03/m05 (m05 is the heaviest model user at 45%). Rollback is to restore `m06.env.bak-pre-local` and restart.
