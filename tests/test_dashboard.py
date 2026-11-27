@@ -153,10 +153,17 @@ class DashboardEndToEndTests(unittest.TestCase):
         # Secret JWT signature must NEVER appear anywhere in snapshot or agent detail
         dumped = json.dumps(snap) + json.dumps(self.reader.agent_detail("m03", query="relay"))
         self.assertNotIn("SENTINEL_SECRET_JWT_999", dumped)
-        # Incremental log tail emits new turns cleanly
-        events = self.reader.poll_new_turns()
-        self.assertGreaterEqual(len(events), 1)
+        # Incremental log tail: first poll starts at EOF (no history replay), then emits appended turns
         self.assertEqual(self.reader.poll_new_turns(), [])
+        log = next((self.root / "logs").glob("noema-player@m*.log"))
+        with log.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"turn": 999, "source": "planner", "action": "WAIT"}) + "\n")
+        events = self.reader.poll_new_turns()
+        self.assertEqual([e["turn"] for e in events], [999])
+        self.assertEqual(self.reader.poll_new_turns(), [])
+        # A second viewer with its own offsets is independent and also starts live
+        other: dict[str, int] = {}
+        self.assertEqual(self.reader.poll_new_turns(other), [])
 
     def test_d2_d3_http_server_enforces_auth_and_audited_safe_controls(self):
         srv = create_dashboard_server(

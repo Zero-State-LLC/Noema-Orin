@@ -50,13 +50,17 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+  row-gap: 6px;
   padding: 8px 14px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
 
-.brand-group { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand-group { display: flex; align-items: center; gap: 10px; min-width: 0; flex-shrink: 0; }
+.brand-meta { min-width: 0; }
+.brand-title, .brand-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
 .n-glyph {
   width: 30px; height: 30px;
   display: grid; place-items: center;
@@ -89,7 +93,8 @@ html, body {
 .pill-eco { border-color: var(--eco); color: var(--eco); }
 .pill-violet { border-color: var(--violet); color: var(--violet); }
 
-.telemetry-strip { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.telemetry-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; flex: 1 1 auto; }
+.metric-chip .v { white-space: nowrap; }
 .metric-chip {
   display: flex; flex-direction: column;
   padding: 3px 8px;
@@ -101,7 +106,8 @@ html, body {
 .metric-chip .k { font-family: var(--font-mono); font-size: 9px; color: var(--ink-2); letter-spacing: 0.08em; }
 .metric-chip .v { font-family: var(--font-mono); font-size: 12px; color: var(--ink); font-variant-numeric: tabular-nums; }
 
-.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.topbar .btn { white-space: nowrap; }
 .split-bar-wrap { width: 140px; }
 .split-bar {
   display: flex; height: 6px; border-radius: 4px; overflow: hidden;
@@ -175,10 +181,12 @@ html, body {
 .agent-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: min-content;
+  align-content: start;
   gap: 10px;
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
 }
 
 .agent-card {
@@ -193,7 +201,6 @@ html, body {
   gap: 6px;
   cursor: pointer;
   transition: border-color 180ms ease, background-color 120ms ease;
-  min-height: 0;
 }
 .agent-card:hover { background: var(--band); border-color: var(--machine); }
 .agent-card.pulse { border-top-color: var(--cyan); }
