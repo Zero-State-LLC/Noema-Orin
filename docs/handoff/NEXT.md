@@ -85,3 +85,7 @@
 - m06: energy <=1 on 32% of turns, idle WAIT with an empty hold. That WAIT refuels it, so it is slow but working. Could RECHARGE-route it.
 - m04: 8/200 role actions, mostly WAIT/INSPECT after D-070. Needs a new subject source.
 - m02: TRADE 12 (shop) with 1 BUDGET_EXCEEDED. Shop is live.
+
+## 2026-11-27 02:16Z
+- D-073 (#141) + D-073b (#142) deployed to m04: published records no longer hold it in place, and evidence INSPECTs skip published subjects. After restart: 5 rooms in 21 turns, 4 role actions (RECONSTRUCT x2, PUBLISH, SUPERSEDE). Before: 1 room and 0 role actions.
+- Next candidate: m06 RECHARGE-routing (energy <=1 on 32% of turns).
