@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -342,6 +343,62 @@ class DashboardEndToEndTests(unittest.TestCase):
         self.assertIn("MemoryMax=", kiosk_unit)
         xinitrc = (repo / "deploy/jetson/kiosk-xinitrc").read_text(encoding="utf-8")
         self.assertIn("deploy/jetson/kiosk.py", xinitrc)
+
+    def test_d6_cached_snapshot_role_spark_and_alert_levels(self):
+        from noema_orin.dashboard.state import classify_alerts
+
+        a = self.reader.cached_snapshot(ttl=60)
+        b = self.reader.cached_snapshot(ttl=60)
+        self.assertIs(a, b)  # N viewers inside one TTL share one build
+        self.assertTrue(a["map_sig"])
+        m03 = next(x for x in a["agents"] if x["member"] == "m03")
+        self.assertEqual(m03["role_spark"], [1])  # fixture turn is REPAIR, a custodian verb
+        self.assertEqual(m03["turns_since_role"], 0)
+        self.assertTrue(m03["last_role_action"].startswith("REPAIR"))
+        self.assertIn("embedding_count", m03)
+
+        items = classify_alerts(
+            ["m01: idle_rate 0.9", "m02: rsi_rollback (regression)", "m03: 2/5 sessions ended early"],
+            hw={"mem_avail_mib": 700},
+            units={"noema-embed-server": {"active_state": "failed"}, "noema-player@m04": {"active_state": "inactive"}},
+        )
+        levels = {i["text"]: i["level"] for i in items}
+        self.assertEqual(levels["m01: idle_rate 0.9"], "expected")
+        self.assertEqual(levels["m02: rsi_rollback (regression)"], "crit")
+        self.assertEqual(levels["m03: 2/5 sessions ended early"], "warn")
+        self.assertEqual(levels["RAM available 700 MiB (< 1024)"], "warn")
+        self.assertEqual(levels["noema-embed-server failed"], "crit")
+        self.assertFalse(any("m04" in t for t in levels))  # players have their own card state
+
+    def test_d7_stream_sends_map_once_and_omits_recent_turns(self):
+        import socket
+        import threading as _th
+
+        srv = create_dashboard_server(host="127.0.0.1", port=0, reader=self.reader, controller=self.controller)
+        t = _th.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        try:
+            port = srv.server_address[1]
+            s = socket.create_connection(("127.0.0.1", port), timeout=15)
+            s.sendall(b"GET /api/stream?interval=2 HTTP/1.1\r\nHost: x\r\n\r\n")
+            buf = b""
+            deadline = time.monotonic() + 12
+            while buf.count(b"event: snapshot") < 2 and time.monotonic() < deadline:
+                chunk = s.recv(65536)
+                if not chunk:
+                    break
+                buf += chunk
+            s.close()
+            snaps = [json.loads(part.split(b"data: ", 1)[1].split(b"\n", 1)[0])
+                     for part in buf.split(b"event: snapshot\n")[1:3]]
+            self.assertEqual(len(snaps), 2)
+            self.assertIn("map", snaps[0])
+            self.assertNotIn("map", snaps[1])  # unchanged map is not resent
+            self.assertNotIn("recent_turns", snaps[0])
+            self.assertEqual(snaps[0]["map_sig"], snaps[1]["map_sig"])
+        finally:
+            srv.shutdown()
+            srv.server_close()
 
 
 if __name__ == "__main__":

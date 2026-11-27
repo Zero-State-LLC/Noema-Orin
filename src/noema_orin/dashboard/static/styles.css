@@ -415,3 +415,59 @@ html, body {
   .cockpit { grid-template-columns: 1fr; }
   .ctrl-grid, .drawer-body { grid-template-columns: 1fr; }
 }
+
+/* ---- Pass 2: legibility + kiosk (D-077 follow-up) ---- */
+.metric-chip .ram-track { display: block; height: 3px; margin-top: 2px; background: var(--band); border-radius: 2px; overflow: hidden; }
+.metric-chip .ram-fill { display: block; height: 100%; width: 0; background: var(--eco); transition: width 400ms ease; }
+.metric-chip.warn { border-color: var(--warn); }
+.metric-chip.warn .ram-fill { background: var(--warn); }
+.metric-chip.warn .v { color: var(--warn); }
+.metric-chip.crit { border-color: var(--crit); }
+.metric-chip.crit .ram-fill { background: var(--crit); }
+.metric-chip.crit .v { color: var(--crit); }
+
+.alert-muted {
+  padding: 3px 14px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.card-health { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; }
+.role-pct-col { grid-row: 1; grid-column: 1; display: flex; flex-direction: column; }
+.role-pct { font-family: var(--font-display); font-weight: 800; font-size: 26px; line-height: 1; font-variant-numeric: tabular-nums; }
+.role-pct.good { color: var(--eco); }
+.role-pct.mid { color: var(--warn); }
+.role-pct.low { color: var(--ink-2); }
+.role-pct-lbl { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: 0.08em; color: var(--ink-2); margin-top: 2px; }
+.spark { grid-row: 1; grid-column: 2; width: 100%; height: 28px; background: var(--inset); border: 1px solid var(--line); border-radius: 4px; }
+.role-since { grid-row: 2; grid-column: 1 / span 2; font-family: var(--font-mono); font-size: 10.5px; color: var(--machine); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.feed-row.is-role { border-left: 2px solid var(--eco); }
+.mini-toggle { font-family: var(--font-mono); font-size: 10px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 4px; cursor: pointer; letter-spacing: 0.06em; }
+
+#reach-svg .halo { animation: halo-pulse 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes halo-pulse { 0%, 100% { opacity: 0.25; transform: scale(0.85); } 50% { opacity: 0.9; transform: scale(1.12); } }
+@media (prefers-reduced-motion: reduce) { #reach-svg .halo { animation: none; opacity: 0.6; } }
+/* Kiosk WebKitGTK paints in software at 4K: any infinite animation means continuous full repaints. */
+html.kiosk #reach-svg .halo { animation: none; opacity: 0.75; }
+html.kiosk .metric-chip .ram-fill { transition: none; }
+
+/* Kiosk (?kiosk=1): wall display. Bigger type, no operator controls, role-only feed. */
+html.kiosk { font-size: 112%; }
+html.kiosk .topbar-actions .btn, html.kiosk .ctl, html.kiosk #infra-units button { pointer-events: none; }
+html.kiosk .topbar-actions .btn, html.kiosk .card-foot .ctl,
+html.kiosk .tab-bar .tab:not(:first-child), html.kiosk #feed-filter, html.kiosk .mini-toggle { display: none; }
+html.kiosk .card-handle { font-size: 17px; }
+html.kiosk .card-role, html.kiosk .card-room, html.kiosk .card-action { font-size: 13px; }
+html.kiosk .b-head { font-size: 11px; }
+html.kiosk .role-pct { font-size: 34px; }
+html.kiosk .role-since { font-size: 13px; }
+html.kiosk .metric-chip .k { font-size: 11px; }
+html.kiosk .metric-chip .v { font-size: 16px; }
+html.kiosk .feed-row { font-size: 13px; }
+html.kiosk .kicker { font-size: 12px; }
+html.kiosk .alert-banner { font-size: 14px; }
