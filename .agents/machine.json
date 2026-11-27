@@ -1,0 +1,378 @@
+{
+  "format": "noema-agent-machine/1",
+  "meta": {
+    "repo": "Zero-State-LLC/Noema-Orin",
+    "core_digest": "sha256:0cd970aa253383ced82909d902a974f4a0cc7f9b54a0e07dd2f9cbadcdd05d35"
+  },
+  "core": {
+    "initial": "ORIENT",
+    "states": {
+      "ORIENT": {
+        "summary": "Read the task, this file and the docs it touches; check `git status`.",
+        "allow": [
+          "read",
+          "docs_board"
+        ],
+        "exits": [
+          {
+            "to": "INTENT",
+            "when": "non-trivial product change, RFC or feature",
+            "guard": {
+              "kind": "attest",
+              "prompt": "why it is non-trivial"
+            }
+          },
+          {
+            "to": "IMPLEMENT",
+            "when": "clarification, adapter or docs-only hygiene; no contract change",
+            "guard": {
+              "kind": "attest",
+              "prompt": "why no intent is needed"
+            }
+          }
+        ]
+      },
+      "INTENT": {
+        "summary": "Record the intent before any spec.",
+        "allow": [
+          "read",
+          "branch",
+          "docs_board"
+        ],
+        "exits": [
+          {
+            "to": "SPEC",
+            "when": "intent recorded",
+            "guard": {
+              "kind": "attest",
+              "prompt": "path or link to the intent"
+            }
+          }
+        ]
+      },
+      "SPEC": {
+        "summary": "Write the spec.",
+        "allow": [
+          "read",
+          "branch",
+          "docs_board"
+        ],
+        "exits": [
+          {
+            "to": "PLAN",
+            "when": "spec written",
+            "guard": {
+              "kind": "attest",
+              "prompt": "path or link to the spec"
+            }
+          }
+        ]
+      },
+      "PLAN": {
+        "summary": "Plan the change.",
+        "allow": [
+          "read",
+          "branch",
+          "docs_board"
+        ],
+        "exits": [
+          {
+            "to": "IMPLEMENT",
+            "when": "plan ready",
+            "guard": {
+              "kind": "attest",
+              "prompt": "path or link to the plan"
+            }
+          }
+        ]
+      },
+      "IMPLEMENT": {
+        "summary": "Make the change on a branch.",
+        "allow": [
+          "read",
+          "branch",
+          "docs_board"
+        ],
+        "exits": [
+          {
+            "to": "VERIFY",
+            "when": "change ready to check"
+          }
+        ]
+      },
+      "VERIFY": {
+        "summary": "Run the repo's checks.",
+        "allow": [
+          "read",
+          "branch"
+        ],
+        "exits": [
+          {
+            "to": "REVIEW",
+            "when": "checks pass",
+            "guard": {
+              "kind": "run",
+              "commands": "@verify"
+            }
+          },
+          {
+            "to": "IMPLEMENT",
+            "when": "checks fail"
+          }
+        ]
+      },
+      "REVIEW": {
+        "summary": "Pull request open; fix CI on it.",
+        "allow": [
+          "read",
+          "branch",
+          "pr",
+          "docs_board",
+          "merge"
+        ],
+        "exits": [
+          {
+            "to": "MERGED",
+            "when": "merged",
+            "guard": {
+              "kind": "attest",
+              "prompt": "PR link and who merged"
+            }
+          },
+          {
+            "to": "IMPLEMENT",
+            "when": "changes requested or CI red"
+          }
+        ]
+      },
+      "MERGED": {
+        "summary": "Merged.",
+        "allow": [
+          "read",
+          "docs_board"
+        ],
+        "exits": [
+          {
+            "to": "ORIENT",
+            "when": "next task"
+          }
+        ]
+      },
+      "ESCALATED": {
+        "summary": "Something looks wrong; report it instead of working around it.",
+        "allow": [
+          "read",
+          "docs_board"
+        ],
+        "exits": [
+          {
+            "to": "@resume",
+            "when": "reported; work can continue",
+            "guard": {
+              "kind": "attest",
+              "prompt": "defect or report link"
+            }
+          },
+          {
+            "to": "ORIENT",
+            "when": "task dropped",
+            "guard": {
+              "kind": "attest",
+              "prompt": "why"
+            }
+          }
+        ]
+      },
+      "AWAITING_USER": {
+        "summary": "Give one summary and ask once; wait for the user's own words.",
+        "allow": [
+          "read"
+        ],
+        "exits": [
+          {
+            "to": "APPROVED",
+            "when": "the user says yes",
+            "guard": {
+              "kind": "user_yes",
+              "prompt": "quote the user's yes"
+            }
+          },
+          {
+            "to": "@resume",
+            "when": "the user says no or redirects",
+            "guard": {
+              "kind": "user_yes",
+              "prompt": "quote the user's reply"
+            }
+          }
+        ]
+      },
+      "APPROVED": {
+        "summary": "Do the one approved step, then record it.",
+        "allow": [
+          "read",
+          "branch",
+          "pr",
+          "docs_board"
+        ],
+        "exits": [
+          {
+            "to": "@resume",
+            "when": "done and recorded",
+            "guard": {
+              "kind": "attest",
+              "prompt": "what was done and where it is recorded"
+            }
+          }
+        ]
+      },
+      "STOPPED": {
+        "summary": "Stop autonomous work.",
+        "allow": [
+          "read"
+        ],
+        "no_global_exits": true,
+        "exits": [
+          {
+            "to": "ORIENT",
+            "when": "the user clears the stop",
+            "guard": {
+              "kind": "user_yes",
+              "prompt": "quote the user clearing it"
+            }
+          }
+        ]
+      }
+    },
+    "global_exits": [
+      {
+        "to": "STOPPED",
+        "when": "on a stop signal",
+        "guard": {
+          "kind": "attest",
+          "prompt": "which signal"
+        }
+      },
+      {
+        "to": "ESCALATED",
+        "when": "when CI, tests or the request itself look wrong",
+        "guard": {
+          "kind": "attest",
+          "prompt": "what looks wrong"
+        }
+      },
+      {
+        "to": "AWAITING_USER",
+        "when": "before a step that needs the user",
+        "guard": {
+          "kind": "attest",
+          "prompt": "what you asked"
+        }
+      }
+    ],
+    "actions": {
+      "read": {
+        "tier": "unstated",
+        "text": "Read the repo; run tests, linters, builds and type checks."
+      },
+      "branch": {
+        "tier": "unstated",
+        "text": "Create branches, commit and push branches."
+      },
+      "pr": {
+        "tier": "unstated",
+        "text": "Open, update and close your own pull requests."
+      },
+      "merge": {
+        "tier": "unstated",
+        "text": "Merge a pull request."
+      },
+      "docs_board": {
+        "tier": "unstated",
+        "text": "Update docs and the issue board."
+      }
+    }
+  },
+  "repo": {
+    "order": [
+      "ORIENT",
+      "LIVE_ATTACH_PREFLIGHT",
+      "INTENT",
+      "SPEC",
+      "PLAN",
+      "IMPLEMENT",
+      "VERIFY",
+      "REVIEW",
+      "MERGED",
+      "APPROVED"
+    ],
+    "verify": [
+      "bash scripts/check.sh",
+      "python3 .agents/machine.py check"
+    ],
+    "notes": [
+      "No standing grant in this repo (unlike Noema and Noema-Specs).",
+      "Triage labels and the G-NNN gates in DECISIONS.md are machines too: `python3 .agents/docs.py`. Vendored Hermes skills stay as pinned in `skills-lock.json`."
+    ],
+    "states": {
+      "ORIENT": {
+        "exits_extra": [
+          {
+            "to": "LIVE_ATTACH_PREFLIGHT",
+            "when": "the task is a live attach",
+            "guard": {
+              "kind": "attest",
+              "prompt": "which world and which approved issue"
+            }
+          }
+        ]
+      },
+      "INTENT": {
+        "do_extra": [
+          "Work from an approved issue."
+        ]
+      },
+      "SPEC": {
+        "do_extra": [
+          "Scope it in a `SPEC-*.md`."
+        ]
+      },
+      "PLAN": {
+        "do_extra": [
+          "Plan under `execplan/`. Use behavior-first vertical-slice tickets with explicit blockers."
+        ]
+      },
+      "IMPLEMENT": {
+        "do_extra": [
+          "Write failing tests before implementation."
+        ]
+      },
+      "REVIEW": {
+        "do_extra": [
+          "Code review."
+        ]
+      },
+      "LIVE_ATTACH_PREFLIGHT": {
+        "summary": "Before a live attach.",
+        "do": [
+          "Independently verify authorization, discovery, seal, scoped credential, production pin and human stop.",
+          "Do not use `/play` browser automation as the canonical agent route."
+        ],
+        "allow": [
+          "read"
+        ],
+        "exits": [
+          {
+            "to": "ORIENT",
+            "when": "not attaching",
+            "guard": {
+              "kind": "attest",
+              "prompt": "why"
+            }
+          }
+        ]
+      }
+    },
+    "actions": {}
+  }
+}

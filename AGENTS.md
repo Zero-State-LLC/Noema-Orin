@@ -5,13 +5,40 @@ This public repository owns **Orin-hosted Controller operations**, not NOEMA wor
 - A Controller acts for an Agent Player; it is not a Player or world writer. The hosted Gateway, Durable Objects and Postgres keep their existing authority.
 - Keep hosted and offline-spark profiles, credentials and evidence separate. Never auto-failover, execute offline research against the live world, or claim production migration.
 - Spec 014's Spark-writer statement conflicts with canonical hosted Platform authority. `offline-spark` execution is BLOCKED pending a canonical resolution and independent hardware evidence.
-- Before a live attach, independently verify authorization, discovery, seal, scoped credential, production pin and human stop. Do not use `/play` browser automation as the canonical agent route.
 - Do not put tokens, private prompts, browser sessions or Admin credentials into code, issues, fixtures, telemetry or model context.
 - Treat telemetry as telemetry, not canonical evidence; distinguish OBSERVED, INFERRED, SPECULATIVE, NOT_COMPUTABLE.
-- Use behavior-first vertical-slice tickets, explicit blockers, failing tests before implementation, and code review. Do not create invented Pocock manifests or a strategy-teaching skill.
+- Do not create invented Pocock manifests or a strategy-teaching skill.
 - No runtime changes, deployments or new contract fields on the strength of this initial specification alone.
 
 <!-- trail:start -->
+
+<!-- agent-machine:start · generated: edit .agents/machine.json, then run `python3 .agents/machine.py render --write` -->
+
+## Workflow
+
+Agent work is a state machine (`.agents/machine.json`): `python3 .agents/machine.py status` shows where you are and what is allowed; `go STATE` moves.
+
+**Path:** ORIENT → INTENT → SPEC → PLAN → IMPLEMENT → VERIFY → REVIEW → MERGED.
+- ORIENT → IMPLEMENT when clarification, adapter or docs-only hygiene; no contract change.
+- ORIENT → LIVE_ATTACH_PREFLIGHT when the task is a live attach.
+- VERIFY → IMPLEMENT when checks fail.
+- REVIEW → IMPLEMENT when changes requested or CI red.
+- **INTENT**: Work from an approved issue.
+- **SPEC**: Scope it in a `SPEC-*.md`.
+- **PLAN**: Plan under `execplan/`. Use behavior-first vertical-slice tickets with explicit blockers.
+- **IMPLEMENT**: Write failing tests before implementation.
+- **VERIFY**: `go REVIEW` runs `bash scripts/check.sh`, `python3 .agents/machine.py check`.
+- **REVIEW**: Code review.
+- **LIVE_ATTACH_PREFLIGHT** (from ORIENT when the task is a live attach): Independently verify authorization, discovery, seal, scoped credential, production pin and human stop. Do not use `/play` browser automation as the canonical agent route. Then: ORIENT when not attaching.
+- **APPROVED** (from AWAITING_USER when the user says yes): Do the one approved step, then record it. Then: back when done and recorded.
+- **Any state → STOPPED** on a stop signal: Stop autonomous work. Then: ORIENT when the user clears the stop.
+- **Any state → ESCALATED** when CI, tests or the request itself look wrong: Something looks wrong; report it instead of working around it. Then: back when reported; work can continue · ORIENT when task dropped.
+- **Any state → AWAITING_USER** before a step that needs the user: Give one summary and ask once; wait for the user's own words. Then: back when the user says no or redirects.
+- No standing grant in this repo (unlike Noema and Noema-Specs).
+- Triage labels and the G-NNN gates in DECISIONS.md are machines too: `python3 .agents/docs.py`. Vendored Hermes skills stay as pinned in `skills-lock.json`.
+
+<!-- agent-machine:end -->
+
 ## Trail — repo context graph
 
 This repo is indexed in `.trail/cache/`: small linked markdown nodes that explain each
