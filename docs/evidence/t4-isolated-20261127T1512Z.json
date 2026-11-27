@@ -1,0 +1,18 @@
+{
+    "world_id": "test.hosted-canonical.orin-t4-202611270712",
+    "server": "https://noema.guru",
+    "client_version": "0.2.0",
+    "client_sha": "89a1fcac4c7c8ec9da7442e2392af85fac733fd8",
+    "host": "jetson-orin-nano (L4T R39.2.2, py3.12)",
+    "credential": "Admin-minted controller token (tester, D-010), temp config_home, not persisted",
+    "prepare_ms": 1179.1,
+    "model_context_clean": true,
+    "look_ok": true,
+    "settled": true,
+    "command_latency_ms": 272.1,
+    "submissions": 1,
+    "invalid_proposal_refused": true,
+    "perihelion_refused": true,
+    "claim_label": "OBSERVED",
+    "evidence_scope": "ISOLATED_TEST_WORLD_ONLY"
+}
