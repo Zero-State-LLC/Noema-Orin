@@ -77,3 +77,11 @@
 - Canary m02+m06 ran 8 min with no tracebacks (m02 did a treasury CONSTRUCT), then rolled m01/m03/m04/m05.
 - Watch: shop_planner (stall stocking/listing, equipment upkeep) and the RSI `unequipped_broken_tool_turns >= 12` rollback.
 - Due ~2026-11-27 00:00Z: `fleet.sh 200 --save` custodian-energy re-measure.
+
+## 2026-11-27 00:25Z: 24h re-measure
+- `fleet.sh 200 --save`: role 211/1200 (was 98/600 at 100 turns). All 6 active, 0 tracebacks, no rsi_rollback.
+- Custodian (m03): 82/200 role actions with REFINE 37, and energy <=1 on only 1% of turns. The energy shortage is resolved by RECHARGE and D-063..065, so the fallback plan (cargo fuel +3) is not needed. Closed.
+- D-072 (#139) deployed to m01: AGREEMENT_FORM went from 46/200 (mostly NOT_COLOCATED) to 1 per party. Verified: 1 attempt after restart.
+- m06: energy <=1 on 32% of turns, idle WAIT with an empty hold. That WAIT refuels it, so it is slow but working. Could RECHARGE-route it.
+- m04: 8/200 role actions, mostly WAIT/INSPECT after D-070. Needs a new subject source.
+- m02: TRADE 12 (shop) with 1 BUDGET_EXCEEDED. Shop is live.
