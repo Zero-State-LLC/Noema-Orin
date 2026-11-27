@@ -110,3 +110,9 @@
 - #153 (close SQLite connections in memory_sync/metrics) was merged at 07:29Z but not deployed. Now rolled fleet-wide: 220 tests OK on Orin, all 6 units restarted 08:27-08:34Z, 0 tracebacks.
 - fleet.sh 30 right after: role 47/180. m03 REFINE 7 + REPAIR 6. m05 MESSAGE 15. m01/m04 idle, which is expected (org settled, subjects published).
 - Watch: m06 shows energy <=1 on 40% of turns in this short window (it was 0% after D-074). The window spans the restart, so re-check with `fleet.sh 100`. If it stays above 20%, look at the D-074 generator-walk path.
+
+## 2026-11-27 08:57Z: D-076 Phase 1 (#169) rolled fleet-wide
+- 241 tests OK on Orin from new source. Canary m03+m06 ran 8 min with 0 tracebacks (m06 used FOCUS). Then rolled m01/m02/m04/m05.
+- fleet.sh 20 after: role 40/120, energy <=1 on 7%, 0 tracebacks in the player logs. Note: `journalctl --user` has no journal on Orin. Grep `~/noema-players/logs/noema-player@mXX.log` instead.
+- Open PRs: only Noema#937 (x402 plan, external author). Its review holds merge on an RFC-0120 conflict and the Noema-Specs `external_crypto_economy` DEFERRED status. Lifting that deferral is a product decision for the user, so it stays open.
+- Next: watch the D-076 verbs (SELL_OFFER, CORE_SWAP, contracts, COMMEMORATE) for spam over 24h. Phase 2 (T8-T11) is ready-for-human until Phase 1 soaks.
