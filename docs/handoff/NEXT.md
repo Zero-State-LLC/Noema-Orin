@@ -196,3 +196,8 @@
 - #4 closed by #210 (D-081): `official_isolated.OfficialIsolatedClient` wraps noema-client 0.2.0. A real isolated-world LOOK from the Orin was ok and settled in 272 ms, receipt `docs/evidence/t4-isolated-20261127T1512Z.json`. It used the Admin-minted tester token instead of a device code.
 - #6 closed by #211 (D-082) after Specs#479 (ADR-013) scoped spec 014 to a non-canonical `offline.spark.*` chamber. No Spark host is reachable, so there is no chamber run. The CLI `offline-spark` stays REFUSED until one exists.
 - Parent #7 closed. Next: C5 soak result (m06), then fleet-wide enablement.
+
+## 2026-11-27 16:02Z: C5 measured, fleet enabled (#200 closed)
+- m06 1 h soak: 126 rows/h, 20.3 KB/row (2.56 MB/h per agent), RSS 43 MB, 0 errors. Shadow 31/31 correct, but every case was tn, so there is no rejection signal yet.
+- `NOEMA_TRANSITION_LOG=1` and `NOEMA_CONSEQUENCE_SHADOW=1` are now in `~/.config/noema-orin/runtime-overrides.env` (backup `.bak-pre-c5`). All 6 are active.
+- Next: once rejections accumulate, re-read the digest for tp/fp. Watch free RAM (1.7 GB).
