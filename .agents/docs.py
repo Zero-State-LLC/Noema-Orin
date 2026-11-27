@@ -16,11 +16,18 @@ Two sources of truth live beside the agent workflow machine:
                                                   change since REF moves forward
     python3 .agents/docs.py render [--write]      print or rewrite generated blocks
     python3 .agents/docs.py report                documents per lifecycle state
-    python3 .agents/docs.py run SKILL.RFC         start a procedure (one at a time)
-    python3 .agents/docs.py where                 current procedure step
+    python3 .agents/docs.py run SKILL.RFC         start a procedure or runbook (one at a time)
+    python3 .agents/docs.py where                 current step, its gate, and the never list
     python3 .agents/docs.py step --evidence "…"   finish the current step
+    python3 .agents/docs.py step --user-said "…"  finish a step that needs the user's own words
     python3 .agents/docs.py escalate --evidence "…"
     python3 .agents/docs.py triage-audit          open issues not in exactly one triage state (gh)
+
+Runbooks ("runbooks" in procedures.json) are machines that sit beside the
+runbook's own text, which stays hand-written: each step names an anchor that
+must still appear in the runbook, and a gate (attest, user_yes, run). Steps
+marked irreversible, and every step of a human_only runbook, need the user's
+own words. The runbook's Never lines are checked to still be in its text.
 
 Known pre-existing lifecycle defects are listed in .agents/docs-baseline.json
 with a tracking issue; check fails on new ones and on baseline entries that
@@ -32,6 +39,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import re
+import shlex
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -70,8 +78,25 @@ def end_marker(name: str) -> str:
 
 
 def steps_of(proc: dict[str, Any]) -> list[str]:
+    if "steps" in proc and isinstance(proc["steps"], list) and proc["steps"] and isinstance(proc["steps"][0], dict):
+        return [st["do"] for st in proc["steps"]]  # runbook
     p = proc["procedure"]
     return list(p["steps"]) if p["form"] in ("steps", "chain") else [p["text"]]
+
+
+def find_procedure(procs: dict[str, Any], name: str) -> dict[str, Any] | None:
+    return procs.get("skills", {}).get(name) or procs.get("runbooks", {}).get(name)
+
+
+def step_gate(proc: dict[str, Any], i: int) -> dict[str, Any]:
+    """Gate for step i. Runbook steps carry their own; human_only and irreversible steps always need the user."""
+    if "runbook" not in proc:
+        return {"kind": "attest"}
+    st = proc["steps"][i]
+    gate = dict(st.get("gate") or {"kind": "attest"})
+    if (proc.get("human_only") or st.get("irreversible")) and gate.get("kind") != "user_yes":
+        gate = {"kind": "user_yes", "prompt": st.get("prompt", "the user's own words for this step")}
+    return gate
 
 
 def render_skills(skills: dict[str, Any]) -> str:
@@ -162,6 +187,8 @@ def validate_procedures(procs: dict[str, Any]) -> list[str]:
             errs.append(f"{v['dir']}: {name} is installed but not pinned in {v['lock']}")
     for mirror in procs.get("mirrors", []):
         errs += _mirror_errors(procs, mirror)
+    for name, rb in procs.get("runbooks", {}).items():
+        errs += _runbook_errors(name, rb)
     t = procs.get("triage")
     if t:
         labels = set(t["states"])
@@ -216,6 +243,45 @@ def _mirror_errors(procs: dict[str, Any], mirror: dict[str, Any]) -> list[str]:
     return errs
 
 
+def _runbook_errors(name: str, rb: dict[str, Any]) -> list[str]:
+    errs: list[str] = []
+    path = ROOT / rb["runbook"]
+    if not path.is_file():
+        return [f"{name}: {rb['runbook']} missing"]
+    text = path.read_text(encoding="utf-8")
+    for key in ("use_when", "escalate_when", "steps"):
+        if not rb.get(key):
+            errs.append(f"{name}: missing {key}")
+    pos = 0
+    for i, st in enumerate(rb.get("steps", []), 1):
+        anchor = st.get("anchor")
+        if anchor:
+            at = text.find(anchor, pos)
+            if at < 0:
+                where_ = "out of order" if anchor in text else "missing"
+                errs.append(f"{name} step {i} ({st.get('id')}): anchor {anchor!r} {where_} in {rb['runbook']}")
+            else:
+                pos = at
+        g = st.get("gate", {"kind": "attest"})
+        if g.get("kind") not in ("attest", "user_yes", "run"):
+            errs.append(f"{name} step {i}: gate kind {g.get('kind')!r}")
+        if g.get("kind") == "run" and not g.get("commands"):
+            errs.append(f"{name} step {i}: run gate needs commands")
+        if st.get("irreversible") and g.get("kind") != "user_yes":
+            errs.append(f"{name} step {i} ({st.get('id')}): irreversible steps need a user_yes gate")
+    for line in rb.get("never", []):
+        if line not in text:
+            errs.append(f"{name}: never line {line!r} no longer in {rb['runbook']}")
+    lst = rb.get("numbered")
+    if lst:
+        body = section(text, lst["section"]) or ""
+        got = [re.sub(r"^\d+\.\s+", "", ln).strip() for ln in body.splitlines() if re.match(r"^\d+\.\s", ln)]
+        want = [st["do"] for st in rb["steps"] if st.get("numbered")]
+        if got != want:
+            errs.append(f"{name}: numbered steps in {rb['runbook']} {lst['section']} differ from the machine: {got} != {want}")
+    return errs
+
+
 # procedure runner ----------------------------------------------------------
 
 
@@ -250,19 +316,31 @@ def _load_run() -> dict[str, Any] | None:
 
 
 def where(procs: dict[str, Any]) -> str:
-    if not procs.get("skills"):
+    names = list(procs.get("skills", {})) + list(procs.get("runbooks", {}))
+    if not names:
         return "This repo defines no runnable procedures in .agents/procedures.json."
     run = _load_run()
     if not run:
-        return "No procedure running. Start one: `python3 .agents/docs.py run SKILL.ORIENT`."
-    s = procs["skills"][run["procedure"]]
+        return f"No procedure running. Start one: `python3 .agents/docs.py run NAME` ({', '.join(names)})."
+    s = find_procedure(procs, run["procedure"])
+    assert s is not None
     steps = steps_of(s)
     i = run["step"]
     lines = [f"{run['procedure']}: {s['use_when']}"]
+    if "runbook" in s:
+        lines[0] += f"  [{s['runbook']}{' · human only' if s.get('human_only') else ''}]"
     if run.get("escalated"):
         lines.append(f"ESCALATED: {run['escalated']} (stop rule: {s['escalate_when']})")
     elif i < len(steps):
-        lines += [f"Step {i + 1}/{len(steps)}: {steps[i]}", f"Stop / escalate when: {s['escalate_when']}"]
+        g = step_gate(s, i)
+        prompt = g.get("prompt", "the user's own words")
+        need = {"attest": '--evidence "…"', "user_yes": f'--user-said "…" ({prompt})', "run": "runs " + ", ".join(g.get("commands", []))}[g["kind"]]
+        sid = f" {s['steps'][i].get('id')}" if "runbook" in s else ""
+        irr = " IRREVERSIBLE." if "runbook" in s and s["steps"][i].get("irreversible") else ""
+        lines += [f"Step {i + 1}/{len(steps)}{sid}: {steps[i]}{irr}", f"Finish with: step {need}", f"Stop / escalate when: {s['escalate_when']}"]
+        lines += [f"Never: {n}" for n in s.get("never", [])]
+    elif "runbook" in s:
+        lines.append("All steps done. `python3 .agents/docs.py step --evidence \"…\"` records where the receipt is.")
     else:
         lines += [f"VALIDATE: {s['validation']}", f"Outputs: {s['outputs']}", "Then `python3 .agents/docs.py step --evidence \"…\"` to finish."]
     return "\n".join(lines)
@@ -270,12 +348,17 @@ def where(procs: dict[str, Any]) -> str:
 
 def run_cmd(procs: dict[str, Any], argv: list[str]) -> str:
     cmd = argv[0]
-    evidence = argv[argv.index("--evidence") + 1] if "--evidence" in argv and argv.index("--evidence") + 1 < len(argv) else ""
+
+    def opt(flag: str) -> str:
+        return argv[argv.index(flag) + 1] if flag in argv and argv.index(flag) + 1 < len(argv) else ""
+
+    evidence, user_said = opt("--evidence"), opt("--user-said")
     run = _load_run()
     if cmd == "run":
         name = argv[1] if len(argv) > 1 else ""
-        if name not in procs.get("skills", {}):
-            raise DocsError(f"unknown procedure {name!r}; known: {', '.join(procs.get('skills', {}))}")
+        if find_procedure(procs, name) is None:
+            known = list(procs.get("skills", {})) + list(procs.get("runbooks", {}))
+            raise DocsError(f"unknown procedure {name!r}; known: {', '.join(known)}")
         if run and not run.get("done"):
             raise DocsError(f"{run['procedure']} is still running; finish it (`step`) or `escalate` first")
         _save_run({"procedure": name, "step": 0, "started": _now(), "log": []})
@@ -292,10 +375,28 @@ def run_cmd(procs: dict[str, Any], argv: list[str]) -> str:
     if cmd == "step":
         if run.get("escalated"):
             raise DocsError("procedure is escalated; resolve it with the user, then `run` again")
-        if not evidence:
+        proc = find_procedure(procs, run["procedure"])
+        assert proc is not None
+        steps = steps_of(proc)
+        ran: list[dict[str, Any]] = []
+        if run["step"] < len(steps):
+            g = step_gate(proc, run["step"])
+            if g["kind"] == "user_yes":
+                if not user_said.strip():
+                    raise DocsError(f"this step needs the user's own words: --user-said \"…\" ({g.get('prompt', '')})")
+                if g.get("must_match") and not re.search(g["must_match"], user_said):
+                    raise DocsError(f"the user's words must match {g['must_match']!r} ({g.get('prompt', '')})")
+            elif g["kind"] == "run":
+                for c in g["commands"]:
+                    code = subprocess.run(shlex.split(c), cwd=ROOT).returncode
+                    ran.append({"cmd": c, "exit": code})
+                    if code != 0:
+                        raise DocsError(f"step blocked: `{c}` exited {code}")
+            elif not evidence:
+                raise DocsError("step needs --evidence")
+        elif not evidence:
             raise DocsError("step needs --evidence")
-        steps = steps_of(procs["skills"][run["procedure"]])
-        run["log"].append({"ts": _now(), "step": run["step"] + 1, "evidence": evidence})
+        run["log"].append({"ts": _now(), "step": run["step"] + 1, "evidence": evidence, "user_said": user_said, "ran": ran})
         if run["step"] >= len(steps):
             _save_run(None)
             return f"{run['procedure']} done ({len(run['log'])} entries)."
@@ -492,7 +593,7 @@ def main(argv: list[str]) -> int:
             if not errs:
                 n = len(_read(BASELINE).get("known", []))
                 vend = sum(len(json.loads((ROOT / v["lock"]).read_text()).get("skills", {})) for v in procs.get("vendored", []))
-                print(f"docs-machine ok: {len(procs.get('skills', {}))} procedures, {vend} vendored pinned, lifecycles legal ({n} known defects baselined)")
+                print(f"docs-machine ok: {len(procs.get('skills', {}))} procedures, {len(procs.get('runbooks', {}))} runbooks, {vend} vendored pinned, lifecycles legal ({n} known defects baselined)")
             return 1 if errs else 0
         if argv[0] == "render":
             for path, name, block in blocks(procs):
