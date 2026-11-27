@@ -172,3 +172,11 @@
 - All 6 agents run local_first S1 (llama-server qwen2.5-3b) with the bge-small embedder. Done early because the shared servers add almost no RAM.
 - 15 min after: 0 tracebacks, embeddings m01 38 / m02 48 / m03 32 / m04 38 / m05 18 / m06 132. fleet.sh 20: m02 11/20, m03 12/20, m05 20/20. m01 is idle as before (org settled). 1.2 GB available.
 - Watch: RAM floor. If available stays under 1 GB, set `NOEMA_KIOSK_RELOAD_S` lower or stop the kiosk (`sudo systemctl stop noema-dashboard-kiosk`). Rollback per agent: restore `mXX.env.bak-pre-local`.
+
+## 2026-11-27 14:28Z: dashboard efficiency + legibility pass
+- Measured on the Orin. Before: kiosk WebKit 820->980 MB RSS growing, 479 s CPU per 10 min (about 80% of a core). Snapshot 52 KB built per viewer every 4 s, and full DOM teardown each tick.
+- After: WebKit 236 MB steady, 3.1 s CPU per 2 min (about 2.6% of a core). Snapshot is cached (repeat GETs take 3-6 ms vs 300 ms). SSE frames are 13-19 KB without the map and 37 KB with it. The map hash ignores seen_seq. RAM available went from about 1.0 GB to 2.2 GB.
+- The biggest single win: WebKitGTK paints in software at 4K, so the infinite halo animation and HW-compositing churn drove the CPU. The kiosk now uses HardwareAccelerationPolicy.NEVER and no infinite animations.
+- Legibility: role share over the last 50 turns as a big number + sparkline + "last role action N turns ago"; feed collapses repeats (xN) with a ROLE ONLY toggle (kiosk default); alerts tiered crit/warn/expected (idle_rate muted); RAM bar warns under 1 GiB; S1/min and EMB/min chips; fanned agent pins on the map; kiosk hides operator controls.
+- Known: "cost: Ollama fallbacks 1681/1525" is pre-D-075 history (last real fallback 06:19Z). It ages out of the 24h window at about 06:19Z on 11-28. No action needed.
+- Merged #192 (D-078 opt-in transition log, off by default). It's your call whether to set `NOEMA_TRANSITION_LOG=1`.

@@ -132,6 +132,8 @@ def fetch_llama_metrics(base_url: str, *, timeout: float = 3.0) -> dict[str, flo
             "llamacpp:prompt_tokens_seconds",
             "llamacpp:kv_cache_usage_ratio",
             "llamacpp:requests_processing",
+            "llamacpp:n_decode_total",
+            "llamacpp:tokens_predicted_total",
         ):
             metrics[name] = round(val, 4)
     return metrics

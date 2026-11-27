@@ -5,6 +5,7 @@ Uses the WebKit2GTK already shipped with the L4T Ubuntu desktop image, so no
 Chromium/snap install is needed. Retries until the dashboard is reachable and
 reloads if the web process dies, so it can run unattended.
 """
+import contextlib
 import os
 import sys
 
@@ -27,6 +28,10 @@ def main() -> int:
     WebKit2.WebContext.get_default().set_cache_model(WebKit2.CacheModel.DOCUMENT_VIEWER)
     settings = view.get_settings()
     settings.set_enable_page_cache(False)
+    # Software rendering at 4K on the shared GPU: never accelerate/composite (avoids GL churn), no smooth scroll.
+    with contextlib.suppress(Exception):
+        settings.set_hardware_acceleration_policy(WebKit2.HardwareAccelerationPolicy.NEVER)
+    settings.set_enable_smooth_scrolling(False)
     settings.set_enable_developer_extras(False)
     settings.set_enable_write_console_messages_to_stdout(True)
 
@@ -51,8 +56,8 @@ def main() -> int:
     win.move(0, 0)
     win.set_default_size(sw, sh)
     win.resize(sw, sh)
-    # The UI is laid out for about 1920 px wide. Scale up on 4K panels so text stays readable.
-    zoom = float(os.environ.get("NOEMA_KIOSK_ZOOM", "0") or 0) or max(1.0, round(sw / 1920, 2))
+    # The UI is laid out for about 2200 px wide (kiosk CSS adds larger type). 4K: about 1.75x.
+    zoom = float(os.environ.get("NOEMA_KIOSK_ZOOM", "0") or 0) or max(1.0, round(sw / 2200, 2))
     view.set_zoom_level(zoom)
     win.fullscreen()
     win.show_all()

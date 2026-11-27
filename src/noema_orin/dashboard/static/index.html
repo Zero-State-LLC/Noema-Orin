@@ -25,8 +25,10 @@
         <div class="metric-chip"><span class="k">GPU</span><span class="v" id="hw-gpu">—</span></div>
         <div class="metric-chip"><span class="k">TEMP</span><span class="v" id="hw-temp">—</span></div>
         <div class="metric-chip"><span class="k">PWR</span><span class="v" id="hw-pwr">—</span></div>
-        <div class="metric-chip"><span class="k">RAM FREE</span><span class="v" id="hw-ram">—</span></div>
+        <div class="metric-chip" id="chip-ram"><span class="k">RAM FREE</span><span class="v" id="hw-ram">—</span><span class="ram-track"><span class="ram-fill" id="hw-ram-bar"></span></span></div>
         <div class="metric-chip"><span class="k">LOCAL S1</span><span class="v" id="hw-tps">—</span></div>
+        <div class="metric-chip"><span class="k">S1 /MIN</span><span class="v" id="hw-s1rate">—</span></div>
+        <div class="metric-chip"><span class="k">EMB /MIN</span><span class="v" id="hw-embrate">—</span></div>
         <div class="metric-chip"><span class="k">JWT</span><span class="v" id="tok-min">—</span></div>
       </div>
 
@@ -48,6 +50,7 @@
     </header>
 
     <div id="alert-banner" class="alert-banner hidden" role="alert"></div>
+    <div id="alert-muted" class="alert-muted hidden"></div>
 
     <!-- Main 100vh Monitor Cockpit Grid -->
     <main class="cockpit">
@@ -87,6 +90,7 @@
             <button type="button" class="tab" data-tab="economy" role="tab">STOREFRONT &amp; CLAIMS</button>
             <button type="button" class="tab" data-tab="controls" role="tab">CONTROL DECK &amp; AUDIT</button>
             <span class="tab-spacer"></span>
+            <label class="mini-toggle" title="Hide idle WAIT/MOVE/INSPECT turns"><input type="checkbox" id="feed-roles-only" /> ROLE ONLY</label>
             <select id="feed-filter" class="mini-select" aria-label="Filter turns by member">
               <option value="all">ALL UNITS</option>
               <option value="m01">m01 Founder</option>

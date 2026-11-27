@@ -7,9 +7,11 @@ block an active Orin agent turn. Never reads or returns raw token or credential 
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,56 @@ from .controls import ALLOWED_UNITS
 
 RESIDENT_MEMBERS = ("m01", "m02", "m03", "m04", "m05", "m06")
 _SAFE_OVERRIDE_KEYS = ("NOEMA_INFERENCE_MODE", "NOEMA_GROUNDED_VOICE")
+# Alerts that are expected for energy-limited roles: shown muted, never in the banner.
+_EXPECTED_ALERT_MARKERS = ("idle_rate",)
+RAM_WARN_MIB = 1024
+SNAPSHOT_TTL_S = 2.0
+ROLE_SPARK_WINDOW = 50
+_EMPTY_LOG_SUMMARY: dict[str, Any] = {
+    "last_turn": None, "recent_turns": [], "last_session": None, "source_counts": {},
+    "role_spark": [], "turns_since_role": None, "last_role_action": None,
+}
+
+
+def classify_alerts(raw: list[str], *, hw: dict[str, Any], units: dict[str, dict]) -> list[dict[str, str]]:
+    """Tag digest alerts crit/warn/expected and add live health alerts (RAM floor, dead infra units)."""
+    out: list[dict[str, str]] = []
+    for text in raw:
+        t = str(text)
+        if any(mk in t for mk in _EXPECTED_ALERT_MARKERS):
+            level = "expected"
+        elif "rollback" in t or "energy 0" in t or "traceback" in t.lower():
+            level = "crit"
+        else:
+            level = "warn"
+        out.append({"level": level, "text": t})
+    mem = hw.get("mem_avail_mib")
+    if isinstance(mem, (int, float)) and mem < RAM_WARN_MIB:
+        out.append({"level": "crit" if mem < 512 else "warn", "text": f"RAM available {int(mem)} MiB (< {RAM_WARN_MIB})"})
+    for unit, st in (units or {}).items():
+        state = (st or {}).get("active_state")
+        if state in ("failed", "inactive") and not unit.startswith("noema-player@"):
+            out.append({"level": "crit", "text": f"{unit} {state}"})
+    return out
+
+
+def _client_map(map_state: dict[str, Any]) -> dict[str, Any]:
+    """Map as sent to browsers: positions/equipment are server-side inputs (agents carry room_id)."""
+    return {k: v for k, v in map_state.items() if k not in ("positions", "equipment", "max_seq")}
+
+
+def _strip_seen(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        return {k: _strip_seen(v) for k, v in obj.items() if not str(k).endswith("seen_seq")}
+    if isinstance(obj, list):
+        return [_strip_seen(v) for v in obj]
+    return obj
+
+
+def _map_signature(map_state: dict[str, Any]) -> str:
+    """Content hash of what the map draws. Ignores re-observation stamps, which change every turn."""
+    body = _strip_seen(_client_map(map_state))
+    return hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:12]
 
 
 def _ro_connect(path: Path) -> sqlite3.Connection | None:
@@ -70,6 +122,30 @@ class DashboardStateReader:
         self.systemd_runner = systemd_runner
         self.llama_base_url = llama_base_url or os.environ.get("NOEMA_LOCAL_LLM_BASE", "http://127.0.0.1:8081/v1")
         self._log_offsets: dict[str, int] = {}
+        self._snap_cache: tuple[float, dict[str, Any]] | None = None
+        self._snap_lock = threading.Lock()
+        self._rate_prev: dict[str, tuple[float, float]] = {}
+
+    def cached_snapshot(self, ttl: float = SNAPSHOT_TTL_S) -> dict[str, Any]:
+        """One snapshot per TTL shared by every viewer (kiosk + tunnels), so N viewers cost 1 build."""
+        with self._snap_lock:
+            now = time.monotonic()
+            if self._snap_cache is not None and now - self._snap_cache[0] < ttl:
+                return self._snap_cache[1]
+            snap = self.snapshot()
+            self._snap_cache = (now, snap)
+            return snap
+
+    def _rate_per_min(self, key: str, counter: float | None) -> float | None:
+        """Per-minute rate of a monotonically increasing counter between snapshots."""
+        if not isinstance(counter, (int, float)):
+            return None
+        now = time.monotonic()
+        prev = self._rate_prev.get(key)
+        self._rate_prev[key] = (now, float(counter))
+        if prev is None or now - prev[0] < 1.0 or counter < prev[1]:
+            return None
+        return round((counter - prev[1]) * 60.0 / (now - prev[0]), 1)
 
     def _roles_map(self) -> dict[str, str]:
         p = self.root / "roles.tsv"
@@ -189,10 +265,10 @@ class DashboardStateReader:
             "max_seq": max_seq,
         }
 
-    def _recent_log_summary(self, member: str, max_turns: int = 20) -> dict[str, Any]:
+    def _recent_log_summary(self, member: str, max_turns: int = 20, role_verbs: frozenset[str] = frozenset()) -> dict[str, Any]:
         log_path = self.root / "logs" / f"noema-player@{member}.log"
         if not log_path.is_file():
-            return {"last_turn": None, "recent_turns": [], "last_session": None, "source_counts": {}}
+            return dict(_EMPTY_LOG_SUMMARY)
         try:
             with log_path.open("rb") as fh:
                 fh.seek(0, os.SEEK_END)
@@ -200,7 +276,7 @@ class DashboardStateReader:
                 fh.seek(max(0, size - 65536))
                 chunk = fh.read().decode("utf-8", errors="replace")
         except OSError:
-            return {"last_turn": None, "recent_turns": [], "last_session": None, "source_counts": {}}
+            return dict(_EMPTY_LOG_SUMMARY)
 
         turns: list[dict] = []
         last_session: dict | None = None
@@ -219,11 +295,18 @@ class DashboardStateReader:
             elif "stop_reason" in d:
                 last_session = d
         recent = turns[-max_turns:]
+        window = turns[-ROLE_SPARK_WINDOW:]
+        # 1/0 per turn over the last 50: did this turn use a role verb? Drives the card sparkline.
+        spark = [1 if str(t.get("action") or "") in role_verbs else 0 for t in window]
+        last_role = next((t for t in reversed(turns) if str(t.get("action") or "") in role_verbs), None)
         return {
             "last_turn": recent[-1] if recent else None,
             "recent_turns": recent,
             "last_session": last_session,
             "source_counts": sources,
+            "role_spark": spark,
+            "turns_since_role": (len(turns) - 1 - turns.index(last_role)) if last_role is not None else None,
+            "last_role_action": f"{last_role.get('action')} {last_role.get('target') or ''}".strip() if last_role else None,
         }
 
     def _read_metrics_digest(self) -> dict[str, Any]:
@@ -290,7 +373,8 @@ class DashboardStateReader:
             rsi_state = _read_json(mind / "rsi_state.json", {})
             pid = cohort.get(member, f"player.{persona.get('name', member)}-{role.capitalize()}")
             pos = map_state["positions"].get(pid, {})
-            log_sum = self._recent_log_summary(member, max_turns=15)
+            role_verbs = frozenset((ROLES.get(role) or {}).get("verbs") or ())
+            log_sum = self._recent_log_summary(member, max_turns=15, role_verbs=role_verbs)
             last_turn = log_sum["last_turn"] or {}
             last_sess = log_sum["last_session"] or {}
             sess_health = last_sess.get("health") if isinstance(last_sess.get("health"), dict) else {}
@@ -333,8 +417,17 @@ class DashboardStateReader:
                 None,
             )
 
+            hw_embed_n = 0
+            mdb = _ro_connect(mind / "memory.db")
+            if mdb is not None:
+                with contextlib.closing(mdb):
+                    with contextlib.suppress(sqlite3.Error):
+                        if _table_exists(mdb, "fact_embeddings"):
+                            hw_embed_n = int(mdb.execute("SELECT count(*) FROM fact_embeddings").fetchone()[0])
+
             agents.append(
                 {
+                    "embedding_count": hw_embed_n,
                     "member": member,
                     "unit": unit_name,
                     "role": role,
@@ -359,6 +452,10 @@ class DashboardStateReader:
                     "loadout_held": loadout_held,
                     "min_tool_condition": min_cond,
                     "role_action_rate": m_dig.get("role_action_rate", 0.0),
+                    "role_spark": log_sum["role_spark"],
+                    "role_rate_recent": round(sum(log_sum["role_spark"]) / len(log_sum["role_spark"]), 3) if log_sum["role_spark"] else 0.0,
+                    "turns_since_role": log_sum["turns_since_role"],
+                    "last_role_action": log_sum["last_role_action"],
                     "idle_rate": m_dig.get("idle_rate", 0.0),
                     "stale_head_rate": m_dig.get("stale_head_rate", 0.0),
                     "turns_24h": m_dig.get("turns", 0),
@@ -373,14 +470,22 @@ class DashboardStateReader:
         home_org_path = self.root / "shared" / "home_org"
         home_org = home_org_path.read_text(encoding="utf-8").strip() if home_org_path.is_file() else ""
         recent_feed.sort(key=lambda r: int(r.get("turn") or 0), reverse=True)
+        map_sig = _map_signature(map_state)
+        hw["llama_req_per_min"] = self._rate_per_min("llama", llama_metrics.get("llamacpp:n_decode_total")
+                                                     if llama_metrics.get("llamacpp:n_decode_total") is not None
+                                                     else llama_metrics.get("llamacpp:tokens_predicted_total"))
+        emb_total = sum(int(a.get("embedding_count") or 0) for a in agents)
+        hw["embed_per_min"] = self._rate_per_min("embed", emb_total if agents else None)
 
         return {
+            "map_sig": map_sig,
+            "alert_items": classify_alerts(list(dig.get("alerts") or []), hw=hw, units=unit_states),
             "ts": round(time.time(), 2),
             "home_org": home_org,
             "world_seq": map_state["max_seq"],
             "units": unit_states,
             "agents": agents,
-            "map": map_state,
+            "map": _client_map(map_state),
             "hw": hw,
             "tokens": tok_rows,
             "token_status_code": tok_code,
@@ -472,9 +577,12 @@ class DashboardStateReader:
         if not logs_dir.is_dir():
             return events
         offs = self._log_offsets if offsets is None else offsets
+        roles = self._roles_map()
         for log_path in sorted(logs_dir.glob("noema-player@m*.log")):
             name = log_path.name
             member = name.split("@", 1)[1].split(".", 1)[0]
+            role = roles.get(member, "unknown")
+            role_verbs = (ROLES.get(role) or {}).get("verbs") or ()
             try:
                 size = log_path.stat().st_size
             except OSError:
@@ -503,7 +611,8 @@ class DashboardStateReader:
                 except ValueError:
                     continue
                 if "turn" in d and "action" in d:
-                    events.append({"event": "turn", "member": member, **d})
+                    events.append({"event": "turn", "member": member, "role": role,
+                                   "is_role": str(d.get("action") or "") in role_verbs, **d})
                 elif "stop_reason" in d:
                     events.append({"event": "session_end", "member": member, **d})
         return events

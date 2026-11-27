@@ -148,7 +148,12 @@ def create_dashboard_server(
                 return
 
             if path == "/api/snapshot":
-                self._send_json(200, reader.snapshot())
+                self._send_json(200, reader.cached_snapshot())
+                return
+
+            if path == "/api/map":
+                snap = reader.cached_snapshot()
+                self._send_json(200, {"map_sig": snap.get("map_sig"), "map": snap.get("map")})
                 return
 
             if path.startswith("/api/agent/"):
@@ -168,15 +173,26 @@ def create_dashboard_server(
                 self.end_headers()
                 last_snap = 0.0
                 offsets: dict[str, int] = {}
+                sent_map_sig = None
+                try:
+                    interval = max(2.0, min(30.0, float((query.get("interval") or ["4"])[0])))
+                except ValueError:
+                    interval = 4.0
                 try:
                     while True:
                         now = time.monotonic()
                         for ev in reader.poll_new_turns(offsets):
                             frame = f"event: {ev['event']}\ndata: {json.dumps(ev, default=str)}\n\n"
                             self.wfile.write(frame.encode("utf-8"))
-                        if now - last_snap >= 4.0:
-                            snap = reader.snapshot()
-                            frame = f"event: snapshot\ndata: {json.dumps(snap, default=str)}\n\n"
+                        if now - last_snap >= interval:
+                            snap = reader.cached_snapshot()
+                            # Delta frame: the map (about half the payload) only when it changed, and no
+                            # recent_turns (the turn events already carry them).
+                            slim = {k: v for k, v in snap.items() if k not in ("map", "recent_turns")}
+                            if snap.get("map_sig") != sent_map_sig:
+                                slim["map"] = snap.get("map")
+                                sent_map_sig = snap.get("map_sig")
+                            frame = f"event: snapshot\ndata: {json.dumps(slim, default=str)}\n\n"
                             self.wfile.write(frame.encode("utf-8"))
                             last_snap = now
                         else:
