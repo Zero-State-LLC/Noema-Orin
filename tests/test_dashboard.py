@@ -19,6 +19,11 @@ from noema_orin.persona import load_or_seed
 from noema_orin.rsi import RsiRatchet, load_or_init_knobs, save_agenda
 
 
+class _NoSysfs:
+    def read_text(self, path: str) -> str:
+        raise FileNotFoundError(path)
+
+
 class _FakeSystemdRunner:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
@@ -126,10 +131,14 @@ class DashboardEndToEndTests(unittest.TestCase):
         self.cfg = Path(self.tmp.name) / "cfg"
         _seed_fleet_fixture(self.root, self.cfg)
         self.runner = _FakeSystemdRunner()
-        self.reader = DashboardStateReader(root=self.root, config_dir=self.cfg, systemd_runner=self.runner)
+        self.reader = DashboardStateReader(
+            root=self.root, config_dir=self.cfg, systemd_runner=self.runner,
+            llama_base_url="http://127.0.0.1:9/v1", sysfs_probe=_NoSysfs(),
+        )
         self.controller = DashboardController(root=self.root, config_dir=self.cfg, systemd_runner=self.runner)
 
     def test_d1_snapshot_aggregates_fleet_map_economy_hw_and_never_leaks_secrets(self):
+        # Hermetic: the real Orin's sysfs must not override the metrics.db fixture.
         snap = self.reader.snapshot()
         self.assertEqual(len(snap["agents"]), 6)
         m03 = next(a for a in snap["agents"] if a["member"] == "m03")

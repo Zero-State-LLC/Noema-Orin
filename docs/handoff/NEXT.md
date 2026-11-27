@@ -148,3 +148,10 @@
 - Watch on Orin: confirm `noema-dashboard.service` + `noema-dashboard-kiosk.service` (Chromium on `DISPLAY=:0`) keep free RAM above 1.5 GB alongside `noema-llama-server` + `noema-embed-server` (currently 2.5 GB free); verify `/usr/bin/chromium-browser` exists on L4T R39.2.2 (adjust `ExecStart` if binary is `chromium`).
 - Heads-up on `runtime-overrides.env`: `noema-player@.service` loads `runtime-overrides.env` *after* `%i.env`. Leaving it absent preserves the per-agent `m03`/`m05`/`m06` `local_first` canary in `mXX.env`; clicking "Save Runtime Overrides" in the UI sets `NOEMA_INFERENCE_MODE` / `NOEMA_GROUNDED_VOICE` fleet-wide on next restart.
 - Optional small follow-up: add `noema-embed-server` (#178) to `ALLOWED_UNITS` in `src/noema_orin/dashboard/controls.py` so the embed server appears in the dashboard's Infrastructure Units strip.
+
+## 2026-11-27 12:45Z: D-077 dashboard installed on Orin
+- `noema-dashboard` is enabled and serves 200 on :8787 with a live snapshot (world_seq 84400). The kiosk is skipped because the Orin is headless with no Chromium. Use an ssh tunnel (see FACTS).
+- Fix: `test_dashboard` d1 read the real Orin sysfs (GPU 0.0 overrode the fixture's 38.0) after #177. The reader now takes `sysfs_probe` and the test is hermetic. `noema-embed-server` was added to ALLOWED_UNITS. 260 tests OK on Orin.
+- New player unit (runtime-overrides.env hook, MemoryMax=160M, about 40-52 MB per agent observed) rolled fleet-wide.
+- Merged Specs#477 (docs, watch D8 pass 4) under the merge grant.
+- Soak 11:46-12:41Z: 0 tracebacks, m06 has 93 embedded facts, 2.4 GB available. Widening local_first/embedder is still due about 17:30Z.

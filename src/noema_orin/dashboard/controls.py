@@ -33,6 +33,7 @@ ALLOWED_UNITS = (
     "noema-player@m06",
     "noema-maint-patrol",
     "noema-llama-server",
+    "noema-embed-server",
 )
 _UNIT_ACTIONS = frozenset({"start", "stop", "restart"})
 _GROUP_ACTIONS = frozenset({"start", "stop", "rolling_restart"})
