@@ -128,12 +128,24 @@ def digest(db: sqlite3.Connection, hours: float = 24) -> dict:
     since = time.time() - hours * 3600
     rows = db.execute("SELECT member, role, count(*), sum(stop_reason='duration_elapsed'), sum(turns), sum(role_actions), "
                       "sum(idle_actions), sum(drops) FROM sessions WHERE ts >= ? GROUP BY member ORDER BY member", (since,)).fetchall()
+    stale_by_member: dict[str, int] = {}
+    for m_name, rej_raw in db.execute("SELECT member, rejections FROM sessions WHERE ts >= ?", (since,)).fetchall():
+        try:
+            rej_obj = json.loads(rej_raw or "{}")
+        except ValueError:
+            rej_obj = {}
+        if isinstance(rej_obj, dict):
+            stale_n = sum(int(v) for k, v in rej_obj.items() if str(k).endswith(":STALE_HEAD") and isinstance(v, (int, float)))
+            stale_by_member[m_name] = stale_by_member.get(m_name, 0) + stale_n
     out = {}
     for member, role, n, full, turns, role_n, idle_n, drops in rows:
         turns = turns or 0
+        stale_n = stale_by_member.get(member, 0)
         out[member] = {"role": role, "sessions": n, "full_sessions": full or 0, "turns": turns,
                        "role_action_rate": round((role_n or 0) / turns, 3) if turns else 0.0,
-                       "idle_rate": round((idle_n or 0) / turns, 3) if turns else 0.0, "drops": drops or 0}
+                       "idle_rate": round((idle_n or 0) / turns, 3) if turns else 0.0, "drops": drops or 0,
+                       "stale_head_rejections": stale_n,
+                       "stale_head_rate": round(stale_n / turns, 3) if turns else 0.0}
     alerts = [f"{m}: idle_rate {v['idle_rate']}" for m, v in out.items() if v["turns"] >= 20 and v["idle_rate"] > 0.6]
     alerts += [f"{m}: {v['sessions'] - v['full_sessions']}/{v['sessions']} sessions ended early" for m, v in out.items()
                if v["sessions"] >= 4 and v["full_sessions"] / v["sessions"] < 0.5]

@@ -33,6 +33,8 @@ class OrinAdapter:
         self.health = RoleHealthTracker(role="")
         self._last_remote = False
         self.builds: tuple = ()
+        self.focus_tracks: tuple[str, ...] = ()
+        self.held_tracks: list[str] = []
         self.cohort_ids: set[str] = set()
         self.explorer = False
         self.memory = None
@@ -49,6 +51,46 @@ class OrinAdapter:
         self.turn_log: list[dict] = []
         self.deep_time_seen: dict[str, int] = {"scars": 0, "lore": 0, "culture": 0, "inherited": 0}
         self._attested_targets: set[str] = set()
+        self._last_social_turn: int = -999
+        self.last_cycle: int | None = None
+
+    def _effective_social_cooldown(self) -> int:
+        knobs = getattr(self, "policy_knobs", None) or {}
+        traits = getattr(self, "persona_traits", None) or {}
+        base = int(knobs.get("social_outreach_cooldown", 12))
+        soc = max(0.0, min(1.0, float(traits.get("sociability", 0.5))))
+        return max(4, min(36, int(round(base * (1.2 - 0.4 * soc)))))
+
+    def _social_outreach_ready(self, current_turn: int | None = None) -> bool:
+        turn_n = sum((getattr(self, "stats", None) or {}).values()) if current_turn is None else int(current_turn)
+        last = int(getattr(self, "_last_social_turn", -999))
+        return (turn_n - last) >= self._effective_social_cooldown()
+
+    def _effective_energy_floor(self) -> int:
+        knobs = getattr(self, "policy_knobs", None) or {}
+        traits = getattr(self, "persona_traits", None) or {}
+        base = int(knobs.get("energy_reserve_floor", 3))
+        caution = float(traits.get("caution", 0.5))
+        return max(1, min(6, base + (1 if caution >= 0.75 else 0)))
+
+    def _effective_dwell_limit(self) -> int:
+        knobs = getattr(self, "policy_knobs", None) or {}
+        traits = getattr(self, "persona_traits", None) or {}
+        base = int(knobs.get("dwell_before_route", 2))
+        curiosity = float(traits.get("curiosity", 0.5))
+        return max(1, min(4, base - (1 if curiosity >= 0.75 else 0)))
+
+    def _effective_treasury_floor(self) -> int:
+        traits = getattr(self, "persona_traits", None) or {}
+        thrift = max(0.0, min(1.0, float(traits.get("thrift", 0.5))))
+        return TREASURY_BUILD_FLOOR + int(round(max(0.0, thrift - 0.5) * 8))
+
+    def _inspect_novelty_window(self) -> int:
+        knobs = getattr(self, "policy_knobs", None) or {}
+        traits = getattr(self, "persona_traits", None) or {}
+        w = max(0.0, min(1.0, float(knobs.get("inspect_novelty_weight", 0.6))))
+        curiosity = max(0.0, min(1.0, float(traits.get("curiosity", 0.5))))
+        return max(6, min(30, int(round(8 + (w * 0.7 + curiosity * 0.3) * 18))))
 
     def set_brief(self, brief: str) -> None:
         from noema_client.adapters.openai_compatible import SYSTEM_PROMPT
@@ -112,11 +154,20 @@ class OrinAdapter:
             # Hold has enough materials for a build or repair: stop gathering, spend them.
             menu = [{**o, "i": i} for i, o in enumerate(o for o in menu if o["action"] not in self.supply)]
         # D-051: SUPPLY is planner-only (need-gated, D-048); _ask hides it from the model.
-        menu = _one_record_per_subject(menu, self._published_subjects())
+        changed_subjects = _changed_published_subjects(canonical, getattr(self, "memory", None))
+        menu = _one_record_per_subject(menu, self._published_subjects(), changed_subjects=changed_subjects)
         if any(o["action"] in self.verbs and o["action"] not in ("CONSTRUCT", "BUILD") for o in menu):
             # S4: role work is affordable here; the model still walked off (m04 MOVE 27/60 beside PUBLISH).
             menu = [{**o, "i": i} for i, o in enumerate(o for o in menu if o["action"] != "MOVE")]
-        return focus(menu, self.verbs, getattr(self, "held_track", None))
+        held_tracks = getattr(self, "held_tracks", None)
+        desired_tracks = getattr(self, "focus_tracks", None) or None
+        return focus(
+            menu,
+            self.verbs,
+            getattr(self, "held_track", None),
+            held_tracks=held_tracks,
+            desired_tracks=desired_tracks,
+        )
 
     def _welcome(self, canonical: dict, options: list[dict]):
         """S11: the founder greets each non-cohort Player it meets, once, naming the Compact. Planner-only."""
@@ -194,7 +245,9 @@ class OrinAdapter:
         # D-051: SUPPLY is planner-only (need-gated, D-048). The model spent 20/30 turns supplying blind.
         # S11: the founder's MESSAGE is planner-only too (one welcome per non-cohort Player).
         # D-059: notices are planner-only (posted when a new fact exists).
-        hidden = self._hidden_verbs()
+        hidden = set(self._hidden_verbs())
+        if not self._social_outreach_ready():
+            hidden |= {"MESSAGE", "SHOUT", "BOARD"}
         options = [{**o, "i": i} for i, o in enumerate(o for o in options if o["action"] not in hidden)]
         if not options:
             return None
@@ -329,6 +382,12 @@ class OrinAdapter:
                     canonical.get("self") or getattr(self, "self_id", None),
                     canonical,
                 )
+            if hasattr(self.world_map, "observe_shared_work"):
+                self.world_map.observe_shared_work(
+                    room,
+                    canonical.get("self") or getattr(self, "self_id", None),
+                    canonical,
+                )
         if self.memory is not None:
             facts = facts_from(canonical)
             for kind, text in facts:
@@ -342,9 +401,12 @@ class OrinAdapter:
                     self.memory.remember(str(cls), kind="built", room=room, sequence=seq)
             self.memories = self.memory.recall(" ".join([str(loc.get("name") or "")] + sorted(self.verbs)))
             self.stats_mem += len(self.memories)
+        from .shop_planner import _room_has_ready_infra
+
+        gen_ready = _room_has_ready_infra(canonical, "generator", min_condition=25) is not None
         if _depleted(canonical):
-            # RFC-0136: if an active generator offers RECHARGE here, prefer +4 energy over WAIT +2.
-            rech = next((o for o in options if o["action"] == "RECHARGE"), None)
+            # RFC-0136 + T3/#157: only pick RECHARGE when an operational generator stands here.
+            rech = next((o for o in options if o["action"] == "RECHARGE"), None) if gen_ready else None
             if rech is not None:
                 self.dwell = 0
                 return _proposal(rech, self.default_args, self.memory)
@@ -352,9 +414,9 @@ class OrinAdapter:
             return ActionProposal(action="WAIT")  # engine #907/#910: WAIT at energy 0 rests +2 energy
         # RFC-0136: when below energy reserve floor and an active generator offers RECHARGE, top up (+4, 0 cargo burned).
         energy_now = (canonical.get("resources") or {}).get("energy")
-        energy_floor = int((getattr(self, "policy_knobs", None) or {}).get("energy_reserve_floor", 3))
+        energy_floor = self._effective_energy_floor()
         if isinstance(energy_now, (int, float)) and energy_now <= energy_floor:
-            rech = next((o for o in options if o["action"] == "RECHARGE"), None)
+            rech = next((o for o in options if o["action"] == "RECHARGE"), None) if gen_ready else None
             if rech is not None:
                 self.dwell = 0
                 return _proposal(rech, self.default_args, self.memory)
@@ -379,10 +441,13 @@ class OrinAdapter:
         # RFC-0141 §2: planner-only deterministic equipment, warden defense/sanction, civic contracts, and storefront management.
         from .planner import home_org
         from .shop_planner import (
+            founder_needs_exchange_visit,
             plan_civic_contract,
             plan_equipment_step,
+            plan_founder_governance_and_commemorate,
             plan_quartermaster_shop,
             plan_warden_defense_and_sanction,
+            quartermaster_needs_shop_visit,
         )
 
         role_name = str(getattr(getattr(self, "health", None), "role", "") or "").rsplit("-", 1)[-1]
@@ -393,41 +458,117 @@ class OrinAdapter:
                 self.dwell = 0
                 return warden_prop
         if role_name in ("founder", "quartermaster", "custodian", "archivist", "speaker", "surveyor"):
-            equip_prop = plan_equipment_step(role_name, canonical, knobs_now, allowed_actions=getattr(self, "allowed", None) or None)
+            equip_prop = plan_equipment_step(
+                role_name,
+                canonical,
+                knobs_now,
+                allowed_actions=getattr(self, "allowed", None) or None,
+                world_map=self.world_map,
+            )
             if equip_prop is not None and hasattr(equip_prop, "action"):
                 self.dwell = 0
                 return equip_prop
+        if role_name == "archivist" and any(o["action"] == "COMMEMORATE" for o in options):
+            commemorated = (
+                {str(r[0]) for r in self.memory.db.execute("SELECT text FROM facts WHERE kind='commemorated'").fetchall()}
+                if self.memory is not None
+                else set()
+            )
+            for scar in canonical.get("scars") or []:
+                if not isinstance(scar, dict) or not scar.get("scar_id"):
+                    continue
+                sid = str(scar["scar_id"])
+                if (scar.get("fossilized") or float(scar.get("strength") or 0.0) >= 0.85) and sid not in commemorated:
+                    if self.memory is not None:
+                        self.memory.remember(sid, kind="commemorated", room=room, sequence=seq)
+                    self.dwell = 0
+                    return ActionProposal(action="COMMEMORATE", target_id=sid, arguments={"scar_id": sid, "target_id": sid})
         if role_name == "quartermaster":
             shop_prop = plan_quartermaster_shop(canonical, knobs_now, recent_actions=getattr(self, "recent", None))
             if shop_prop is not None and hasattr(shop_prop, "action"):
                 self.dwell = 0
                 return shop_prop
+            if (
+                self.world_map is not None
+                and room
+                and _can_afford_move(canonical)
+                and (not self.allowed or "MOVE" in self.allowed)
+                and quartermaster_needs_shop_visit(canonical, self.world_map, knobs_now)
+            ):
+                hop = self.world_map.next_hop(room, "room.civic-exchange")
+                exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict)}
+                if hop in exits:
+                    self.dwell = 0
+                    return ActionProposal(action="MOVE", target_id=exits[hop])
         if role_name == "founder":
-            contract_prop = plan_civic_contract(role_name, canonical, home_org(canonical))
+            home_id = home_org(canonical)
+            gov_prop = plan_founder_governance_and_commemorate(canonical, home_id, self.memory, options)
+            if gov_prop is not None and hasattr(gov_prop, "action"):
+                self.dwell = 0
+                return gov_prop
+            contract_prop = plan_civic_contract(role_name, canonical, home_id, world_map=self.world_map)
             if contract_prop is not None and hasattr(contract_prop, "action"):
                 self.dwell = 0
                 return contract_prop
+            if (
+                self.world_map is not None
+                and room
+                and _can_afford_move(canonical)
+                and (not self.allowed or "MOVE" in self.allowed)
+                and founder_needs_exchange_visit(canonical, home_id, self.world_map)
+            ):
+                hop = self.world_map.next_hop(room, "room.civic-exchange")
+                exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict)}
+                if hop in exits:
+                    self.dwell = 0
+                    return ActionProposal(action="MOVE", target_id=exits[hop])
         notice = next((o for o in options if o["action"] == "ORG_OFFICE_ACT"
                        and str((o.get("raw") or {}).get("authority_profile") or "PUBLISH_NOTICE") == "PUBLISH_NOTICE"), None)
         if notice is not None and "MESSAGE" in self.verbs and "ORG_CREATE" not in self.verbs:
-            # D-059 (S13): the notice text is deterministic (grounded_notice), so the model only ever chose "post";
-            # that was 596 strong-tier calls a day. Post when a new observed fact exists, else fall through.
-            p = _proposal(notice, self.default_args, self.memory)
+            # D-059 (S13) + T6/#160: deterministic grounded notice or market/contract TRADE_NOTICE digest.
+            p = _proposal(notice, self.default_args, self.memory, world_map=self.world_map, canonical=canonical)
             if p is not None:
                 self.dwell = 0
                 return p
+        # T6/#160: m05 Speaker publishes grounded market/contract BOARD digest when available, else patrols Herald loop.
+        if role_name == "speaker" and self._social_outreach_ready():
+            board_opt = next((o for o in options if o["action"] == "BOARD"), None)
+            if board_opt is not None and self.world_map is not None:
+                digest_txt = grounded_market_and_contract_digest(self.memory, self.world_map, canonical, org_name="Reach Compact")
+                if digest_txt:
+                    self.dwell = 0
+                    return ActionProposal(action="BOARD", target_id=board_opt.get("target_id"), arguments={"text": digest_txt})
+            if (
+                self.world_map is not None
+                and room
+                and room != "room.civic-exchange"
+                and _can_afford_move(canonical)
+                and (not self.allowed or "MOVE" in self.allowed)
+                and not self.world_map.observed_listings(room_id="room.civic-exchange")
+            ):
+                hop = self.world_map.next_hop(room, "room.civic-exchange")
+                exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict)}
+                if hop in exits:
+                    self.dwell = 0
+                    return ActionProposal(action="MOVE", target_id=exits[hop])
         # D-047/D-048 (RFC-0133): the seated quartermaster serves before gathering: cargo to the custodian or to a
         # stuck peer (see _needs_supply), at most once per peer per 10 turns; then harvest into the treasury.
         custodian = self.role_handles.get("custodian")
         served = {r.get("target") for r in getattr(self, "recent", [])[-10:] if r["action"] == "SUPPLY"}
-        sup = next((o for o in options if "SUPPLY" in self.verbs and o["action"] == "SUPPLY"
-                    and o.get("target_id") not in served
-                    and _needs_supply(o, custodian, self.world_map, self.cohort_ids)), None)
-        if sup is not None:
+        sup_pair = None
+        for o in options:
+            if "SUPPLY" in self.verbs and o["action"] == "SUPPLY" and o.get("target_id") not in served:
+                if _needs_supply(o, custodian, self.world_map, self.cohort_ids):
+                    ok_sup, sup_amt = _can_supply(o, canonical)
+                    if ok_sup:
+                        sup_pair = (o, sup_amt)
+                        break
+        if sup_pair is not None:
+            sup, sup_amt = sup_pair
             self.dwell = 0
             p = _proposal(sup, self.default_args, self.memory)
             if p is not None:
-                p.arguments = {**(p.arguments or {}), "amount": SUPPLY_AMOUNT}
+                p.arguments = {**(p.arguments or {}), "amount": sup_amt}
                 if self.memory is not None and p.target_id:
                     self.memory.note_player(str(p.target_id), "supplied cargo from treasury", sign=1, sequence=seq)
             return p
@@ -454,12 +595,13 @@ class OrinAdapter:
         tbuild = next((o for o in options if "SUPPLY" in self.verbs and o["action"] in ("CONSTRUCT", "BUILD")
                        and (o.get("raw") or {}).get("acting_for")
                        and str((o.get("raw") or {}).get("class") or "") in self.builds), None)
-        if tbuild is not None and _vault_storage(canonical) >= TREASURY_BUILD_FLOOR:
+        treasury_floor = self._effective_treasury_floor()
+        if tbuild is not None and _vault_storage(canonical) >= treasury_floor:
             # D-061 (RFC-0133 amendment 1): build the Compact's generator / storage bay from vault cargo once the vault
             # keeps a supply reserve; the holder pays only fuel.
             self.dwell = 0
             return _proposal(tbuild, self.default_args, self.memory)
-        if ("SUPPLY" in self.verbs and _vault_storage(canonical) >= TREASURY_BUILD_FLOOR
+        if ("SUPPLY" in self.verbs and _vault_storage(canonical) >= treasury_floor
                 and _treasury_build_waiting(canonical, self.builds) and _wait_refuels(canonical.get("resources") or {})):
             # D-062: the treasury build is offered but the holder lacks fuel (generator 8 energy). Live m02 sat at
             # energy 1-3 and never saw it as available. WAIT here until it is; walking spends the energy it needs.
@@ -532,7 +674,7 @@ class OrinAdapter:
         ):
             # D-046: RECONSTRUCT needs evidence (LIVE_INSPECT). With no reconstruction on offer, INSPECT an
             # entity not inspected lately instead of walking on.
-            seen = {r.get("target") for r in self.recent[-12:] if r["action"] == "INSPECT"}
+            seen = {r.get("target") for r in self.recent[-self._inspect_novelty_window():] if r["action"] == "INSPECT"}
             seen |= self._published_subjects()  # D-073: evidence for an already-published subject is wasted
             insp = next((o for o in options if o["action"] == "INSPECT" and o.get("target_id") not in seen), None)
             if insp is not None:
@@ -550,7 +692,14 @@ class OrinAdapter:
                 and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)):
             # D-034: energy 1 + empty hold. WAIT gives nothing, so spend the 1 walking toward the goal;
             # arriving at 0 gets lockout rest (+2) right where the role verb is.
-            direction = route(canonical, self.world_map, _route_verbs(goal_verbs), explorer=self.explorer, me=getattr(self, "self_id", None))
+            direction = route(
+                canonical,
+                self.world_map,
+                _route_verbs(goal_verbs),
+                explorer=self.explorer,
+                me=getattr(self, "self_id", None),
+                current_seq=seq,
+            )
             if direction:
                 self.dwell = 0
                 return ActionProposal(action="MOVE", target_id=direction)
@@ -580,7 +729,7 @@ class OrinAdapter:
             if pick is not None:
                 self.dwell = 0
                 return _proposal(pick, self.default_args, self.memory)
-        dwell_limit = int((getattr(self, "policy_knobs", None) or {}).get("dwell_before_route", 2))
+        dwell_limit = self._effective_dwell_limit()
         if self.world_map is None or here or self.dwell < dwell_limit or (self.allowed and "MOVE" not in self.allowed):
             self.dwell = self.dwell + 1 if not here else 0
             return None
@@ -598,6 +747,7 @@ class OrinAdapter:
             avoid_pressure=avoid_p,
             pressure_weight=float(knobs.get("scar_avoidance_weight", 0.7)),
             seek_scars=seek_s,
+            current_seq=seq,
         )
         if not direction:
             return None
@@ -664,7 +814,14 @@ class OrinAdapter:
                     and _can_afford_move(canonical) and (not self.allowed or "MOVE" in self.allowed)
                     and _energy_after_move_ok(canonical, self.explorer)):
                 # The founder (ORG_CREATE) stays put: its raw org offers are everywhere and get filtered.
-                direction = route(canonical, self.world_map, _route_verbs(set(goal)), explorer=self.explorer, me=getattr(self, "self_id", None))
+                direction = route(
+                    canonical,
+                    self.world_map,
+                    _route_verbs(set(goal)),
+                    explorer=self.explorer,
+                    me=getattr(self, "self_id", None),
+                    current_seq=canonical.get("sequence"),
+                )
             proposal = ActionProposal(action="MOVE", target_id=direction) if direction else ActionProposal(action="WAIT")
             source = "idle_skip"
             self.stats["idle_skip"] = self.stats.get("idle_skip", 0) + 1
@@ -712,19 +869,46 @@ class OrinAdapter:
         subject = (getattr(proposal, "arguments", None) or {}).get("subject_ref")
         if (str(getattr(proposal, "action", "") or "").upper() == "RECONSTRUCT_PUBLISH" and subject
                 and self.memory is not None):
-            # S12: one public record per subject; the other private drafts of it stay private.
+            # S12: one public record per subject; also snapshot its observed state fingerprint (T6/#160).
             self.memory.remember(str(subject), kind="published", room=None, sequence=None)
+            fp = _subject_state_fingerprint(context.get("canonical") or {}, str(subject))
+            if fp:
+                self.memory.remember(fp, kind="subject_state", room=None, sequence=(context.get("canonical") or {}).get("sequence"))
         if (str(getattr(proposal, "action", "") or "").upper() == "RECONSTRUCT_SUPERSEDE" and subject
                 and self.memory is not None):
             self.memory.remember("revised:" + str(subject), kind="published", room=None, sequence=None)
+            fp = _subject_state_fingerprint(context.get("canonical") or {}, str(subject))
+            if fp:
+                self.memory.remember(fp, kind="subject_state", room=None, sequence=(context.get("canonical") or {}).get("sequence"))
         if str(getattr(proposal, "action", "") or "").upper() == "AGREEMENT_FORM" and self.memory is not None:
             args = getattr(proposal, "arguments", None) or {}
             party = args.get("player_id") or getattr(proposal, "target_id", None)
             if party:
                 self.memory.remember(f"agreement:{party}", kind="published", room=None, sequence=None)
-        if str(getattr(proposal, "action", "") or "").upper() == "FOCUS" and track:
-            self.held_track = str(track)  # D-049: don't re-offer the same track
+        if str(getattr(proposal, "action", "") or "").upper() in ("FOCUS", "COMMIT.FOCUS") and track:
+            t_norm = str(track).strip().lower()
+            held = list(getattr(self, "held_tracks", None) or [])
+            if t_norm in held:
+                held.remove(t_norm)
+            held.append(t_norm)
+            self.held_tracks = held[-2:]
+            self.held_track = self.held_tracks[-1]  # D-049 + RFC-0144 §1 dual-track cap
+        if str(getattr(proposal, "action", "") or "").upper() in ("MESSAGE", "SHOUT", "BOARD"):
+            self._last_social_turn = sum(self.stats.values())
         canonical = (context.get("canonical") or {})
+        act_upper = str(getattr(proposal, "action", "") or "").upper()
+        tgt_id = getattr(proposal, "target_id", None)
+        if (
+            self.world_map is not None
+            and hasattr(self.world_map, "claim_target")
+            and act_upper in ("REPAIR", "RESTORE", "REMEDIATE", "CONTRACT_FULFILL", "INVESTIGATE")
+            and tgt_id
+            and self.self_id
+        ):
+            self.world_map.claim_target(str(tgt_id), str(self.self_id), act_upper, int(canonical.get("sequence") or 0))
+        cyc = canonical.get("cycle")
+        if isinstance(cyc, int) and cyc > 0:
+            self.last_cycle = cyc
         self.health.record_turn(
             verb=str(getattr(proposal, "action", "") or ""),
             used_workers_ai=bool(getattr(self, "_last_remote", False)),
@@ -786,10 +970,47 @@ def _create_allowed(canonical: dict, proposal) -> bool:
     return bool(name) and name not in existing and name in {n for n, _p in missing(canonical, home)}
 
 
-def _one_record_per_subject(menu: list[dict], published: set[str]) -> list[dict]:
-    """S12: m04 held 50 private reconstructions of one subject (salvage-cache) and published them one by one
-    (78 publishes, 0 new subjects). Offer one PUBLISH per subject, none for a subject already published, and no
-    new RECONSTRUCT of a published subject."""
+def _subject_state_fingerprint(canonical: dict, subject_ref: str) -> str | None:
+    """Compute a coarse observed state fingerprint for a subject so m04 supersedes only on real state deltas (T6/#160)."""
+    loc = canonical.get("location") or {}
+    ents = [e for e in (loc.get("entities") or canonical.get("entities") or []) if isinstance(e, dict)]
+    ent = next((e for e in ents if str(e.get("entity_id") or "") == subject_ref), None)
+    if ent is None and str(loc.get("room_id") or "") != subject_ref:
+        return None
+    cond_raw = ent.get("condition") if ent is not None else None
+    cond_bucket = (int(cond_raw) // 20) * 20 if isinstance(cond_raw, (int, float)) else -1
+    scar_count = len([s for s in (canonical.get("scars") or []) if isinstance(s, dict) and s.get("scar_id")])
+    contest_count = len([c for c in (canonical.get("contests") or []) if isinstance(c, dict) and c.get("status") == "OPEN"])
+    return f"{subject_ref}|cond={cond_bucket}|scars={scar_count}|contests={contest_count}"
+
+
+def _changed_published_subjects(canonical: dict, memory) -> set[str]:
+    """Return subject_refs whose live observed fingerprint differs from their latest stored subject_state (T6/#160)."""
+    if memory is None:
+        return set()
+    rows = memory.db.execute(
+        "SELECT text FROM facts WHERE kind='subject_state' AND stale=0 ORDER BY coalesce(source_sequence, 0) ASC, id ASC"
+    ).fetchall()
+    latest: dict[str, str] = {}
+    for (txt,) in rows:
+        if "|" in str(txt or ""):
+            subj = str(txt).split("|", 1)[0]
+            latest[subj] = str(txt)
+    changed: set[str] = set()
+    for subj, recorded in latest.items():
+        live = _subject_state_fingerprint(canonical, subj)
+        if live is not None and live != recorded:
+            changed.add(subj)
+    return changed
+
+
+def _one_record_per_subject(
+    menu: list[dict],
+    published: set[str],
+    *,
+    changed_subjects: set[str] | frozenset[str] = frozenset(),
+) -> list[dict]:
+    """S12 + D-070 + T6/#160: one PUBLISH per subject; permit SUPERSEDE once per subject OR on observed state delta."""
     seen, kept = set(published), []
     for o in menu:
         raw = o.get("raw") or {}
@@ -801,9 +1022,9 @@ def _one_record_per_subject(menu: list[dict], published: set[str]) -> list[dict]
         elif o["action"] == "RECONSTRUCT" and subject and subject in published:
             continue
         elif o["action"] == "RECONSTRUCT_SUPERSEDE" and subject:
-            # D-070: 103 revise offers, all relay-7, same canned claim; m04 superseded ~15x/session. One per subject.
+            # D-070 + T6/#160: suppress unchanged revisions, but re-allow when subject state fingerprint changed.
             key = "revised:" + str(subject)
-            if key in seen:
+            if key in seen and subject not in changed_subjects:
                 continue
             seen.add(key)
         elif o["action"] == "AGREEMENT_FORM":
@@ -855,6 +1076,41 @@ def _route_verbs(verbs) -> set[str]:
 SUPPLY_AMOUNT = 3  # D-047: under the engine cap of 5; spreads the vault across peers
 LOW_ENERGY = 3  # D-048: a cohort peer at or below this recorded energy with an empty hold gets cargo (WAIT fuel)
 LOW_CARGO = 6  # D-048: custodian with fewer than this aboard (16 - free) gets cargo
+
+
+def _can_supply(opt: dict, canonical: dict) -> tuple[bool, int]:
+    """T3/#157: verify SUPPLY colocation, active OPERATE_RESOURCE_ACCOUNT office, and live vault storage."""
+    raw = opt.get("raw") or {}
+    pid = str(opt.get("target_id") or raw.get("player_id") or "")
+    if not pid:
+        return False, 0
+    if "players_here" in canonical:
+        here_ids = {str(p.get("player_id") or "") for p in canonical.get("players_here") or [] if isinstance(p, dict)}
+        if pid not in here_ids:
+            return False, 0
+    orgs = [o for o in (canonical.get("organizations") or []) if isinstance(o, dict)]
+    vault = _vault_storage(canonical) if orgs else SUPPLY_AMOUNT
+    if orgs and vault < 1:
+        return False, 0
+    me = str(canonical.get("self") or "")
+    me_handle = me.replace("player.", "", 1)
+    if orgs and me:
+        all_offices = [
+            off
+            for o in orgs
+            for off in (o.get("offices") or [])
+            if isinstance(off, dict)
+        ]
+        if all_offices:
+            holds_res = any(
+                str(off.get("authority_profile") or off.get("profile") or "") == "OPERATE_RESOURCE_ACCOUNT"
+                and str(off.get("status") or "OCCUPIED") == "OCCUPIED"
+                and (str(off.get("holder_id") or "") == me or str(off.get("holder_handle") or "") == me_handle)
+                for off in all_offices
+            )
+            if not holds_res:
+                return False, 0
+    return True, max(1, min(SUPPLY_AMOUNT, int(vault)))
 
 
 def _needs_supply(opt: dict, custodian: str | None, world_map, cohort_ids) -> bool:
@@ -1033,15 +1289,31 @@ def _hold_empty(canonical: dict) -> bool:
     return isinstance(storage, (int, float)) and storage >= 16
 
 
+def _requires_met(aff: dict, resources: dict) -> bool:
+    """T3/#157: drop affordances whose explicit budget `requires` exceed current canonical resources."""
+    req = aff.get("requires")
+    if not isinstance(req, dict) or not isinstance(resources, dict) or not resources:
+        return True
+    for budget in ("energy", "attention", "compute", "storage"):
+        need = req.get(budget)
+        have = resources.get(budget)
+        if isinstance(need, (int, float)) and isinstance(have, (int, float)) and have < need:
+            return False
+    return True
+
+
 def _options(canonical: dict, allowed: frozenset) -> list[dict]:
     """Available advertised affordances this role may use, as a short indexed menu.
 
     `action` is the operation the server executes (ORG_INVITE -> ORG_MEMBER_ADD) and
     `raw` is kept so the proposal is built by the client's own affordance mapper.
     """
+    resources = canonical.get("resources") if isinstance(canonical.get("resources"), dict) else {}
     out = []
     for aff in canonical.get("affordances") or []:
         if not isinstance(aff, dict) or aff.get("available") is False:
+            continue
+        if not _requires_met(aff, resources):
             continue
         shown = str(aff.get("action") or aff.get("verb") or "").upper()
         op = str(aff.get("operation") or shown).upper()
@@ -1055,7 +1327,7 @@ def _options(canonical: dict, allowed: frozenset) -> list[dict]:
     return out
 
 
-def _proposal(opt: dict, default_args: dict, memory=None):
+def _proposal(opt: dict, default_args: dict, memory=None, *, world_map=None, canonical: dict | None = None):
     from noema_client.affordances import proposal_from_affordance
     from noema_client.types import ActionProposal
 
@@ -1065,11 +1337,14 @@ def _proposal(opt: dict, default_args: dict, memory=None):
     args = {**default_args.get(base.action, {}), **_cmd_args(opt["raw"]), **dict(base.arguments or {})}
     if base.action == "SUPPLY":
         args.setdefault("amount", SUPPLY_AMOUNT)  # engine requires 1..5; model-picked SUPPLY carried none
-    if base.action == "ORG_OFFICE_ACT" and not args.get("notice") and not args.get("governance_rule"):
-        notice = grounded_notice(memory)
-        if not notice:
-            return None  # nothing observed worth publishing; never post filler (S13)
-        args["notice"] = notice
+    if base.action == "ORG_OFFICE_ACT":
+        if not args.get("org_id"):
+            return None  # T3/#157: ORG_OFFICE_ACT without org_id fails INVALID_REQUEST
+        if not args.get("notice") and not args.get("governance_rule"):
+            notice = grounded_notice(memory, world_map=world_map, canonical=canonical)
+            if not notice:
+                return None  # nothing observed worth publishing; never post filler (S13)
+            args["notice"] = notice
     return ActionProposal(action=base.action, target_id=base.target_id, arguments=args)
 
 
@@ -1108,13 +1383,70 @@ def _cmd_args(raw: dict) -> dict:
     return {k: v for k, v in out.items() if v}
 
 
-def grounded_notice(memory, org_name: str = "the Compact") -> str | None:
-    """A public notice built only from observed, non-stale facts, citing the source sequence (S13).
+def grounded_market_and_contract_digest(
+    memory,
+    world_map,
+    canonical: dict | None = None,
+    org_name: str = "Reach Compact",
+) -> str | None:
+    """Grounded TRADE_NOTICE / BOARD digest of active barter_stall stock and open WS06 contracts (RFC-0141 §2.2, T6/#160)."""
+    if memory is None or world_map is None or not hasattr(world_map, "observed_listings"):
+        return None
+    listings = [l for l in world_map.observed_listings() if int(l.get("fills_remaining") or 0) > 0]
+    contracts = [c for c in ((canonical or {}).get("open_contracts") or []) if isinstance(c, dict)]
+    if not listings and not contracts:
+        return None
+    seq_candidates = [int(l.get("seen_seq") or 0) for l in listings]
+    if canonical and isinstance(canonical.get("sequence"), int) and not seq_candidates:
+        seq_candidates.append(int(canonical["sequence"]))
+    obs_seq = max(seq_candidates) if seq_candidates else 0
+    parts: list[str] = []
+    if listings:
+        summaries = []
+        for l in listings[:3]:
+            kind = str(l.get("listing_kind") or "OFFER")
+            offer_s = str(l.get("offer_json") or "")
+            ask_s = str(l.get("ask_json") or "")
+            item_tag = ""
+            for token in ("power_cell", "chrono_lens", "arc_welder", "plasma_cutter", "signal_transceiver", "FERROUS_ORE", "SALVAGE_COMPOSITE", "SILICA_CELL"):
+                if token in offer_s or token in ask_s:
+                    item_tag = f"({token})"
+                    break
+            summaries.append(f"{kind}{item_tag}")
+        parts.append("Exchange stall: " + ", ".join(summaries))
+    if contracts:
+        c_summaries = []
+        for c in contracts[:2]:
+            ck = str(c.get("kind") or "CONTRACT")
+            detail = c.get("target_item_archetype") or c.get("target_material") or ""
+            c_summaries.append(f"{ck}({detail})" if detail else ck)
+        parts.append("Open contracts: " + ", ".join(c_summaries))
+    core = "; ".join(parts)
+    dedup_key = f"trade_digest:{core}|seq={obs_seq}"
+    posted = {t for (t,) in memory.db.execute("SELECT text FROM facts WHERE kind='noticed'").fetchall()}
+    if dedup_key in posted:
+        return None
+    memory.remember(dedup_key, kind="noticed", room=None, sequence=obs_seq)
+    return f"{org_name} TRADE_NOTICE: {core} (observed at seq {obs_seq})"[:280]
+
+
+def grounded_notice(
+    memory,
+    org_name: str = "the Compact",
+    *,
+    world_map=None,
+    canonical: dict | None = None,
+) -> str | None:
+    """A public notice built only from observed, non-stale facts, citing the source sequence (S13, T6/#160).
 
     D-059: skip the speaker's own echoes ("Notice posted", "You wait", "You arrive"): m05 was publishing its last
     consequence, which was usually its previous notice. One notice per fact (kind `noticed`)."""
     if memory is None:
         return None
+    if world_map is not None:
+        digest_notice = grounded_market_and_contract_digest(memory, world_map, canonical, org_name=org_name)
+        if digest_notice:
+            return digest_notice
     posted = {t for (t,) in memory.db.execute("SELECT text FROM facts WHERE kind='noticed'").fetchall()}
     rows = memory.db.execute(
         "SELECT text, source_sequence FROM facts WHERE stale=0 AND kind IN ('consequence','room') "
@@ -1156,7 +1488,8 @@ def reflect(
         "\"lesson_seq\": integer sequence from valid_sequences, \"quirk\": optional new quirk}. "
         "Traits: caution, curiosity, sociability, thrift. "
         "Knobs: dwell_before_route, energy_reserve_floor, harvest_batch_target, scar_avoidance_weight, "
-        "social_outreach_cooldown, inspect_novelty_weight. Do not change name or role."
+        "social_outreach_cooldown, inspect_novelty_weight, tool_repair_floor, battery_reserve_target, "
+        "shop_margin_bias. Do not change name or role."
     )
     payload: dict = {
         "persona": {k: persona[k] for k in ("name", "role", "traits", "quirk", "lessons")},

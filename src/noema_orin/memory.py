@@ -44,6 +44,11 @@ CREATE TABLE IF NOT EXISTS shop_listings(listing_id TEXT PRIMARY KEY, stall_id T
 CREATE TABLE IF NOT EXISTS equipment_state(player_id TEXT, item_id TEXT, archetype TEXT, category TEXT,
                                            equip_slot TEXT, equipped_slot TEXT, condition INTEGER, max_condition INTEGER,
                                            seen_seq INTEGER, PRIMARY KEY(player_id, item_id));
+CREATE TABLE IF NOT EXISTS cohort_claims(target_id TEXT PRIMARY KEY, member TEXT NOT NULL, action TEXT NOT NULL,
+                                         claimed_seq INTEGER NOT NULL, expires_seq INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS shared_work(room_id TEXT NOT NULL, action TEXT NOT NULL, target_id TEXT NOT NULL,
+                                       condition INTEGER, observer_id TEXT, seen_seq INTEGER NOT NULL,
+                                       PRIMARY KEY(room_id, action, target_id));
 """
 
 
@@ -523,3 +528,129 @@ class WorldMap(_Closable):
             }
             for r in rows
         ]
+
+    def claim_target(
+        self,
+        target_id: str,
+        member: str,
+        action: str,
+        current_seq: int,
+        *,
+        ttl: int = 8,
+    ) -> bool:
+        """Atomically acquire or refresh a short-lived cohort lease on `target_id` (T2/#156)."""
+        tid = str(target_id or "").strip()
+        mem = str(member or "").strip()
+        if not tid or not mem:
+            return False
+        now_seq = int(current_seq or 0)
+        exp_seq = now_seq + max(1, int(ttl))
+        with self.db:
+            row = self.db.execute(
+                "SELECT member, expires_seq FROM cohort_claims WHERE target_id=?",
+                (tid,),
+            ).fetchone()
+            if row is not None and row[0] != mem and int(row[1]) > now_seq:
+                return False
+            self.db.execute(
+                "INSERT INTO cohort_claims(target_id, member, action, claimed_seq, expires_seq) "
+                "VALUES (?,?,?,?,?) ON CONFLICT(target_id) DO UPDATE SET "
+                "member=excluded.member, action=excluded.action, "
+                "claimed_seq=excluded.claimed_seq, expires_seq=excluded.expires_seq",
+                (tid, mem, str(action or "").upper(), now_seq, exp_seq),
+            )
+        return True
+
+    def release_claim(self, target_id: str, *, member: str | None = None) -> None:
+        tid = str(target_id or "").strip()
+        if not tid:
+            return
+        with self.db:
+            if member:
+                self.db.execute("DELETE FROM cohort_claims WHERE target_id=? AND member=?", (tid, member))
+            else:
+                self.db.execute("DELETE FROM cohort_claims WHERE target_id=?", (tid,))
+
+    def active_claims(self, current_seq: int, *, exclude_member: str | None = None) -> dict[str, dict]:
+        now_seq = int(current_seq or 0)
+        rows = self.db.execute(
+            "SELECT target_id, member, action, claimed_seq, expires_seq FROM cohort_claims WHERE expires_seq > ?",
+            (now_seq,),
+        ).fetchall()
+        out: dict[str, dict] = {}
+        for tid, mem, act, cseq, eseq in rows:
+            if exclude_member and mem == exclude_member:
+                continue
+            out[tid] = {"member": mem, "action": act, "claimed_seq": cseq, "expires_seq": eseq}
+        return out
+
+    def observe_shared_work(self, room_id: str | None, observer_id: str | None, canonical: dict) -> int:
+        """Record damaged public infrastructure and remediable scars from any cohort observer (T2/#156)."""
+        if not room_id or not isinstance(canonical, dict):
+            return 0
+        seq = int(canonical.get("sequence") or 0)
+        loc = canonical.get("location") or {}
+        entities = [e for e in (loc.get("entities") or canonical.get("entities") or []) if isinstance(e, dict)]
+        items: list[tuple[str, str, str, int, str, int]] = []
+        for ent in entities:
+            eid = str(ent.get("entity_id") or "").strip()
+            if not eid or ent.get("in_progress"):
+                continue
+            is_infra = str(ent.get("entity_type") or "").upper() == "INFRASTRUCTURE" or bool(ent.get("infra_type"))
+            if not is_infra:
+                continue
+            cond = ent.get("condition")
+            if cond is not None and int(cond) < 80:
+                items.append((room_id, "REPAIR", eid, int(cond), str(observer_id or ""), seq))
+        for scar in canonical.get("scars") or []:
+            if isinstance(scar, dict) and scar.get("scar_id") and not scar.get("fossilized"):
+                strength = float(scar.get("strength") or 0.0)
+                if strength >= 0.05:
+                    items.append((room_id, "REMEDIATE", str(scar["scar_id"]), int(round((1.0 - strength) * 100)), str(observer_id or ""), seq))
+        with self.db:
+            self.db.execute("DELETE FROM shared_work WHERE room_id=?", (room_id,))
+            if items:
+                self.db.executemany(
+                    "INSERT OR REPLACE INTO shared_work(room_id, action, target_id, condition, observer_id, seen_seq) "
+                    "VALUES (?,?,?,?,?,?)",
+                    items,
+                )
+        return len(items)
+
+    def shared_work(
+        self,
+        actions: set[str] | None = None,
+        *,
+        exclude_targets: set[str] | None = None,
+        exclude_room: str | None = None,
+    ) -> list[dict]:
+        """Cross-cohort damaged infra & remediable scars ordered by severity then recency."""
+        if actions:
+            acts = sorted(str(a).upper() for a in actions)
+            marks = ",".join("?" * len(acts))
+            rows = self.db.execute(
+                f"SELECT room_id, action, target_id, condition, observer_id, seen_seq "
+                f"FROM shared_work WHERE action IN ({marks}) ORDER BY coalesce(condition, 100) ASC, seen_seq DESC",
+                tuple(acts),
+            ).fetchall()
+        else:
+            rows = self.db.execute(
+                "SELECT room_id, action, target_id, condition, observer_id, seen_seq "
+                "FROM shared_work ORDER BY coalesce(condition, 100) ASC, seen_seq DESC"
+            ).fetchall()
+        blocked = exclude_targets or set()
+        out = []
+        for room_id, action, target_id, cond, obs, seq in rows:
+            if exclude_room and room_id == exclude_room:
+                continue
+            if target_id in blocked:
+                continue
+            out.append({
+                "room_id": room_id,
+                "action": action,
+                "target_id": target_id,
+                "condition": cond,
+                "observer_id": obs,
+                "seen_seq": seq,
+            })
+        return out

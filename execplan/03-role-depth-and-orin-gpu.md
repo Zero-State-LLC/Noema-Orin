@@ -16,13 +16,13 @@ All constitutional boundaries remain intact:
 
 - [x] (2026-11-27) Operator approved 3-phase plan, Phase 1 `ready-for-agent` gating (`T1`–`T7`), Phases 2–3 `ready-for-human` gating (`T8`–`T14`), and `llama-server` target for `T10` (`D-076`).
 - [x] (2026-11-27) Published parent [Spec #154](https://github.com/Zero-State-LLC/Noema-Orin/issues/154) and child tickets `#155`–`#168` (`T1`–`T14`) with native sub-issue links and blocking edges.
-- [ ] `T1` (#155): Dual-track `FOCUS` (`ACTIVE_FOCUS_CAP = 2`) and role focus targets.
-- [ ] `T2` (#156): Shared map `cohort_claims` lease table and cross-cohort damaged-infra work queue.
-- [ ] `T3` (#157): Pre-flight precondition mirroring and `STALE_HEAD` phase jitter + digest tracking.
-- [ ] `T4` (#158): `m02` complete storefront (`SELL_OFFER`, `CORE_SWAP`, `SALVAGE_COMPOSITE` `BUY_ORDER`).
-- [ ] `T5` (#159): `m01` full civic contracts (4 kinds), `OPEN_CHARTER`, `COMMEMORATE`, and colocated diplomacy.
-- [ ] `T6` (#160): `m03` fleet-aware crafting, `m04` state-delta supersession, and `m05` grounded market/contract Herald digests.
-- [ ] `T7` (#161): Wire dead RSI knobs, persona traits, Deep Time epoch reversion, and `reflect()` prompt knobs.
+- [x] (2026-11-27) `T1` (#155): Dual-track `FOCUS` (`ACTIVE_FOCUS_CAP = 2`) and role focus targets.
+- [x] (2026-11-27) `T2` (#156): Shared map `cohort_claims` lease table and cross-cohort damaged-infra work queue.
+- [x] (2026-11-27) `T3` (#157): Pre-flight precondition mirroring and `STALE_HEAD` phase jitter + digest tracking.
+- [x] (2026-11-27) `T4` (#158): `m02` complete storefront (`SELL_OFFER`, `CORE_SWAP`, `SALVAGE_COMPOSITE` `BUY_ORDER`).
+- [x] (2026-11-27) `T5` (#159): `m01` full civic contracts (4 kinds), `OPEN_CHARTER`, `COMMEMORATE`, and colocated diplomacy.
+- [x] (2026-11-27) `T6` (#160): `m03` fleet-aware crafting, `m04` state-delta supersession, and `m05` grounded market/contract Herald digests.
+- [x] (2026-11-27) `T7` (#161): Wire dead RSI knobs, persona traits, Deep Time epoch reversion, and `reflect()` prompt knobs.
 - [ ] `T8`–`T11` (#162–#165, `ready-for-human`): Phase 2 (`playbooks/`, `agenda.json`, local `llama-server`, grounded voice).
 - [ ] `T12`–`T14` (#166–#168, `ready-for-human`): Phase 3 (TensorRT `bge-small`, Tegra telemetry, `#5` physical Orin qualification).
 

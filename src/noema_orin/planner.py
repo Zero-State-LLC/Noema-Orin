@@ -54,6 +54,7 @@ def refine(options: list[dict], canonical: dict, cohort_ids: set[str]) -> list[d
         if isinstance(org, dict) and org.get("org_id") == home:
             members = {m.get("agent_id") for m in org.get("members") or [] if isinstance(m, dict)}
     handles = {p.get("handle"): p.get("player_id") for p in canonical.get("players_here") or [] if isinstance(p, dict)}
+    here_player_ids = {str(p.get("player_id") or "") for p in canonical.get("players_here") or [] if isinstance(p, dict)}
     out, invites = [], []
     for opt in options:
         action = opt["action"]
@@ -71,7 +72,13 @@ def refine(options: list[dict], canonical: dict, cohort_ids: set[str]) -> list[d
             continue
         if action == "AGREEMENT_FORM":
             raw = opt.get("raw") or {}
-            if str(raw.get("agreement_type") or "").lower() in BLOCKED_AGREEMENTS or (raw.get("player_id") or opt.get("target_id")) not in cohort_ids:
+            party = str(raw.get("player_id") or opt.get("target_id") or "")
+            if str(raw.get("agreement_type") or "").lower() in BLOCKED_AGREEMENTS:
+                continue
+            # T5/#159 (D-076): enforce colocation to eliminate NOT_COLOCATED rejections; allow colocated external diplomacy.
+            if "players_here" in canonical and party not in here_player_ids:
+                continue
+            if "players_here" not in canonical and party not in cohort_ids:
                 continue
         out.append(opt)
     merged = invites + out
@@ -105,25 +112,62 @@ def prefer_builds(options: list[dict], builds: tuple, built: set[str]) -> list[d
     return [{**o, "i": i} for i, o in enumerate(ordered)]
 
 
-def focus(options: list[dict], verbs: set[str], held_track: str | None = None) -> list[dict]:
+def focus(
+    options: list[dict],
+    verbs: set[str],
+    held_track: str | None = None,
+    *,
+    held_tracks: list[str] | tuple[str, ...] | None = None,
+    desired_tracks: tuple[str, ...] | list[str] | None = None,
+) -> list[dict]:
     """When the role's own verbs are on offer, hide idle perception so the model acts in role."""
-    options = _drop_held_focus(options, held_track)
+    options = _drop_held_focus(options, held_track, held_tracks=held_tracks, desired_tracks=desired_tracks)
     if not has_role_verb(options, verbs):
         return options
     kept = [o for o in options if o["action"] not in IDLE]
     return [{**o, "i": i} for i, o in enumerate(kept)]
 
 
-def _drop_held_focus(options: list[dict], held_track: str | None) -> list[dict]:
-    """D-049: re-declaring the held FOCUS track is a no-op (engine applyFocus just resets declared_cycle).
+def _focus_track_of(opt: dict) -> str:
+    raw = opt.get("raw") or {}
+    track = raw.get("track") or (opt.get("arguments") or {}).get("track")
+    if track:
+        return str(track).strip().lower()
+    cmd = str(raw.get("cmd") or "").strip().lower().split()
+    if len(cmd) >= 2 and cmd[0] == "focus":
+        return cmd[1].strip("\"'")
+    tgt = str(opt.get("target_id") or "").strip().lower()
+    if tgt and not tgt.startswith(("entity.", "room.", "player.", "org.")):
+        return tgt
+    return ""
 
-    The surveyor spent ~23/40 turns on it. The client's canonical view omits `focus_lines`, so the adapter
-    passes the track it last declared itself.
-    """
-    if not held_track:
+
+def _drop_held_focus(
+    options: list[dict],
+    held_track: str | None = None,
+    *,
+    held_tracks: list[str] | tuple[str, ...] | None = None,
+    desired_tracks: tuple[str, ...] | list[str] | None = None,
+) -> list[dict]:
+    """D-049 + RFC-0144 §1 (ACTIVE_FOCUS_CAP = 2): allow missing desired tracks; drop held/unwanted FOCUS."""
+    held = [str(t).strip().lower() for t in (held_tracks or ()) if str(t or "").strip()]
+    if not held and held_track:
+        held = [str(held_track).strip().lower()]
+    desired = [str(t).strip().lower() for t in (desired_tracks or ()) if str(t or "").strip()]
+    if desired:
+        missing = [t for t in desired if t not in held]
+        if not missing:
+            kept = [o for o in options if o["action"] not in ("FOCUS", "COMMIT.FOCUS")]
+        else:
+            kept = [
+                o for o in options
+                if o["action"] not in ("FOCUS", "COMMIT.FOCUS") or _focus_track_of(o) in missing
+            ]
+        return [{**o, "i": i} for i, o in enumerate(kept)] if len(kept) != len(options) else options
+    if not held:
         return options
-    # Any FOCUS after the first declaration only switches or clears the track; the model cycled all five.
-    kept = [o for o in options if o["action"] != "FOCUS"]
+    # Legacy single-track guard when caller specifies no desired_tracks.
+    kept = [o for o in options if o["action"] not in ("FOCUS", "COMMIT.FOCUS")]
     return [{**o, "i": i} for i, o in enumerate(kept)] if len(kept) != len(options) else options
 
 
@@ -137,6 +181,7 @@ def route(
     avoid_pressure: bool = False,
     pressure_weight: float = 0.7,
     seek_scars: bool = False,
+    current_seq: int | None = None,
 ) -> str | None:
     """Exit direction to take, or None to decide in place."""
     loc = canonical.get("location") or {}
@@ -158,6 +203,23 @@ def route(
         dist = world_map.distances(here) if rooms else {}
         reach = sorted((dist[r], r) for r in rooms if r in dist)
         goal = reach[0][1] if reach else None
+    if goal is None and hasattr(world_map, "shared_work"):
+        # T2/#156: consume cross-cohort damaged infra & scars discovered by surveyor/peers, skipping claimed targets.
+        seq_now = current_seq if current_seq is not None else canonical.get("sequence")
+        claimed = (
+            set(world_map.active_claims(int(seq_now), exclude_member=me))
+            if seq_now is not None and hasattr(world_map, "active_claims")
+            else set()
+        )
+        shared = world_map.shared_work(verbs, exclude_targets=claimed, exclude_room=here)
+        if shared:
+            dist = world_map.distances(here)
+            reach = sorted(
+                (dist[row["room_id"]], int(row.get("condition") if row.get("condition") is not None else 100), row["room_id"])
+                for row in shared
+                if row["room_id"] in dist
+            )
+            goal = reach[0][2] if reach else None
     if goal is None and avoid_pressure and hasattr(world_map, "low_pressure_offered"):
         goal = world_map.low_pressure_offered(verbs, exclude=here, near=here, pressure_weight=pressure_weight)
     if goal is None:

@@ -38,6 +38,7 @@ ROLES: dict[str, dict[str, object]] = {
         "supply": ("HARVEST", "COMMIT.HARVEST"),
         # Role spaces (D-018): workshop cuts repair/craft cost; archive_annex cuts Archivist attention cost.
         "builds": ("workshop", "archive_annex"),
+        "focus_tracks": ("engineer", "artificer"),
         "mission": "Keep the Reach standing: gather materials, RECHARGE at active generators, fabricate tools and power cells "
                    "at workshops (focusing engineer and artificer), REPAIR or RESTORE damaged infrastructure, fulfill civic "
                    "contracts, remediate pre-fossilization scars, ATTEST witnessed site condition, and UPGRADE or CONSTRUCT.",
@@ -45,6 +46,7 @@ ROLES: dict[str, dict[str, object]] = {
     "archivist": {
         "verbs": ("RECONSTRUCT", "RECONSTRUCT_PUBLISH", "RECONSTRUCT_SUPERSEDE", "COMMEMORATE", "ATTEST", "CONTRACT_FULFILL",
                   "RECHARGE", "INVESTIGATE", "CONTEST_DEFEND", "FOCUS", "COMMIT.FOCUS", "EQUIP", "UNEQUIP", "USE_ITEM"),
+        "focus_tracks": ("archivist", "surveyor"),
         "mission": "Keep the Reach's memory honest: INSPECT scars, lore attractors, and artifacts, INVESTIGATE crime residues, "
                    "defend public artifacts via CONTEST_DEFEND, RECONSTRUCT what happened, publish and supersede "
                    "reconstructions, COMMEMORATE crystallized lore or fossilized scars, and ATTEST observed claims.",
@@ -52,6 +54,7 @@ ROLES: dict[str, dict[str, object]] = {
     "speaker": {
         "verbs": ("MESSAGE", "SHOUT", "BOARD", "ORG_OFFICE_ACT", "ATTEST", "CONTRACT_POST", "RECHARGE", "FOCUS", "COMMIT.FOCUS",
                   "EQUIP", "UNEQUIP", "USE_ITEM"),
+        "focus_tracks": ("herald",),
         "mission": "Be the Compact's voice: carry grounded news between Players with MESSAGE, SHOUT, and BOARD, "
                    "publish grounded TRADE_NOTICE digests of active barter_stall stock and open contracts, corroborate "
                    "rumors, and ATTEST witnessed room states. Every claim must come from something observed.",
@@ -59,6 +62,7 @@ ROLES: dict[str, dict[str, object]] = {
     "surveyor": {
         "verbs": ("FOCUS", "COMMIT.FOCUS", "CONNECT", "ATTEST", "SHOUT", "RECHARGE", "CONTRACT_FULFILL", "HARVEST", "COMMIT.HARVEST",
                   "CONTEST_DEFEND", "SANCTION", "INVESTIGATE", "EQUIP", "UNEQUIP", "USE_ITEM", "TRADE"),
+        "focus_tracks": ("explorer", "surveyor"),
         "mission": "Chart and guard the Reach: MOVE to the least recently visited room, map lots, stalls, scars, lore "
                    "attractors, and open contests into shared memory, harvest edge salvage, defend Compact assets via "
                    "CONTEST_DEFEND and evidence-backed SANCTION (never declare offensive contests), and CONNECT routes.",
