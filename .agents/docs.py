@@ -453,8 +453,13 @@ def checklist_items(text: str) -> dict[str, bool]:
 
 
 def documents(kind: dict[str, Any]) -> dict[str, Path]:
-    files = sorted(ROOT.glob(kind["files"]))
-    return {p.name: p for p in files if not any(fnmatch.fnmatch(str(p.relative_to(ROOT)), x) for x in kind.get("exclude", []))}
+    globs = kind["files"] if isinstance(kind["files"], list) else [kind["files"]]
+    files = sorted({p for g in globs for p in ROOT.glob(g)})
+    return {
+        (p.name if p.name != "spec.md" or p.parent.name == "specify" else f"{p.parent.name}/{p.name}"): p
+        for p in files
+        if not any(fnmatch.fnmatch(str(p.relative_to(ROOT)), x) for x in kind.get("exclude", []))
+    }
 
 
 def index_rows(kind: dict[str, Any]) -> dict[str, str]:
@@ -504,6 +509,22 @@ def lifecycle_violations(lc: dict[str, Any], since: str | None = None) -> list[d
                 targets = [need["file_prefix"].format(int(t) if t.isdigit() else t) for t in re.findall(need["pattern"], raw)]
                 if not targets or not all(any(n.startswith(t) for n in docs) for t in targets):
                     out.append({"key": f"{ref}:missing_successor", "detail": f"{state} must name an existing successor ({need['pattern']})"})
+            for req in kind.get("requires", []):
+                if state not in req["when"]:
+                    continue
+                m = re.search(req["field"], path.read_text(encoding="utf-8"), re.M)
+                if not m:
+                    continue
+                other = lc["kinds"][req["kind"]]
+                target = Path(m.group(1)).name
+                tdocs = documents(other)
+                if target not in tdocs:
+                    out.append({"key": f"{ref}:requires_missing:{target}", "detail": f"names {req['kind']} {target}, which does not exist"})
+                    continue
+                tstate = normalize(status_text(tdocs[target].read_text(encoding="utf-8"), other["status"]), other)
+                order = other["states"]
+                if tstate is None or order.index(tstate) < order.index(req["min_state"]):
+                    out.append({"key": f"{ref}:requires:{target}", "detail": f"is {state} but its {req['kind']} {target} is {tstate} (needs {req['min_state']})"})
             if since and state:
                 old = subprocess.run(["git", "show", f"{since}:{path.relative_to(ROOT)}"], cwd=ROOT, capture_output=True, text=True)
                 if old.returncode == 0:
