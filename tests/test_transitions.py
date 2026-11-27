@@ -140,6 +140,95 @@ class TransitionLogTests(unittest.TestCase):
         self.assertIn("transitions.jsonl", _PRIVATE_LEAK_TOKENS)
 
 
+def _turn(action, ok=True, code=None, reason=None, failure=None):
+    """Shaped like noema_client.types.TurnResult; `code` is the gateway error code."""
+    result = SimpleNamespace(ok=ok, error={"code": code} if code else None)
+    return SimpleNamespace(ok=ok, reason=reason, failure=SimpleNamespace(value=failure) if failure else None,
+                           proposal=SimpleNamespace(action=action, target_id=None, arguments=None), result=result)
+
+
+class OutcomeTests(unittest.TestCase):
+    """C1 (#196): each logged turn's outcome, from the client's turn results, never from prose."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.mind = Path(self._tmp.name) / "mind"
+        self.mind.mkdir()
+        self.log = TransitionLog(self.mind)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _play(self, actions, start_seq=1):
+        self.log.new_session()
+        for i, action in enumerate(actions):
+            self.log.append(canonical=_obs(start_seq + i), proposal=_prop(action), source="planner")
+
+    def _outcomes(self):
+        from noema_orin.transitions import iter_outcomes
+
+        return [(obs["sequence"], action["action"], outcome) for obs, action, outcome in iter_outcomes(self.mind)]
+
+    def test_accepted_and_rejected_turns_are_labelled_with_the_client_code(self):
+        self._play(["LOOK", "MOVE", "REPAIR"])
+        # play() puts the ENTER_WORLD CommandResult first; it has no proposal and is not a decided turn.
+        report = [SimpleNamespace(ok=True), _turn("LOOK"), _turn("MOVE", ok=False, code="STALE_HEAD", failure="server_rejection"),
+                  _turn("REPAIR", ok=False, reason="POLICY_DENIED", failure="policy_rejection")]
+        self.assertEqual(self.log.record_outcomes(report), 3)
+        self.assertEqual(self._outcomes(), [
+            (1, "LOOK", {"ok": True}),
+            (2, "MOVE", {"ok": False, "code": "STALE_HEAD", "failure": "server_rejection"}),
+            (3, "REPAIR", {"ok": False, "code": "POLICY_DENIED", "failure": "policy_rejection"}),
+        ])
+
+    def test_the_last_turn_of_a_session_has_an_outcome_even_without_a_next_observation(self):
+        self._play(["LOOK", "WAIT"])
+        self.log.record_outcomes([_turn("LOOK"), _turn("WAIT", ok=False, code="BUDGET_EXCEEDED")])
+        self.assertEqual(len(list(iter_transitions(self.mind))), 1)
+        self.assertEqual(self._outcomes()[-1], (2, "WAIT", {"ok": False, "code": "BUDGET_EXCEEDED"}))
+
+    def test_a_session_without_a_report_has_no_outcomes_and_later_sessions_do_not_leak_into_it(self):
+        self._play(["LOOK", "MOVE"])  # transport drop: play() raised, nothing recorded
+        self._play(["WAIT"], start_seq=50)
+        self.log.record_outcomes([_turn("WAIT")])
+        self.assertEqual(self._outcomes(), [(1, "LOOK", None), (2, "MOVE", None), (50, "WAIT", {"ok": True})])
+
+    def test_labelling_stops_at_the_first_turn_that_does_not_match_the_logged_action(self):
+        self._play(["LOOK", "MOVE", "WAIT"])
+        self.assertEqual(self.log.record_outcomes([_turn("LOOK"), _turn("TRADE", ok=False, code="X"), _turn("WAIT")]), 1)
+        self.assertEqual([o for _s, _a, o in self._outcomes()], [{"ok": True}, None, None])
+
+    def test_a_stopped_turn_without_a_proposal_is_not_a_decided_turn(self):
+        self._play(["LOOK"])
+        tripped = SimpleNamespace(ok=False, reason="circuit_breaker", failure=None, proposal=None, result=None)
+        self.assertEqual(self.log.record_outcomes([_turn("LOOK"), tripped]), 1)
+        self.assertEqual(self._outcomes(), [(1, "LOOK", {"ok": True})])
+
+    def test_outcomes_do_not_disturb_transition_pairing_and_rows_without_them_still_read(self):
+        self._play(["LOOK", "MOVE"])
+        self.log.record_outcomes([_turn("LOOK"), _turn("MOVE")])
+        self._play(["WAIT", "WAIT"], start_seq=10)
+        self.assertEqual([(o["sequence"], n["sequence"]) for o, _a, n in iter_transitions(self.mind)], [(1, 2), (10, 11)])
+
+    def test_outcomes_ride_the_same_rotation_and_survive_it(self):
+        log = TransitionLog(self.mind, max_bytes=2000, keep=50)
+        log.new_session()
+        for seq in range(30):
+            log.append(canonical=_obs(seq, filler="x" * 100), proposal=_prop("WAIT"), source="planner")
+        log.record_outcomes([_turn("WAIT", ok=seq % 2 == 0, code=None if seq % 2 == 0 else "STALE_HEAD") for seq in range(30)])
+        self.assertTrue(list(self.mind.glob("transitions-*.jsonl.gz")))
+        self.assertEqual({p.name.split("-")[0].split(".")[0] for p in self.mind.iterdir()}, {"transitions"})
+        from noema_orin.transitions import iter_outcomes
+
+        got = [(obs["sequence"], outcome["ok"]) for obs, _a, outcome in iter_outcomes(self.mind)]
+        self.assertEqual(got, [(seq, seq % 2 == 0) for seq in range(30)])
+
+    def test_codes_are_bounded_strings(self):
+        self._play(["LOOK"])
+        self.log.record_outcomes([_turn("LOOK", ok=False, code="E" * 500)])
+        self.assertEqual(len(self._outcomes()[0][2]["code"]), 80)
+
+
 @unittest.skipUnless(_HAS_CLIENT, "needs noema-client")
 class DecideHookTests(unittest.TestCase):
     def _adapter(self):
