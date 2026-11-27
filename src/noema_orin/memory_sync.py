@@ -7,6 +7,7 @@ local memory untouched and is retried on the next tick.
 """
 
 import argparse
+import contextlib
 import json
 import os
 import sqlite3
@@ -28,13 +29,13 @@ def collect(root: Path, member: str, marks: dict) -> dict:
     out: dict = {"member": member, "facts": [], "relations": [], "rooms": [], "exits": [], "offers": []}
     mem = _ro(root / member / "mind" / "memory.db")
     if mem is not None:
-        out["facts"] = [dict(r) for r in mem.execute(
-            "SELECT id, sequence, room, kind, text, source_sequence, stale FROM facts WHERE coalesce(sequence,0) > ? "
-            "ORDER BY sequence LIMIT 2000", (mark.get("facts_seq", -1),))]
-        out["relations"] = [dict(r) for r in mem.execute(
-            "SELECT rowid, player_id, note, sign, sequence FROM relations WHERE rowid > ? ORDER BY rowid LIMIT 2000",
-            (mark.get("rel_rowid", 0),))]
-        mem.close()
+        with contextlib.closing(mem):
+            out["facts"] = [dict(r) for r in mem.execute(
+                "SELECT id, sequence, room, kind, text, source_sequence, stale FROM facts WHERE coalesce(sequence,0) > ? "
+                "ORDER BY sequence LIMIT 2000", (mark.get("facts_seq", -1),))]
+            out["relations"] = [dict(r) for r in mem.execute(
+                "SELECT rowid, player_id, note, sign, sequence FROM relations WHERE rowid > ? ORDER BY rowid LIMIT 2000",
+                (mark.get("rel_rowid", 0),))]
     persona = root / member / "mind" / "persona.json"
     if persona.exists():
         body = json.loads(persona.read_text())
@@ -43,21 +44,22 @@ def collect(root: Path, member: str, marks: dict) -> dict:
     if member == "_metrics":
         mdb = _ro(root / "shared" / "metrics.db")
         if mdb is not None:
-            out["sessions"] = [dict(r) for r in mdb.execute(
-                "SELECT * FROM sessions WHERE rowid > ? ORDER BY rowid LIMIT 2000", (mark.get("sess_rowid", 0),))]
-            out["_rowids"] = [r[0] for r in mdb.execute(
-                "SELECT rowid FROM sessions WHERE rowid > ? ORDER BY rowid LIMIT 2000", (mark.get("sess_rowid", 0),))]
-            mdb.close()
+            with contextlib.closing(mdb):
+                out["sessions"] = [dict(r) for r in mdb.execute(
+                    "SELECT * FROM sessions WHERE rowid > ? ORDER BY rowid LIMIT 2000", (mark.get("sess_rowid", 0),))]
+                out["_rowids"] = [r[0] for r in mdb.execute(
+                    "SELECT rowid FROM sessions WHERE rowid > ? ORDER BY rowid LIMIT 2000", (mark.get("sess_rowid", 0),))]
         digest = root / "shared" / "digest.json"
         if digest.exists() and digest.stat().st_mtime > mark.get("digest_mtime", 0):
             out["digest"] = json.loads(digest.read_text())
             out["_digest_mtime"] = digest.stat().st_mtime
-    shared = _ro(root / "shared" / "map.db")
-    if shared is not None and member == "_map":
-        out["rooms"] = [dict(r) for r in shared.execute("SELECT * FROM rooms WHERE last_seen_seq > ?", (mark.get("map_seq", -1),))]
-        out["offers"] = [dict(r) for r in shared.execute("SELECT * FROM offers WHERE seen_seq > ?", (mark.get("map_seq", -1),))]
-        out["exits"] = [dict(r) for r in shared.execute("SELECT * FROM exits")]
-        shared.close()
+    if member == "_map":
+        shared = _ro(root / "shared" / "map.db")
+        if shared is not None:
+            with contextlib.closing(shared):
+                out["rooms"] = [dict(r) for r in shared.execute("SELECT * FROM rooms WHERE last_seen_seq > ?", (mark.get("map_seq", -1),))]
+                out["offers"] = [dict(r) for r in shared.execute("SELECT * FROM offers WHERE seen_seq > ?", (mark.get("map_seq", -1),))]
+                out["exits"] = [dict(r) for r in shared.execute("SELECT * FROM exits")]
     return out
 
 

@@ -1,6 +1,9 @@
+import contextlib
+import gc
 import json
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest import mock
 
@@ -12,9 +15,11 @@ class SyncTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        Memory(self.root / "m01" / "mind").remember("Civic offers HARVEST", kind="offer", room="room.civic", sequence=5)
+        with Memory(self.root / "m01" / "mind") as mem:
+            mem.remember("Civic offers HARVEST", kind="offer", room="room.civic", sequence=5)
         (self.root / "m01" / "mind" / "persona.json").write_text(json.dumps({"name": "Aphelia", "version": 3}))
-        WorldMap(self.root).observe("room.civic", "Civic", 5, ["room.ring"], ["HARVEST"])
+        with WorldMap(self.root) as wm:
+            wm.observe("room.civic", "Civic", 5, ["room.ring"], ["HARVEST"])
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -39,9 +44,9 @@ class SyncTests(unittest.TestCase):
 
     def test_metrics_sessions_and_digest_sync_once(self):
         from noema_orin.metrics import open_db
-        db = open_db(self.root)
-        db.execute("INSERT INTO sessions VALUES ('a.log',1,1.0,'m01','founder',3,'duration_elapsed',NULL,1,1,3,0,'{}')")
-        db.commit(); db.close()
+        with contextlib.closing(open_db(self.root)) as db:
+            db.execute("INSERT INTO sessions VALUES ('a.log',1,1.0,'m01','founder',3,'duration_elapsed',NULL,1,1,3,0,'{}')")
+            db.commit()
         (self.root / "shared" / "digest.json").write_text('{"alerts": []}')
         calls = []
         with mock.patch.dict("os.environ", {"MEMORY_SYNC_URL": "https://x", "MEMORY_SYNC_TOKEN": "t"}), \
@@ -57,6 +62,18 @@ class SyncTests(unittest.TestCase):
     def test_unconfigured_is_a_noop(self):
         with mock.patch.dict("os.environ", {}, clear=True):
             self.assertEqual(memory_sync.main(["--root", str(self.root)]), 0)
+
+    def test_collect_closes_sqlite_handles(self):
+        from noema_orin.metrics import open_db
+        with contextlib.closing(open_db(self.root)) as db:
+            db.commit()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", ResourceWarning)
+            for member in ("m01", "_metrics", "_map"):
+                memory_sync.collect(self.root, member, {})
+            gc.collect()
+        resource_warnings = [w for w in caught if issubclass(w.category, ResourceWarning)]
+        self.assertEqual(resource_warnings, [])
 
 
 if __name__ == "__main__":
