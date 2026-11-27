@@ -1,0 +1,14 @@
+[Unit]
+Description=NOEMA Orin bge-small embedding server (T12/#166, llama.cpp CUDA)
+After=network-online.target
+
+[Service]
+Type=simple
+# Model: CompendiumLabs/bge-small-en-v1.5-gguf (f16, 67 MB, MIT). Clients: NOEMA_TRT_EMBED_URL=http://127.0.0.1:8082/v1
+ExecStart=%h/llama.cpp/build/bin/llama-server -m %h/models/bge-small-en-v1.5-f16.gguf --embedding --pooling cls --host 127.0.0.1 --port 8082 -ngl 99 --ctx-size 512
+Restart=on-failure
+RestartSec=10
+MemoryMax=600M
+
+[Install]
+WantedBy=noema-players.target

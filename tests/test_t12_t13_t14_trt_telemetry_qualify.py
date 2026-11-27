@@ -80,6 +80,34 @@ class TrtSemanticMemoryTests(unittest.TestCase):
 
 
 class TegraTelemetryTests(unittest.TestCase):
+    def test_http_embedder_openai_shape(self):
+        from unittest import mock
+
+        from noema_orin.embedder import HttpTrtEmbedder
+
+        class _Resp:
+            def __init__(self, body):
+                self.body = body
+
+            def read(self):
+                return self.body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        seen = {}
+
+        def fake_urlopen(req, timeout=None):
+            seen["url"] = req.full_url
+            return _Resp(json.dumps({"data": [{"embedding": [0.5, -0.25]}]}).encode())
+
+        with mock.patch("urllib.request.urlopen", fake_urlopen):
+            vec = HttpTrtEmbedder(base_url="http://127.0.0.1:8082/v1").embed("relay damage")
+        self.assertEqual(seen["url"], "http://127.0.0.1:8082/v1/embeddings")
+        self.assertEqual(vec, [0.5, -0.25])
     def test_collect_jetson_telemetry_parses_sysfs_and_degrades_cleanly(self):
         probe = _FakeJetsonProbe(
             {
