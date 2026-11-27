@@ -240,3 +240,7 @@ m05 (speaker) fell back to ORG_MEMBER_REMOVE (4 times, once POLICY_DENIED) and O
 ## D-072: one AGREEMENT_FORM per party (2026-11-26)
 
 24h `fleet.sh 200`: m01 (founder) tried AGREEMENT_FORM 46 times (25 at Cantor-Speaker, 9 at Rivet, 8 at Vellum), and most failed NOT_COLOCATED. `_one_record_per_subject` now offers one agreement per party, and an attempt is remembered as `agreement:<party>` (kind `published`), so m01 does not retry it every turn.
+
+## D-073: the archivist does not wait beside records it already published (2026-11-26)
+
+m04 had 8/200 role actions: 181/600 turns were idle_skip WAITs at attention 8, in rooms offering 125 RECONSTRUCT_PUBLISH records, all of subjects it had already published (D-055 hides them from the menu). `_offered_here` still counted them as work, so it stayed put. Records of `published` subjects no longer count, and m04 walks on to find new subjects.

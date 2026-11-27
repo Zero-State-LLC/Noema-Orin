@@ -567,3 +567,16 @@ class AgreementOnceTests(unittest.TestCase):
                 for i, t in enumerate(("TRADE", "ACCESS", "TRADE"))]
         self.assertEqual(len(_one_record_per_subject(menu, set())), 1)
         self.assertEqual(_one_record_per_subject(menu, {"agreement:player.Cantor-Speaker"}), [])
+
+
+class ArchivistRoamsTests(unittest.TestCase):
+    """D-073: published-subject records do not hold the archivist in place."""
+
+    def test_done_subject_does_not_hold(self):
+        from noema_orin.orin_adapter import _offered_here
+
+        c = {"affordances": [{"action": "RECONSTRUCT_PUBLISH", "operation": "RECONSTRUCT_PUBLISH",
+                              "subject_ref": "entity.relay-7", "available": True}]}
+        verbs = set(role_for("archivist")["verbs"])
+        self.assertTrue(_offered_here(c, verbs))
+        self.assertFalse(_offered_here(c, verbs, done={"entity.relay-7"}))
