@@ -638,7 +638,8 @@ class OrinAdapter:
             canonical = context.get("canonical") or {}
             goal = self.supply if (self.supply and _hold_empty(canonical)) else self.verbs
             direction = None
-            if _offered_here(canonical, set(goal) - STAY_EXEMPT):
+            stay = set(goal) - STAY_EXEMPT
+            if _offered_here(canonical, stay, done=self._published_subjects()):
                 # S4: the role verb is here, only unaffordable now (filtered from options). WAIT refuels in place;
                 # m03 walked away from relay-quarter REPAIR at energy 3 every time it arrived.
                 pass
@@ -972,11 +973,13 @@ def _depleted(canonical: dict) -> bool:
     return isinstance(energy, (int, float)) and energy <= 0
 
 
-def _offered_here(canonical: dict, verbs: set[str]) -> bool:
+def _offered_here(canonical: dict, verbs: set[str], done: set[str] | frozenset = frozenset()) -> bool:
     """D-035: the room advertises a role verb even if unaffordable now; stay and rest rather than walk off.
-    S4: a depleted node ("Not enough stock") does not count; WAIT cannot fix it."""
+    S4: a depleted node ("Not enough stock") does not count; WAIT cannot fix it.
+    D-073: neither does a record of an already-published subject (m04 WAITed 181/600 beside 125 such offers)."""
     return any(isinstance(a, dict) and str(a.get("operation") or a.get("action") or "").upper() in verbs
                and (a.get("available") is not False or _budget_blocked(a))
+               and not (str(a.get("action") or "").startswith("RECONSTRUCT") and a.get("subject_ref") in done)
                for a in canonical.get("affordances") or [])
 
 
