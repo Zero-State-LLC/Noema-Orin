@@ -185,3 +185,9 @@
 - #204 (consequence model in shadow) and #205 (shadow accuracy in the digest/dashboard) are rolled fleet-wide: 308 tests OK, all 6 active. Both are inert unless the flags are set.
 - C5 (#200) canary: m06 has `NOEMA_TRANSITION_LOG=1` + `NOEMA_CONSEQUENCE_SHADOW=1` (backup `m06.env.bak-pre-c5`). In the first 10 min: 3 rows (about 48 KB/row, because the full canonical observation is stored), 0 errors, m06 RSS 31 MB (ceiling 160M).
 - Watch: bytes/row is high. At about 6 agents x 250 turns/h that is roughly 70 MB/h before gzip rotation. The rotation cap (16 MB x 32 segments) bounds it at about 512 MB per agent. Check after the 1h soak, then decide on fleet-wide enablement.
+
+## 2026-11-27 15:05Z: approvals applied
+- #5/#168 closed. G-002 is APPROVED (gate states allow only BLOCKED/NOT_COMPUTABLE/APPROVED). Receipt `docs/evidence/qualify-orin-20261127T1457Z.json`: 20.6 tok/s, embed p95 12 ms, 5.8 W. #207 and #208 merged, main CI green.
+- #4: blocked on a human device-code approval at noema.guru/connect for the isolated world attach (details on #4). The client is now 0.2.0, so re-pin `official_client.py` first.
+- #6: still blocked on a Noema-Specs canonical decision for spec 014 (G-001). Operator approval cannot substitute for that.
+- Ship command: always `sleep 20 && gh pr checks --watch --fail-fast` and merge only on rc=0.
