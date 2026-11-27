@@ -629,3 +629,16 @@ class RouteToRechargeTests(unittest.TestCase):
         p = a._plan({"canonical": c}, [])
         # energy 2 == hops 2: arriving empty is worse than resting here
         self.assertFalse(p is not None and (p.action, p.target_id) == ("MOVE", "east"))
+
+
+class FallbackMetricTests(unittest.TestCase):
+    """D-075: scripted fallback turns are not Ollama fallbacks."""
+
+    def test_scripted_not_counted(self):
+        from noema_orin.health import RoleHealthTracker
+
+        h = RoleHealthTracker(role="x")
+        h.record_turn(verb="MOVE", used_workers_ai=False, source_sequence=1, used_local=False)
+        h.record_turn(verb="MOVE", used_workers_ai=False, source_sequence=2, used_local=True)
+        h.record_turn(verb="MOVE", used_workers_ai=False, source_sequence=3)
+        self.assertEqual(h.ollama_fallbacks, 2)

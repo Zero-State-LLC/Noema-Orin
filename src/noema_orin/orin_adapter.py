@@ -80,6 +80,7 @@ class OrinAdapter:
         payload = {"model": self.model, "stream": False, "format": "json",
                    "options": {"temperature": 0.4, "num_ctx": self.num_ctx, "num_predict": num_predict},
                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+        self._last_local = True  # D-075: a real local-model call (counted as an Ollama fallback)
         req = urllib.request.Request(self.base_url.removesuffix("/v1") + "/api/chat", data=json.dumps(payload).encode(),
                                      headers={"content-type": "application/json"}, method="POST")
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
@@ -728,9 +729,11 @@ class OrinAdapter:
             verb=str(getattr(proposal, "action", "") or ""),
             used_workers_ai=bool(getattr(self, "_last_remote", False)),
             used_planner=source in ("planner", "idle_skip", "guard"),
+            used_local=bool(getattr(self, "_last_local", False)),
             source_sequence=int(canonical.get("sequence") or 0),
         )
         self._last_remote = False
+        self._last_local = False
         budgets_snap = {k: v for k, v in (canonical.get("resources") or {}).items()
                         if k in ("energy", "attention", "compute", "storage", "influence")}
         if hasattr(self, "turn_log"):

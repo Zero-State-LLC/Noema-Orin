@@ -52,6 +52,7 @@ class RoleHealthTracker:
         source_sequence: int,
         had_error: bool = False,
         used_planner: bool = False,
+        used_local: bool | None = None,
     ) -> None:
         norm = verb.strip().upper()
         if norm in {"LOOK", "WAIT"}:
@@ -62,7 +63,8 @@ class RoleHealthTracker:
             self.planner_turns += 1
         elif used_workers_ai:
             self.workers_ai_calls += 1
-        else:
+        elif used_local is None or used_local:
+            # D-075: scripted fallback/loop_break turns call no model; only count real local-model calls.
             self.ollama_fallbacks += 1
         if had_error:
             self.error_count += 1

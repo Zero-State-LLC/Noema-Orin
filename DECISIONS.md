@@ -253,3 +253,7 @@ Follow-up (D-073b): after the first fix, m04 looped on planner INSPECTs of publi
 ## D-074: walk to the generator to RECHARGE (2026-11-27)
 
 m06 (surveyor) was at energy <=1 on 32% of turns, idle_skip WAITing (+1 to +2) in 6 rooms, including generator-hall, which has no active generator. RECHARGE (+4) has been offered only at civic-exchange (212 RECHARGE turns fleet-wide, all there). Below the energy reserve floor with no RECHARGE in the room, the planner now takes the next hop toward the nearest known RECHARGE room, but only if energy exceeds the hop count. Otherwise it rests in place as before.
+
+## D-075: "Ollama fallbacks" counts only real local-model calls (2026-11-27)
+
+The digest alarmed "cost: Ollama fallbacks 3288/2355 (140%)". `RoleHealthTracker` counted every turn that was neither planner nor Workers AI as an Ollama fallback, which includes scripted `fallback` and `loop_break` turns that call no model (m05: 136 "fallbacks" in one session, all scripted). The adapter now sets `_last_local` when it actually calls the local model, and only those count. Callers that don't pass `used_local` keep the old behaviour.
