@@ -337,7 +337,11 @@ class DashboardEndToEndTests(unittest.TestCase):
         self.assertIn("127.0.0.1", dash_unit)
         self.assertIn("MemoryMax=96M", dash_unit)
         kiosk_unit = (repo / "deploy/jetson/noema-dashboard-kiosk.service").read_text(encoding="utf-8")
-        self.assertIn("--kiosk", kiosk_unit)
+        # #190 replaced the Chromium `--kiosk` launcher with xinit + WebKit2GTK (kiosk-xinitrc -> kiosk.py).
+        self.assertIn("deploy/jetson/kiosk-xinitrc", kiosk_unit)
+        self.assertIn("MemoryMax=", kiosk_unit)
+        xinitrc = (repo / "deploy/jetson/kiosk-xinitrc").read_text(encoding="utf-8")
+        self.assertIn("deploy/jetson/kiosk.py", xinitrc)
 
 
 if __name__ == "__main__":
