@@ -24,7 +24,7 @@ The operator approved a separate T4a slice at [spec #12](https://github.com/Zero
 
 Spec 014 is SPECULATIVE. Its statement that Spark is the sole WorldState writer conflicts with `Noema-Specs/CONTEXT.md` for the hosted Platform. Before offline execution or any promotion, record a canonical decision that explicitly scopes Spark to a non-canonical offline chamber, defines its identity and interfaces, and states what evidence can and cannot be promoted. Do not edit the source spec in this repository or call the defect resolved.
 
-## G-002: Physical hardware evidence (model chosen in D-009; decisions on Workers AI since D-016), OBSERVED
+## G-002: Physical hardware evidence (model chosen in D-009; decisions on Workers AI since D-016), APPROVED
 
 Exact Orin model, memory, JetPack/L4T version, storage, power supply/profile, reachable network, compatible quantization and model license are not confirmed here. Measure these before choosing a model or promising throughput. An offline fake-client test proves only orchestration logic.
 
