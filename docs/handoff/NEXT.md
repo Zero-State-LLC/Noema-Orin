@@ -99,3 +99,9 @@
 - #144 merged (recommendation: states-only gate checks, enforce direction later once a G-gate actually moves). `machine.py check` and `docs.py check` OK on main.
 - m04 idle is correct world state: all 13 inspectable subjects in reach are published, and its idle turns are planner WAIT/MOVE with no model calls, so they cost nothing. It resumes when new entities or structures appear (m02 builds, m03 repairs). A possible later slice is to allow a re-revision when an entity's condition changes. That needs a condition-change signal, so it is not urgent.
 - Fleet healthy: 0 turns at energy <=1, 0 tracebacks, no open PRs.
+
+## 2026-11-27 07:01Z
+- New merged PRs #148-#150 (agents docs machine sync, gates D-009..011) are docs only, with no runtime impact and no roll needed.
+- D-075 (#151) rolled fleet-wide: the "Ollama fallbacks 140%" alert was a metric bug, since scripted fallback turns were counted as local-model calls. First full sessions after: ollama_fallbacks = 0 on all 6 (Workers AI calls 0-22 per session). The 24h alert clears as old rows age out.
+- fleet.sh 200 at 06:17Z: role 232/1200 (was 211). m06 63/200 (was 10) after D-074.
+- idle_rate alerts (0.68-0.93) count WAIT/LOOK/MOVE as idle. That is expected given energy-limited roles, not a fault.
