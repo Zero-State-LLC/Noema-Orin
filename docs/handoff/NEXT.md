@@ -89,3 +89,8 @@
 ## 2026-11-27 02:16Z
 - D-073 (#141) + D-073b (#142) deployed to m04: published records no longer hold it in place, and evidence INSPECTs skip published subjects. After restart: 5 rooms in 21 turns, 4 role actions (RECONSTRUCT x2, PUBLISH, SUPERSEDE). Before: 1 room and 0 role actions.
 - Next candidate: m06 RECHARGE-routing (energy <=1 on 32% of turns).
+
+## 2026-11-27 03:13Z
+- D-074 (#145) rolled fleet-wide: low energy with no RECHARGE in the room now walks to the generator room. 25 min after: 0 turns at energy <=1 fleet-wide (m06 was 32%), and m06 did HARVEST 14/20. All 6 active, 0 tracebacks.
+- m04 is back to WAIT 12/MOVE 11 with no role actions in this window. Watch: it may have exhausted subjects within reach.
+- **Needs user:** PR #144 (AGENTS.md state machine, by scrimshawlife-ctrl) asks to "confirm before we enforce direction" on the G-gate lifecycle order. CI is green and there are no runtime changes. Left open for you.
