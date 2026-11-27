@@ -26,6 +26,7 @@ _PRIVATE_LEAK_TOKENS = (
     "persona.json",
     "agenda.json",
     "quarantine.jsonl",
+    "transitions.jsonl",
     "trait_deltas",
     "knob_deltas",
     "canary_window",

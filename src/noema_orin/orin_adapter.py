@@ -55,6 +55,7 @@ class OrinAdapter:
         self.last_cycle: int | None = None
         self.last_playbook_state: str | None = None
         self.agenda_manager = None
+        self.transition_log = None
 
     def _effective_social_cooldown(self) -> int:
         knobs = getattr(self, "policy_knobs", None) or {}
@@ -694,6 +695,13 @@ class OrinAdapter:
         self._last_tier = None
         batch_cap = int((getattr(self, "policy_knobs", None) or {}).get("harvest_batch_target", HARVEST_MAX))
         proposal = _harvest_amount(proposal, canonical, max_batch=batch_cap)
+        transition_log = getattr(self, "transition_log", None)
+        if transition_log is not None:
+            # D-078: opt-in, Controller-local. Logs the proposal as returned; must never stall a turn.
+            try:
+                transition_log.append(canonical=canonical, proposal=proposal, source=source)
+            except Exception as exc:
+                print(json.dumps({"transition_log_error": type(exc).__name__}), flush=True)
         return proposal
 
 
