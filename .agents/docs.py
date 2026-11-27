@@ -472,11 +472,12 @@ def documents(kind: dict[str, Any]) -> dict[str, Path]:
     }
 
 
-def index_rows(kind: dict[str, Any]) -> dict[str, str]:
+def index_rows(kind: dict[str, Any], text: str | None = None) -> dict[str, str]:
     idx = kind.get("index")
     if not idx:
         return {}
-    text = (ROOT / idx["file"]).read_text(encoding="utf-8")
+    if text is None:
+        text = (ROOT / idx["file"]).read_text(encoding="utf-8")
     return {Path(m.group("file")).name: m.group("status") for m in re.finditer(idx["row"], text, re.M)}
 
 
@@ -495,6 +496,16 @@ def lifecycle_violations(lc: dict[str, Any], since: str | None = None) -> list[d
             continue
         docs = documents(kind)
         index = index_rows(kind)
+        old_index: dict[str, str] = {}
+        if since and kind.get("index"):
+            prev_idx = subprocess.run(
+                ["git", "show", f"{since}:{kind['index']['file']}"],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            if prev_idx.returncode == 0:
+                old_index = index_rows(kind, prev_idx.stdout)
         for fname, path in docs.items():
             raw = status_text(path.read_text(encoding="utf-8"), kind["status"])
             ref = f"{kid}:{fname}"
@@ -512,7 +523,9 @@ def lifecycle_violations(lc: dict[str, Any], since: str | None = None) -> list[d
                     out.append({"key": f"{ref}:not_in_index", "detail": f"missing from {kind['index']['file']}"})
                 else:
                     istate = normalize(index[fname], kind)
-                    if state and istate and istate != state:
+                    if istate is None:
+                        out.append({"key": f"{ref}:unknown_index_status", "detail": f"index status {index[fname][:80]!r} is not a {kind['title']} state ({', '.join(kind['states'])})"})
+                    elif state and istate != state:
                         out.append({"key": f"{ref}:index_mismatch", "detail": f"file says {state}, index says {istate}"})
             need = kind.get("links", {}).get(state or "")
             if need and raw:
@@ -538,7 +551,12 @@ def lifecycle_violations(lc: dict[str, Any], since: str | None = None) -> list[d
             if since and state:
                 old = subprocess.run(["git", "show", f"{since}:{path.relative_to(ROOT)}"], cwd=ROOT, capture_output=True, text=True)
                 if old.returncode == 0:
-                    old_state = normalize(status_text(old.stdout, kind["status"]), kind)
+                    old_raw = status_text(old.stdout, kind["status"])
+                    if old_raw is None and fname in old_index:
+                        old_raw = old_index[fname]
+                    if old_raw is None and kind.get("default"):
+                        old_raw = kind["default"]
+                    old_state = normalize(old_raw, kind)
                     if old_state and not forward(kind, old_state, state):
                         out.append({"key": f"{ref}:backward:{old_state}->{state}", "detail": f"{old_state} → {state} is not a forward move ({kind['declared']})"})
         for fname in index:
