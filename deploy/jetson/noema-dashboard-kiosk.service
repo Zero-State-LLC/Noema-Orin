@@ -1,0 +1,26 @@
+[Unit]
+Description=NOEMA Orin Dedicated Monitor Kiosk Browser for Mission Control (D-077)
+After=graphical-session.target noema-dashboard.service
+Wants=noema-dashboard.service
+
+[Service]
+Type=simple
+Environment=DISPLAY=:0
+# Memory-capped Chromium kiosk pointed strictly at loopback Mission Control (?kiosk=1 enables anti-burn-in drift).
+ExecStart=/usr/bin/chromium-browser \
+  --kiosk \
+  --incognito \
+  --no-first-run \
+  --disable-extensions \
+  --disable-sync \
+  --disable-background-networking \
+  --disable-component-update \
+  --js-flags=--max-old-space-size=192 \
+  http://127.0.0.1:8787/?kiosk=1
+MemoryHigh=384M
+MemoryMax=512M
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical-session.target

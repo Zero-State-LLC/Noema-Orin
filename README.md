@@ -11,6 +11,7 @@ Hermes orchestration stays on its existing host. The NOEMA Gateway and World Eng
 | Hosted Controller dry run | Implemented with a scripted LOOK proposal and fake client. `ATTEMPTED` means a fake handoff, not world acceptance. |
 | Official-client proof | Verified against loopback fake server (`SPEC-T4A.md`) and `noema-client` v0.2.0 granular `ClientPolicy` (`RFC-0141`). |
 | Resident 6-agent system fleet (`m01`–`m06`) | Live Admin-minted system actors (`D-009`–`D-076`) with declarative `playbooks/`, `agenda.json` medium loop, shared `map.db` leases (`cohort_claims`), `RSI` canary ratchet, local `llama-server` System-1/System-2 routing, grounded voice verifier, and optional TensorRT FP16 hybrid memory. Excluded from live-agent censuses (`G-003`). |
+| Always-on monitor dashboard | Native loopback stdlib HTTP/SSE daemon (`python -m noema_orin.dashboard`, `MemoryMax=96M`) + Hallmark `noema-ledger-dark` zero-build UI and Chromium kiosk unit (`D-077`); audited safe controls only, never touches tokens or world authority. See [docs/DASHBOARD.md](docs/DASHBOARD.md). |
 | Local host preflight | Read-only, credential-free inspection (`python -m noema_orin.preflight`) with a bounded `SPECULATIVE` receipt (`SPEC-T5A.md`). |
 | Physical Orin qualification | Opt-in harness implemented (`python -m noema_orin.qualify`, `jetson_telemetry.py`, `deploy/jetson/profile_nsys.sh`); `G-002` stays `NOT_COMPUTABLE` until on-board `OBSERVED` receipts are archived from the physical kit; see [#5](https://github.com/Zero-State-LLC/Noema-Orin/issues/5). |
 | Live isolated-world attach / PSR-1 | External PSR-1 admission remains **blocked** (`G-003`); see [#4](https://github.com/Zero-State-LLC/Noema-Orin/issues/4). |
@@ -55,6 +56,7 @@ The optional official-client loopback proof requires Python **3.11+** and the ex
 - [Synthetic foundation](SPEC-FOUNDATION.md)
 - [Official-client loopback proof](SPEC-T4A.md)
 - [Local host preflight](SPEC-T5A.md)
+- [Always-on monitor dashboard](SPEC-DASHBOARD.md)
 - [Decisions and unresolved authority](DECISIONS.md)
 
 No model, unattended service, production enrollment, Spark writer, or world cutover is authorized by these local proofs. Any live attach requires a separately authorized isolated world and scoped credentials; any offline writer change requires an accepted Noema-Specs decision.

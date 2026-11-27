@@ -415,13 +415,15 @@ class RsiRatchet:
         }
 
     def can_propose(self) -> bool:
-        """Cooldown: never stack a second mutation while a canary is still open."""
-        return self.state.get("candidate") is None
+        """Cooldown: never stack a second mutation while a canary is open or RSI is paused."""
+        return not bool(self.state.get("paused", False)) and self.state.get("candidate") is None
 
     def register_candidate(self, patch: dict[str, Any], persona_version: int) -> tuple[bool, str]:
         sig = mutation_signature(patch)
         if sig in self.quarantined_signatures():
             return False, "quarantined"
+        if bool(self.state.get("paused", False)):
+            return False, "paused"
         if not self.can_propose():
             return False, "canary_active"
         self.state["candidate"] = {

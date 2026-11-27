@@ -1,0 +1,12 @@
+[
+  {
+    "date": "2026-11-27",
+    "scope": "src/noema_orin/dashboard/static",
+    "macrostructure": "Workbench",
+    "genre": "atmospheric",
+    "theme": "noema-ledger-dark",
+    "enrichment": "live SVG Perihelion Reach topology map + one-shot cyan SSE turn pulse",
+    "brief": "Native always-on 1080p/4K Jetson Orin Nano Mission Control cockpit: 100vh zero-scroll fleet grid, SVG topology & storefront ledger, SSE turn ticker, slide-over mind/RSI/knob inspector & full safe audited control plane. Zero innerHTML on untrusted data, <=64 MiB daemon RAM.",
+    "design_system": "Noema-Specs/docs/VISUAL-DESIGN.md (noema-ledger-dark)"
+  }
+]
