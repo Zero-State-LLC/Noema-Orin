@@ -155,3 +155,9 @@
 - New player unit (runtime-overrides.env hook, MemoryMax=160M, about 40-52 MB per agent observed) rolled fleet-wide.
 - Merged Specs#477 (docs, watch D8 pass 4) under the merge grant.
 - Soak 11:46-12:41Z: 0 tracebacks, m06 has 93 embedded facts, 2.4 GB available. Widening local_first/embedder is still due about 17:30Z.
+
+## 2026-11-27 13:07Z: dashboard diagnosed and fixed on Orin
+- Stream replayed history: the SSE feed started each log at byte 0, so viewers saw ORG_CREATE turn 1 from days ago. It now starts at EOF. Offsets were shared across viewers, so two tabs split events between them. Each connection now has its own offsets (test updated).
+- MODE showed cloud_first while m03/m05/m06 run local_first. The snapshot now has per-agent `inference_mode` and `semantic_memory` read from mXX.env (only those keys, no token leak, checked). Cards show LOCAL/EMB badges and the header shows `local_first 3/6`.
+- Layout: the header clipped PWR/RAM/S1/JWT and the brand text wrapped over 5 lines, and agent cards overlapped in a fixed 3-row grid. The header now wraps, the brand is one line with a humanized org name, and the grid is min-content and scrollable. LOCAL S1 shows "idle" instead of 0 t/s (llama.cpp's gauge is per interval). embed-server is in the infra strip.
+- Verified in a browser over `ssh -L 8787` with live data. 260 tests OK on Orin.

@@ -107,7 +107,13 @@ function fmtVal(v, suffix = "") {
 }
 
 function renderTopbar(snap) {
-  document.getElementById("org-label").textContent = (snap.home_org || "Reach Compact") + " · Perihelion Reach";
+  const orgRaw = snap.home_org || "";
+  const orgName = orgRaw.startsWith("org.")
+    ? orgRaw.slice(4).replace(/\.[0-9a-f]{6,}$/, "").split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+    : (orgRaw || "Reach Compact");
+  const orgEl = document.getElementById("org-label");
+  orgEl.textContent = orgName + " · Perihelion Reach";
+  orgEl.title = orgRaw;
   document.getElementById("seq-pill").textContent = "SEQ " + (snap.world_seq || "—");
 
   const activeAgents = (snap.agents || []).filter((a) => a.unit_state === "active").length;
@@ -122,7 +128,8 @@ function renderTopbar(snap) {
     : fmtVal(hw.cpu_temp_c, "°C");
   document.getElementById("hw-pwr").textContent = typeof hw.vdd_in_mw === "number" ? (hw.vdd_in_mw / 1000).toFixed(1) + "W" : "N/C";
   document.getElementById("hw-ram").textContent = typeof hw.mem_avail_mib === "number" ? (hw.mem_avail_mib / 1024).toFixed(1) + "G" : "N/C";
-  document.getElementById("hw-tps").textContent = fmtVal(hw.llama_tps, " t/s");
+  const tpsIdle = hw.llama_tps === 0 || hw.llama_tps === "0";
+  document.getElementById("hw-tps").textContent = tpsIdle ? "idle" : fmtVal(hw.llama_tps, " t/s");
 
   const toks = snap.tokens || [];
   const minDays = toks.reduce((acc, r) => (typeof r.days_left === "number" ? Math.min(acc, r.days_left) : acc), Infinity);
@@ -144,7 +151,10 @@ function renderTopbar(snap) {
   document.getElementById("inference-legend").textContent = `P ${pPct}% · S1 ${s1Pct}% · S2 ${s2Pct}%`;
 
   const ov = snap.runtime_overrides || {};
-  document.getElementById("mode-pill").textContent = `MODE: ${ov.NOEMA_INFERENCE_MODE || "cloud_first"} · VOICE: ${ov.NOEMA_GROUNDED_VOICE === "1" ? "ON" : "OFF"}`;
+  const nLocal = (snap.agents || []).filter((a) => a.inference_mode === "local_first").length;
+  const nAll = (snap.agents || []).length;
+  const modeTxt = nLocal === 0 ? "cloud_first" : nLocal === nAll ? "local_first" : `local_first ${nLocal}/${nAll}`;
+  document.getElementById("mode-pill").textContent = `MODE: ${modeTxt} · VOICE: ${ov.NOEMA_GROUNDED_VOICE === "1" ? "ON" : "OFF"}`;
   document.getElementById("sel-inf-mode").value = ov.NOEMA_INFERENCE_MODE || "cloud_first";
   document.getElementById("chk-voice").checked = ov.NOEMA_GROUNDED_VOICE === "1";
 
@@ -193,6 +203,8 @@ function renderAgents(snap, pulsedMember = null) {
       el("span", { class: a.unit_state === "active" ? "pill pill-active" : "pill pill-warn" }, a.unit_state.toUpperCase()),
       el("span", { class: a.rsi_status.startsWith("CANARY") ? "pill pill-warn" : "pill pill-violet" }, a.rsi_status),
     );
+    if (a.inference_mode === "local_first") badges.append(el("span", { class: "pill pill-eco", title: "System-1 on local llama-server" }, "LOCAL"));
+    if (a.semantic_memory) badges.append(el("span", { class: "pill pill-eco", title: "bge-small semantic recall" }, "EMB"));
     top.append(idCol, badges);
 
     const room = el("div", { class: "card-room" });
@@ -232,7 +244,7 @@ function renderAgents(snap, pulsedMember = null) {
 
   const infra = document.getElementById("infra-units");
   clear(infra);
-  for (const uname of ["noema-maint-patrol", "noema-llama-server"]) {
+  for (const uname of ["noema-maint-patrol", "noema-llama-server", "noema-embed-server"]) {
     const st = (snap.units || {})[uname] || { active_state: "unknown" };
     const pill = el("button", {
       type: "button",

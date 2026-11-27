@@ -167,10 +167,11 @@ def create_dashboard_server(
                 self.send_header("Connection", "keep-alive")
                 self.end_headers()
                 last_snap = 0.0
+                offsets: dict[str, int] = {}
                 try:
                     while True:
                         now = time.monotonic()
-                        for ev in reader.poll_new_turns():
+                        for ev in reader.poll_new_turns(offsets):
                             frame = f"event: {ev['event']}\ndata: {json.dumps(ev, default=str)}\n\n"
                             self.wfile.write(frame.encode("utf-8"))
                         if now - last_snap >= 4.0:

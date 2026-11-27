@@ -93,6 +93,26 @@ class DashboardStateReader:
                 out[m.strip()] = pid.strip()
         return out
 
+    def _agent_mode(self, member: str, fleet: dict[str, str]) -> dict[str, Any]:
+        """Effective inference mode per agent: runtime-overrides.env loads after mXX.env, so it wins."""
+        mode, embed = None, False
+        p = self.config_dir / f"{member}.env"
+        try:
+            for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+                if "=" not in line or line.lstrip().startswith("#"):
+                    continue
+                k, v = (s.strip() for s in line.split("=", 1))
+                if k == "NOEMA_INFERENCE_MODE":
+                    mode = v.strip('"')
+                elif k == "NOEMA_TRT_EMBED_URL" and v.strip('"'):
+                    embed = True
+        except OSError:
+            pass
+        ov_file = self.config_dir / "runtime-overrides.env"
+        if ov_file.is_file() and "NOEMA_INFERENCE_MODE" in ov_file.read_text(encoding="utf-8", errors="replace"):
+            mode = fleet.get("NOEMA_INFERENCE_MODE", mode)
+        return {"inference_mode": mode or "cloud_first", "semantic_memory": embed}
+
     def _runtime_overrides(self) -> dict[str, str]:
         p = self.config_dir / "runtime-overrides.env"
         out = {
@@ -323,6 +343,7 @@ class DashboardStateReader:
                     "persona_name": persona.get("name", member),
                     "persona_version": int(persona.get("version") or 0),
                     "unit_state": ust.get("active_state", "unknown"),
+                    **self._agent_mode(member, self._runtime_overrides()),
                     "unit_since": ust.get("since", ""),
                     "room_id": last_turn.get("room") or pos.get("room_id"),
                     "budgets": budgets,
@@ -444,12 +465,13 @@ class DashboardStateReader:
             "embedding_count": embed_count,
         }
 
-    def poll_new_turns(self) -> list[dict[str, Any]]:
+    def poll_new_turns(self, offsets: dict[str, int] | None = None) -> list[dict[str, Any]]:
         """Incrementally tail member log files and return newly appended JSONL turn/session events."""
         events: list[dict[str, Any]] = []
         logs_dir = self.root / "logs"
         if not logs_dir.is_dir():
             return events
+        offs = self._log_offsets if offsets is None else offsets
         for log_path in sorted(logs_dir.glob("noema-player@m*.log")):
             name = log_path.name
             member = name.split("@", 1)[1].split(".", 1)[0]
@@ -457,7 +479,11 @@ class DashboardStateReader:
                 size = log_path.stat().st_size
             except OSError:
                 continue
-            prev = self._log_offsets.get(name, 0)
+            if name not in offs:
+                # First sight of this log: start at EOF so viewers get live turns, not hours of replay.
+                offs[name] = size
+                continue
+            prev = offs[name]
             if prev > size:
                 prev = 0  # rotated or truncated
             if prev == size:
@@ -466,7 +492,7 @@ class DashboardStateReader:
                 with log_path.open("rb") as fh:
                     fh.seek(prev)
                     raw = fh.read(131072)
-                    self._log_offsets[name] = fh.tell()
+                    offs[name] = fh.tell()
             except OSError:
                 continue
             for line in raw.decode("utf-8", errors="replace").splitlines():
