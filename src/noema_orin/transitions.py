@@ -123,11 +123,8 @@ class TransitionLog:
         """
         if self.session is None:
             return 0
-        results = [t for t in (report or []) if getattr(t, "proposal", None) is not None]
         rows = []
-        for turn, (logged, result) in enumerate(zip(self._actions, results)):
-            if str(getattr(result.proposal, "action", "") or "").upper() != logged:
-                break
+        for turn, result in decided_results(self._actions, report):
             row = {"v": SCHEMA_VERSION, "kind": OUTCOME_KIND, "label": "TELEMETRY", "session": self.session,
                    "turn": turn, "ok": bool(getattr(result, "ok", False))}
             if not row["ok"]:
@@ -174,9 +171,26 @@ class TransitionLog:
             old.unlink(missing_ok=True)
 
 
-def _rows(mind: Path) -> Iterator[dict]:
+def decided_results(actions: list[str], report: Any) -> Iterator[tuple[int, Any]]:
+    """Pair a session's decided turns, in order, with the client's results for them.
+
+    `actions` are the upper-cased actions `decide()` returned, in turn order; `report` is what
+    `client.play()` returned. Every decided turn yields one result that carries a proposal; entries
+    without one (the ENTER_WORLD result, a tripped breaker) are not decided turns. Pairing stops at the
+    first result whose action differs from the decided one, so a result is never attributed by guess.
+    """
+    results = [t for t in (report or []) if getattr(t, "proposal", None) is not None]
+    for turn, (decided, result) in enumerate(zip(actions, results)):
+        if str(getattr(result.proposal, "action", "") or "").upper() != decided:
+            return
+        yield turn, result
+
+
+def _rows(mind: Path, newest_segments: int | None = None) -> Iterator[dict]:
     mind = Path(mind)
     segments = sorted(p for p in mind.iterdir() if _SEGMENT_RE.match(p.name))
+    if newest_segments is not None:
+        segments = segments[-newest_segments:] if newest_segments > 0 else []
     for segment in segments:
         with gzip.open(segment, "rt", encoding="utf-8") as fh:
             yield from _parse(fh)
@@ -227,18 +241,19 @@ def iter_outcomes(mind: Path) -> Iterator[tuple[dict, dict, dict | None]]:
             yield row["obs"], row["action"], outcomes.get((row.get("session"), row.get("turn")))
 
 
-def iter_labelled(mind: Path) -> Iterator[tuple[dict, dict, dict | None, dict | None]]:
+def iter_labelled(mind: Path, newest_segments: int | None = None) -> Iterator[tuple[dict, dict, dict | None, dict | None]]:
     """Yield (observation, action, next_observation, outcome) for every logged turn (C2, #197).
 
     `next_observation` is None for a session's last turn or across a gap; `outcome` is None when no
-    result was recorded. Either can be missing without the other.
+    result was recorded. Either can be missing without the other. `newest_segments` limits the read
+    to the live file and that many newest rotated segments.
     """
     outcomes = {}
-    for row in _rows(mind):
+    for row in _rows(mind, newest_segments):
         if row.get("kind") == OUTCOME_KIND:
             outcomes[(row.get("session"), row.get("turn"))] = {k: row[k] for k in ("ok", "code", "failure") if k in row}
     prev = None
-    for row in _rows(mind):
+    for row in _rows(mind, newest_segments):
         if row.get("kind") == OUTCOME_KIND:
             continue
         if prev is not None:
