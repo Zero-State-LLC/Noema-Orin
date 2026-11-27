@@ -127,7 +127,11 @@ class TransitionLogTests(unittest.TestCase):
         log.new_session()
         for seq in range(10):
             log.append(canonical=_obs(seq, filler="x" * 100), proposal=_prop("WAIT"), source="planner")
-        for path in [self.mind / "transitions.jsonl", *self.mind.glob("transitions-*.jsonl.gz")]:
+        # Every row above rotated at once, so write one more under a large cap to leave a live file too.
+        TransitionLog(self.mind).append(canonical=_obs(99), proposal=_prop("WAIT"), source="planner")
+        paths = [self.mind / "transitions.jsonl", *self.mind.glob("transitions-*.jsonl.gz")]
+        self.assertGreater(len(paths), 1)
+        for path in paths:
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600, path.name)
 
     def test_private_filename_is_on_the_voice_leak_list(self):
