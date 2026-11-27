@@ -23,8 +23,11 @@ All constitutional boundaries remain intact:
 - [x] (2026-11-27) `T5` (#159): `m01` full civic contracts (4 kinds), `OPEN_CHARTER`, `COMMEMORATE`, and colocated diplomacy.
 - [x] (2026-11-27) `T6` (#160): `m03` fleet-aware crafting, `m04` state-delta supersession, and `m05` grounded market/contract Herald digests.
 - [x] (2026-11-27) `T7` (#161): Wire dead RSI knobs, persona traits, Deep Time epoch reversion, and `reflect()` prompt knobs.
-- [ ] `T8`–`T11` (#162–#165, `ready-for-human`): Phase 2 (`playbooks/`, `agenda.json`, local `llama-server`, grounded voice).
-- [ ] `T12`–`T14` (#166–#168, `ready-for-human`): Phase 3 (TensorRT `bge-small`, Tegra telemetry, `#5` physical Orin qualification).
+- [x] (2026-11-27) `T8` (#162): Declarative `playbooks/` state machines (`founder`, `quartermaster`, `custodian`, `archivist`, `speaker`, `surveyor`, `common`).
+- [x] (2026-11-27) `T9` (#163): Medium-loop `agenda.json` planner (`AgendaManager`, 3–5 typed sub-goals surviving session restarts).
+- [x] (2026-11-27) `T10` (#164): Local CUDA `llama-server` backend (`llm_client.py`), constrained JSON-schema grammar, `NOEMA_INFERENCE_MODE=local_first` routing, `local_s1_calls` health tracking, and `deploy/jetson/noema-llama-server.service`.
+- [x] (2026-11-27) `T11` (#165): Grounded character voice synthesis (`voice.py`) with deterministic seq/number/privacy verifier and template fallback.
+- [ ] `T12`–`T14` (#166–#168): Phase 3 (TensorRT `bge-small`, Tegra telemetry, `#5` physical Orin qualification).
 
 ## Ticket Graph & Blocking Edges
 

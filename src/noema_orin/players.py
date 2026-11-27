@@ -128,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     role_for(role)
     from noema_client.client import NoemaClient
 
+    from .agenda import AgendaManager
     from .orin_adapter import from_env, reflect
     from .persona import apply_reflection, load_or_seed, prompt_block, rollback_to_version
     from .rsi import (
@@ -167,6 +168,7 @@ def main(argv: list[str] | None = None) -> int:
     adapter.policy_knobs = dict(knobs)
     adapter.persona_traits = dict(persona.get("traits") or {})
     adapter.mind_dir = mind
+    adapter.agenda_manager = AgendaManager.from_disk(mind)
     adapter.held_tracks = list(agenda.get("held_tracks") or ([agenda["held_track"]] if agenda.get("held_track") else []))[-2:]
     if adapter.held_tracks:
         adapter.held_track = adapter.held_tracks[-1]
@@ -220,14 +222,22 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:  # compaction must never end a session loop
             compacted = -1
         held_tracks = list(getattr(adapter, "held_tracks", None) or ([] if not getattr(adapter, "held_track", None) else [adapter.held_track]))
-        save_agenda(mind, {
-            "held_track": held_tracks[-1] if held_tracks else None,
-            "held_tracks": held_tracks,
-            "build_room": getattr(adapter, "build_room", None),
-            "epoch": agenda.get("epoch", 0),
-            "steps": agenda.get("steps", []),
-            "updated_seq": adapter.health.last_source_sequence,
-        })
+        if getattr(adapter, "agenda_manager", None) is not None:
+            adapter.agenda_manager.save(
+                mind,
+                held_tracks=held_tracks,
+                build_room=getattr(adapter, "build_room", None),
+                updated_seq=adapter.health.last_source_sequence,
+            )
+        else:
+            save_agenda(mind, {
+                "held_track": held_tracks[-1] if held_tracks else None,
+                "held_tracks": held_tracks,
+                "build_room": getattr(adapter, "build_room", None),
+                "epoch": agenda.get("epoch", 0),
+                "steps": agenda.get("steps", []),
+                "updated_seq": adapter.health.last_source_sequence,
+            })
         persona, _reverted = maybe_revert_persona_on_epoch(
             mind, persona, ratchet, cycle=getattr(adapter, "last_cycle", None)
         )
