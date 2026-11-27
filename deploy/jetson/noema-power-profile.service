@@ -1,0 +1,14 @@
+[Unit]
+Description=NOEMA Orin Jetson Power Profile & Clocks (T13/#167)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Mode 2 = 25W MAXN_SUPER (use mode 0 = 15W if running fanless/quiet 24x7).
+# Recommended host prep: mount ~/noema-players on NVMe SSD and enable 4 GiB LZ4 zram.
+ExecStart=/usr/sbin/nvpmodel -m 2
+ExecStart=/usr/bin/jetson_clocks
+
+[Install]
+WantedBy=multi-user.target

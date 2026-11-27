@@ -512,6 +512,7 @@ class OrinAdapter:
                     self.memory.note_player(who, txt[:180], sign=1, sequence=seq)
 
     def decide(self, context):
+        from .nvtx_trace import nvtx_range
         from .planner import has_role_verb
 
         self.self_id = (context.get("canonical") or {}).get("self") or getattr(self, "self_id", None)
@@ -520,7 +521,8 @@ class OrinAdapter:
         options = self._menu(context)
         source = "model"
         try:
-            proposal = self._plan(context, options)
+            with nvtx_range("playbook_plan"):
+                proposal = self._plan(context, options)
         except Exception as exc:  # memory must never stall a turn
             print(json.dumps({"memory_error": type(exc).__name__}), flush=True)
             proposal = None

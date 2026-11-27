@@ -9,11 +9,12 @@ Hermes orchestration stays on its existing host. The NOEMA Gateway and World Eng
 | Capability | Evidence and boundary |
 | --- | --- |
 | Hosted Controller dry run | Implemented with a scripted LOOK proposal and fake client. `ATTEMPTED` means a fake handoff, not world acceptance. |
-| Official-client proof | The pinned `noema-client` v0.1.23 is exercised separately against a loopback fake server; no live enrollment or production command. |
-| Local host preflight | Read-only, credential-free inspection with a bounded JSON receipt. It cannot certify the 8GB kit, JetPack, throughput, power, or readiness. |
-| Live isolated-world attach | **Not authorized or implemented**; see [#4](https://github.com/Zero-State-LLC/Noema-Orin/issues/4). |
-| Physical Orin qualification | **Not performed**; the board is required; see [#5](https://github.com/Zero-State-LLC/Noema-Orin/issues/5). |
-| Offline Spark Controller | **Blocked** by unresolved writer authority in Noema-Specs Spec 014; see [#6](https://github.com/Zero-State-LLC/Noema-Orin/issues/6). |
+| Official-client proof | Verified against loopback fake server (`SPEC-T4A.md`) and `noema-client` v0.2.0 granular `ClientPolicy` (`RFC-0141`). |
+| Resident 6-agent system fleet (`m01`–`m06`) | Live Admin-minted system actors (`D-009`–`D-076`) with declarative `playbooks/`, `agenda.json` medium loop, shared `map.db` leases (`cohort_claims`), `RSI` canary ratchet, local `llama-server` System-1/System-2 routing, grounded voice verifier, and optional TensorRT FP16 hybrid memory. Excluded from live-agent censuses (`G-003`). |
+| Local host preflight | Read-only, credential-free inspection (`python -m noema_orin.preflight`) with a bounded `SPECULATIVE` receipt (`SPEC-T5A.md`). |
+| Physical Orin qualification | Opt-in harness implemented (`python -m noema_orin.qualify`, `jetson_telemetry.py`, `deploy/jetson/profile_nsys.sh`); `G-002` stays `NOT_COMPUTABLE` until on-board `OBSERVED` receipts are archived from the physical kit; see [#5](https://github.com/Zero-State-LLC/Noema-Orin/issues/5). |
+| Live isolated-world attach / PSR-1 | External PSR-1 admission remains **blocked** (`G-003`); see [#4](https://github.com/Zero-State-LLC/Noema-Orin/issues/4). |
+| Offline Spark Controller | **Blocked** by unresolved writer authority in Noema-Specs Spec 014 (`G-001`); see [#6](https://github.com/Zero-State-LLC/Noema-Orin/issues/6). |
 
 The hosted and offline-research paths require separate world identities, endpoints, credentials, configuration profiles, and evidence. There is no automatic fallback between them. The Spark/Orin stack remains `SPECULATIVE` in [Noema-Specs](https://github.com/Zero-State-LLC/Noema-Specs/tree/619d0674518761aa08462d3f5d5966a917259aa1/specs/014-spark-orin-nvidia-stack); the source contract is pinned at `619d0674518761aa08462d3f5d5966a917259aa1`. A pin and local tests are not a live integration with the NOEMA runtime.
 

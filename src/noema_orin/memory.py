@@ -19,6 +19,8 @@ CREATE TRIGGER IF NOT EXISTS facts_ai AFTER INSERT ON facts BEGIN
 CREATE TRIGGER IF NOT EXISTS facts_ad AFTER DELETE ON facts BEGIN
   INSERT INTO facts_fts(facts_fts, rowid, text, room, kind) VALUES ('delete', old.id, old.text, old.room, old.kind); END;
 CREATE TABLE IF NOT EXISTS relations(player_id TEXT, note TEXT, sign INTEGER, sequence INTEGER);
+CREATE TABLE IF NOT EXISTS fact_embeddings(fact_id INTEGER PRIMARY KEY REFERENCES facts(id) ON DELETE CASCADE,
+                                           model TEXT NOT NULL, dim INTEGER NOT NULL, vec BLOB NOT NULL);
 """
 
 _MAP = """
@@ -58,6 +60,7 @@ def _open(path: Path, schema: str) -> sqlite3.Connection:
     db = sqlite3.connect(path, timeout=10)
     if new:
         os.chmod(path, 0o600)
+    db.execute("PRAGMA foreign_keys=ON")
     db.execute("PRAGMA journal_mode=WAL")
     db.executescript(schema)
     return db
@@ -83,8 +86,9 @@ class _Closable:
 
 
 class Memory(_Closable):
-    def __init__(self, mind: Path) -> None:
+    def __init__(self, mind: Path, *, embedder=None) -> None:
         self.db = _open(mind / "memory.db", _SCHEMA)
+        self.embedder = embedder
 
     def remember(self, text: str, *, kind: str, room: str | None, sequence: int | None) -> None:
         text = " ".join(str(text).split())[:300]
@@ -94,8 +98,24 @@ class Memory(_Closable):
             cur = self.db.execute("UPDATE facts SET sequence=?, source_sequence=?, stale=0 WHERE kind=? AND room IS ? AND text=?",
                                   (sequence, sequence, kind, room, text))
             if cur.rowcount == 0:
-                self.db.execute("INSERT INTO facts(sequence, room, kind, text, source_sequence) VALUES (?,?,?,?,?)",
-                                (sequence, room, kind, text, sequence))
+                ins = self.db.execute("INSERT INTO facts(sequence, room, kind, text, source_sequence) VALUES (?,?,?,?,?)",
+                                      (sequence, room, kind, text, sequence))
+                fact_id = ins.lastrowid
+            else:
+                row = self.db.execute(
+                    "SELECT id FROM facts WHERE kind=? AND room IS ? AND text=?", (kind, room, text)
+                ).fetchone()
+                fact_id = row[0] if row else None
+            if fact_id is not None and self.embedder is not None:
+                vec = self.embedder.embed(text)
+                if vec:
+                    from .embedder import pack_f16
+
+                    self.db.execute(
+                        "INSERT INTO fact_embeddings(fact_id, model, dim, vec) VALUES (?,?,?,?) "
+                        "ON CONFLICT(fact_id) DO UPDATE SET model=excluded.model, dim=excluded.dim, vec=excluded.vec",
+                        (int(fact_id), str(getattr(self.embedder, "model_name", "trt")), len(vec), pack_f16(vec)),
+                    )
 
     def mark_stale(self, *, kind: str, room: str | None, keep: set[str]) -> None:
         """Current observation wins: room facts of this kind not seen now become stale."""
@@ -106,6 +126,39 @@ class Memory(_Closable):
 
     def recall(self, query: str, limit: int = 5) -> list[dict]:
         terms = [t for t in "".join(c if c.isalnum() else " " for c in query).split() if len(t) > 2][:12]
+        q_vec = self.embedder.embed(query) if self.embedder is not None else None
+        if q_vec:
+            from .embedder import cosine_similarity, unpack_f16
+
+            fts_scores: dict[int, float] = {}
+            if terms:
+                fts_rows = self.db.execute(
+                    "SELECT f.id, rank FROM facts_fts JOIN facts f ON f.id = facts_fts.rowid "
+                    "WHERE facts_fts MATCH ? AND f.stale=0 ORDER BY rank LIMIT ?",
+                    (" OR ".join(terms), max(limit * 4, 20)),
+                ).fetchall()
+                for idx, (fid, _rk) in enumerate(fts_rows):
+                    fts_scores[int(fid)] = 1.0 / (1.0 + idx)
+
+            emb_rows = self.db.execute(
+                "SELECT f.id, f.text, f.room, coalesce(f.source_sequence, 0), e.vec "
+                "FROM fact_embeddings e JOIN facts f ON f.id = e.fact_id WHERE f.stale=0"
+            ).fetchall()
+            if emb_rows:
+                max_seq = max((int(r[3]) for r in emb_rows), default=1) or 1
+                scored = []
+                for fid, text, room, seq, blob in emb_rows:
+                    cos = max(0.0, cosine_similarity(q_vec, unpack_f16(blob)))
+                    fts_s = fts_scores.get(int(fid), 0.0)
+                    recency = max(0.0, min(1.0, int(seq) / max_seq))
+                    hybrid = 0.55 * cos + 0.25 * fts_s + 0.20 * recency
+                    scored.append((hybrid, int(seq), text, room))
+                scored.sort(key=lambda t: (-t[0], -t[1], t[2]))
+                return [
+                    {"fact": text, "room": room, "source_sequence": seq}
+                    for _sc, seq, text, room in scored[:limit]
+                ]
+
         if not terms:
             return []
         rows = self.db.execute(

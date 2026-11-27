@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS cost(src TEXT, line INTEGER, ts REAL, calls INTEGER, 
 CREATE TABLE IF NOT EXISTS cost_marks(src TEXT PRIMARY KEY, calls_total INTEGER, fallbacks_total INTEGER);
 CREATE TABLE IF NOT EXISTS rsi_events(src TEXT, line INTEGER, ts REAL, member TEXT, verdict TEXT, fitness REAL, reason TEXT,
   PRIMARY KEY(src, line));
+CREATE TABLE IF NOT EXISTS hw_samples(ts REAL PRIMARY KEY, gpu_load_pct REAL, cpu_temp_c REAL, gpu_temp_c REAL,
+  vdd_in_mw INTEGER, mem_avail_mib INTEGER, llama_tps REAL, kv_cache_ratio REAL);
 """
 IDLE = {"LOOK", "WAIT", "INSPECT", "MOVE"}
 STUCK_TURNS = 10
@@ -124,6 +126,29 @@ def collect(root: Path, db: sqlite3.Connection) -> int:
     return added
 
 
+def _num_or_none(val: object):
+    return val if isinstance(val, (int, float)) and not isinstance(val, bool) else None
+
+
+def record_hw_sample(db: sqlite3.Connection, sample: dict, *, ts: float | None = None) -> None:
+    """Persist one non-identifying Jetson hardware telemetry sample (T13/#167)."""
+    stamp = time.time() if ts is None else float(ts)
+    db.execute(
+        "INSERT OR REPLACE INTO hw_samples VALUES (?,?,?,?,?,?,?,?)",
+        (
+            stamp,
+            _num_or_none(sample.get("gpu_load_pct")),
+            _num_or_none(sample.get("cpu_temp_c")),
+            _num_or_none(sample.get("gpu_temp_c")),
+            _num_or_none(sample.get("vdd_in_mw")),
+            _num_or_none(sample.get("mem_avail_mib")),
+            _num_or_none(sample.get("llama_tps")),
+            _num_or_none(sample.get("kv_cache_ratio")),
+        ),
+    )
+    db.commit()
+
+
 def digest(db: sqlite3.Connection, hours: float = 24) -> dict:
     since = time.time() - hours * 3600
     rows = db.execute("SELECT member, role, count(*), sum(stop_reason='duration_elapsed'), sum(turns), sum(role_actions), "
@@ -159,7 +184,23 @@ def digest(db: sqlite3.Connection, hours: float = 24) -> dict:
         (since,),
     ).fetchall():
         alerts.append(f"{member}: rsi_rollback ({reason or 'regression'})")
-    return {"window_hours": hours, "members": out, "alerts": alerts}
+    res = {"window_hours": hours, "members": out, "alerts": alerts}
+    hw_row = db.execute(
+        "SELECT ts, gpu_load_pct, cpu_temp_c, gpu_temp_c, vdd_in_mw, mem_avail_mib, llama_tps, kv_cache_ratio "
+        "FROM hw_samples ORDER BY ts DESC LIMIT 1"
+    ).fetchone()
+    if hw_row is not None:
+        res["hw"] = {
+            "ts": hw_row[0],
+            "gpu_load_pct": hw_row[1],
+            "cpu_temp_c": hw_row[2],
+            "gpu_temp_c": hw_row[3],
+            "vdd_in_mw": hw_row[4],
+            "mem_avail_mib": hw_row[5],
+            "llama_tps": hw_row[6],
+            "kv_cache_ratio": hw_row[7],
+        }
+    return res
 
 
 def cost_alerts(db: sqlite3.Connection, hours: float = 24) -> list[str]:
