@@ -27,7 +27,11 @@ CREATE TABLE IF NOT EXISTS rsi_events(src TEXT, line INTEGER, ts REAL, member TE
   PRIMARY KEY(src, line));
 CREATE TABLE IF NOT EXISTS hw_samples(ts REAL PRIMARY KEY, gpu_load_pct REAL, cpu_temp_c REAL, gpu_temp_c REAL,
   vdd_in_mw INTEGER, mem_avail_mib INTEGER, llama_tps REAL, kv_cache_ratio REAL);
+CREATE TABLE IF NOT EXISTS consequence(src TEXT, line INTEGER, ts REAL, member TEXT, turns INTEGER, no_prediction INTEGER,
+  by_verb TEXT, PRIMARY KEY(src, line));
 """
+CONSEQUENCE_COUNTS = ("turns", "predicted", "tp", "fp", "fn", "tn")
+CONSEQUENCE_MAX_VERBS = 12
 IDLE = {"LOOK", "WAIT", "INSPECT", "MOVE"}
 STUCK_TURNS = 10
 DAILY_CALL_CAP = 10_000  # Workers AI daily cap (memory worker /usage)
@@ -108,6 +112,14 @@ def collect(root: Path, db: sqlite3.Connection) -> int:
                         (src, n, time.time(), d.get("member"), str(rsi.get("verdict")),
                          float(rsi.get("fitness") or 0.0), str(rsi.get("reason") or "")[:200]),
                     )
+                shadow = d.get("consequence")
+                if isinstance(shadow, dict) and isinstance(shadow.get("by_verb"), dict):
+                    # C4 (#199): the C3 shadow summary for this session. Counts only; INFERRED telemetry.
+                    by_verb = {str(verb)[:40]: {k: _count(row.get(k)) for k in CONSEQUENCE_COUNTS}
+                               for verb, row in list(shadow["by_verb"].items())[:CONSEQUENCE_MAX_VERBS] if isinstance(row, dict)}
+                    db.execute("INSERT OR IGNORE INTO consequence VALUES (?,?,?,?,?,?,?)",
+                               (src, n, time.time(), d.get("member"), _count(shadow.get("turns")),
+                                _count(shadow.get("no_prediction")), json.dumps(by_verb, sort_keys=True)))
                 health = d.get("health") or {}
                 if isinstance(health, dict) and "workers_ai_calls" in health:
                     # health counters are cumulative per process; store the delta (reset on restart).
@@ -128,6 +140,49 @@ def collect(root: Path, db: sqlite3.Connection) -> int:
 
 def _num_or_none(val: object):
     return val if isinstance(val, (int, float)) and not isinstance(val, bool) else None
+
+
+def _count(val: object) -> int:
+    return int(val) if isinstance(val, int) and not isinstance(val, bool) and val >= 0 else 0
+
+
+def consequence_digest(db: sqlite3.Connection, since: float) -> dict[str, dict]:
+    """C4 (#199): shadow accuracy per member from the C3 session summaries. A member with no summary in
+    the window is absent, so "shadow off" never reads as zeros. Every value is INFERRED telemetry."""
+    try:
+        rows = db.execute("SELECT member, turns, no_prediction, by_verb FROM consequence WHERE ts >= ? ORDER BY member, ts",
+                          (since,)).fetchall()
+    except sqlite3.OperationalError:  # a metrics.db created before this table existed, opened read-only
+        return {}
+    out: dict[str, dict] = {}
+    for member, turns, no_prediction, raw in rows:
+        try:
+            by_verb = json.loads(raw or "{}")
+        except ValueError:
+            by_verb = {}
+        agg = out.setdefault(member, {"sessions": 0, "turns": 0, "none": 0, "by_verb": {}})
+        agg["sessions"] += 1
+        agg["turns"] += turns or 0
+        agg["none"] += no_prediction or 0
+        for verb, counts in (by_verb.items() if isinstance(by_verb, dict) else ()):
+            row = agg["by_verb"].setdefault(verb, dict.fromkeys(CONSEQUENCE_COUNTS, 0))
+            for k in CONSEQUENCE_COUNTS:
+                row[k] += _count(counts.get(k)) if isinstance(counts, dict) else 0
+    res = {}
+    for member, agg in out.items():
+        tp, fp, fn, tn = (sum(row[k] for row in agg["by_verb"].values()) for k in ("tp", "fp", "fn", "tn"))
+        res[member] = {
+            "label": "INFERRED",
+            "sessions": agg["sessions"],
+            "turns": agg["turns"],
+            "predictions": sum(row["predicted"] for row in agg["by_verb"].values()),
+            "no_prediction_share": round(agg["none"] / agg["turns"], 3) if agg["turns"] else "NOT_COMPUTABLE",
+            "rejection_scored": tp + fp + fn + tn,
+            "rejection_precision": round(tp / (tp + fp), 3) if tp + fp else "NOT_COMPUTABLE",
+            "rejection_recall": round(tp / (tp + fn), 3) if tp + fn else "NOT_COMPUTABLE",
+            "by_verb": agg["by_verb"],
+        }
+    return res
 
 
 def record_hw_sample(db: sqlite3.Connection, sample: dict, *, ts: float | None = None) -> None:
@@ -171,7 +226,10 @@ def digest(db: sqlite3.Connection, hours: float = 24) -> dict:
                        "idle_rate": round((idle_n or 0) / turns, 3) if turns else 0.0, "drops": drops or 0,
                        "stale_head_rejections": stale_n,
                        "stale_head_rate": round(stale_n / turns, 3) if turns else 0.0}
-    alerts = [f"{m}: idle_rate {v['idle_rate']}" for m, v in out.items() if v["turns"] >= 20 and v["idle_rate"] > 0.6]
+    for member, shadow in consequence_digest(db, since).items():
+        if member in out:
+            out[member]["consequence"] = shadow
+    alerts =[f"{m}: idle_rate {v['idle_rate']}" for m, v in out.items() if v["turns"] >= 20 and v["idle_rate"] > 0.6]
     alerts += [f"{m}: {v['sessions'] - v['full_sessions']}/{v['sessions']} sessions ended early" for m, v in out.items()
                if v["sessions"] >= 4 and v["full_sessions"] / v["sessions"] < 0.5]
     for src, streak in db.execute("SELECT src, zero_energy_streak FROM stuck WHERE zero_energy_streak >= ? ORDER BY src",

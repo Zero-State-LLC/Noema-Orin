@@ -70,3 +70,79 @@ class MetricsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _session(member, role, by_verb, turns, no_prediction):
+    return {"member": member, "role": role, "actions": turns, "stop_reason": "duration_elapsed",
+            "consequence": {"label": "INFERRED", "turns": turns, "no_prediction": no_prediction, "by_verb": by_verb}}
+
+
+class ConsequenceDigestTests(unittest.TestCase):
+    """C4 (#199): shadow accuracy from the C3 session summaries, per member and per verb."""
+
+    def _db(self, root, logs):
+        (root / "logs").mkdir()
+        for member, rows in logs.items():
+            (root / "logs" / f"noema-player@{member}.log").write_text("\n".join(json.dumps(x) for x in rows) + "\n")
+        db = open_db(root)
+        collect(root, db)
+        return db
+
+    def test_digest_reports_precision_recall_and_no_prediction_share_per_member(self):
+        with tempfile.TemporaryDirectory() as d:
+            repair = {"turns": 10, "predicted": 8, "tp": 3, "fp": 1, "fn": 2, "tn": 2, "right": 5, "wrong": 3, "budget_scored": 7, "budget_mae": 0.4}
+            wait = {"turns": 10, "predicted": 6, "tp": 0, "fp": 0, "fn": 0, "tn": 6, "right": 6, "wrong": 0, "budget_scored": 6, "budget_mae": 0.0}
+            db = self._db(Path(d), {
+                "m03": [{"member": "m03", "role": "custodian", "persona_version": 1},
+                        _session("m03", "custodian", {"REPAIR": repair, "WAIT": wait}, 20, 6),
+                        _session("m03", "custodian", {"REPAIR": repair}, 10, 2)],
+                "m05": [{"member": "m05", "role": "speaker", "persona_version": 1},
+                        {"member": "m05", "role": "speaker", "actions": 4, "stop_reason": "duration_elapsed"}],
+            })
+            members = digest(db)["members"]
+            db.close()
+        got = members["m03"]["consequence"]
+        self.assertEqual(got["label"], "INFERRED")
+        self.assertEqual((got["sessions"], got["turns"], got["predictions"]), (2, 30, 22))
+        self.assertEqual(got["no_prediction_share"], round(8 / 30, 3))
+        self.assertEqual(got["rejection_scored"], 22)
+        self.assertEqual(got["rejection_precision"], 0.75)  # tp 6 / (tp 6 + fp 2)
+        self.assertEqual(got["rejection_recall"], 0.6)  # tp 6 / (tp 6 + fn 4)
+        self.assertEqual(got["by_verb"]["REPAIR"], {"turns": 20, "predicted": 16, "tp": 6, "fp": 2, "fn": 4, "tn": 4})
+        self.assertEqual(got["by_verb"]["WAIT"]["tn"], 6)
+        self.assertNotIn("consequence", members["m05"])  # shadow off: no data, not zeros
+
+    def test_precision_and_recall_are_not_computable_without_the_cases_they_need(self):
+        with tempfile.TemporaryDirectory() as d:
+            wait = {"turns": 5, "predicted": 5, "tp": 0, "fp": 0, "fn": 0, "tn": 5}
+            db = self._db(Path(d), {"m06": [{"member": "m06", "role": "surveyor", "persona_version": 1},
+                                             _session("m06", "surveyor", {"WAIT": wait}, 5, 0)]})
+            got = digest(db)["members"]["m06"]["consequence"]
+            db.close()
+        self.assertEqual(got["rejection_precision"], "NOT_COMPUTABLE")
+        self.assertEqual(got["rejection_recall"], "NOT_COMPUTABLE")
+        self.assertEqual(got["no_prediction_share"], 0.0)
+
+    def test_collect_is_incremental_and_malformed_summaries_are_ignored(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            rows = [{"member": "m03", "role": "custodian", "persona_version": 1},
+                    {"member": "m03", "role": "custodian", "actions": 1, "stop_reason": "duration_elapsed", "consequence": "NOT_COMPUTABLE"},
+                    {"member": "m03", "role": "custodian", "actions": 1, "stop_reason": "duration_elapsed",
+                     "consequence": {"turns": "many", "no_prediction": None, "by_verb": {"WAIT": {"turns": 2, "predicted": "x", "tp": True}, "BAD": 7}}},
+                    _session("m03", "custodian", {"WAIT": {"turns": 4, "predicted": 4, "tp": 1, "fp": 0, "fn": 0, "tn": 3}}, 4, 0)]
+            db = self._db(root, {"m03": rows})
+            collect(root, db)  # a second pass must not double count
+            got = digest(db)["members"]["m03"]["consequence"]
+            db.close()
+        self.assertEqual(got["by_verb"]["WAIT"], {"turns": 6, "predicted": 4, "tp": 1, "fp": 0, "fn": 0, "tn": 3})
+        self.assertNotIn("BAD", got["by_verb"])
+
+    def test_a_metrics_db_from_before_this_change_still_digests(self):
+        with tempfile.TemporaryDirectory() as d:
+            db = self._db(Path(d), {"m03": [{"member": "m03", "role": "custodian", "persona_version": 1},
+                                             {"member": "m03", "role": "custodian", "actions": 1, "stop_reason": "duration_elapsed"}]})
+            db.execute("DROP TABLE consequence")
+            members = digest(db)["members"]
+            db.close()
+        self.assertNotIn("consequence", members["m03"])
