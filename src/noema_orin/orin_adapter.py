@@ -517,11 +517,12 @@ class OrinAdapter:
             # D-046: RECONSTRUCT needs evidence (LIVE_INSPECT). With no reconstruction on offer, INSPECT an
             # entity not inspected lately instead of walking on.
             seen = {r.get("target") for r in self.recent[-12:] if r["action"] == "INSPECT"}
+            seen |= self._published_subjects()  # D-073: evidence for an already-published subject is wasted
             insp = next((o for o in options if o["action"] == "INSPECT" and o.get("target_id") not in seen), None)
             if insp is not None:
                 self.dwell = 0
                 return _proposal(insp, self.default_args, self.memory)
-        here = has_role_verb(options, goal_verbs) or _offered_here(canonical, goal_verbs)
+        here = has_role_verb(options, goal_verbs) or _offered_here(canonical, goal_verbs, done=self._published_subjects())
         energy = (canonical.get("resources") or {}).get("energy")
         if (self.supply and not _hold_empty(canonical) and not here and isinstance(energy, (int, float))
                 and energy < SPEND_READY):
