@@ -178,6 +178,10 @@ def main(argv: list[str] | None = None) -> int:
     from .memory import Memory, WorldMap
 
     adapter.memory, adapter.world_map = Memory(mind, embedder=default_embedder()), WorldMap(ns.root)
+    from .transitions import TransitionLog
+
+    adapter.transition_log = TransitionLog.from_env(mind)  # D-078: None unless NOEMA_TRANSITION_LOG=1
+
     def on_turn(pid):
         record_self(ns.root, ns.member, pid)
         adapter.role_handles = role_handles(ns.root, roles)
@@ -204,6 +208,8 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"member": ns.member, "role": role, "status": "NO_CREDENTIAL"}), flush=True)
             return 3
         loop_breaks_before = int(adapter.stats.get("loop_break", 0))
+        if adapter.transition_log is not None:
+            adapter.transition_log.new_session()  # never pair turns across a reconnect or session boundary
         try:
             report = client.play(duration=ns.session_seconds, cooldown=cooldown, adapter=adapter)
         except (ConnectionError, EOFError, OSError) as exc:
