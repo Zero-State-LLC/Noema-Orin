@@ -119,6 +119,18 @@ class TegraTelemetryTests(unittest.TestCase):
             finally:
                 db.close()
 
+    def test_r39_hwmon4_and_gpu_path(self):
+        probe = _FakeJetsonProbe(
+            {
+                "/sys/devices/platform/bus@0/17000000.gpu/load": "100\n",
+                "/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon4/in1_input": "5000\n",
+                "/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon4/curr1_input": "1200\n",
+            }
+        )
+        sample = collect_jetson_telemetry(probe=probe)
+        self.assertEqual(sample["gpu_load_pct"], 10.0)
+        self.assertEqual(sample["vdd_in_mw"], 6000)
+
 
 class QualificationAndNvtxTests(unittest.TestCase):
     def test_qualify_emits_allowlisted_receipt_without_leaking_secrets_or_faking_hardware(self):

@@ -16,17 +16,16 @@ _LIMIT = 4096
 _GPU_LOAD_PATHS = (
     "/sys/devices/platform/bus@0/17000000.ga10b/load",
     "/sys/devices/gpu.0/load",
+    "/sys/devices/platform/bus@0/17000000.gpu/load",  # L4T R39
 )
+# hwmon index is assigned at boot (hwmon0/1 on older L4T, hwmon4 on R39 Orin Nano Super).
+_INA_BASE = "/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon"
+_HWMON_RANGE = range(10)
 _CPU_TEMP_PATH = "/sys/class/thermal/thermal_zone0/temp"
 _GPU_TEMP_PATH = "/sys/class/thermal/thermal_zone1/temp"
-_INA_VOLT_PATHS = (
-    "/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon1/in1_input",
-    "/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon0/in1_input",
-)
-_INA_CURR_PATHS = (
-    "/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon1/curr1_input",
-    "/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon0/curr1_input",
-)
+_HWMON_ORDER = (1, 0) + tuple(i for i in _HWMON_RANGE if i not in (0, 1))
+_INA_VOLT_PATHS = tuple(f"{_INA_BASE}{i}/in1_input" for i in _HWMON_ORDER)
+_INA_CURR_PATHS = tuple(f"{_INA_BASE}{i}/curr1_input" for i in _HWMON_ORDER)
 
 
 class SysfsProbe(Protocol):
