@@ -181,6 +181,13 @@ def main(argv: list[str] | None = None) -> int:
     from .transitions import TransitionLog
 
     adapter.transition_log = TransitionLog.from_env(mind)  # D-078: None unless NOEMA_TRANSITION_LOG=1
+    from .consequence import attach_shadow, close_shadow_session
+
+    # C3 (#198): shadow mode needs the transition log on and NOEMA_CONSEQUENCE_SHADOW=1. It only reports.
+    try:
+        attach_shadow(adapter, mind)
+    except Exception as exc:
+        print(json.dumps({"member": ns.member, "consequence_error": type(exc).__name__}), flush=True)
 
     def on_turn(pid):
         record_self(ns.root, ns.member, pid)
@@ -210,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         loop_breaks_before = int(adapter.stats.get("loop_break", 0))
         if adapter.transition_log is not None:
             adapter.transition_log.new_session()  # never pair turns across a reconnect or session boundary
+        close_shadow_session(adapter, None)  # turns left by a dropped session: learn budgets from them, score nothing
         try:
             report = client.play(duration=ns.session_seconds, cooldown=cooldown, adapter=adapter)
         except (ConnectionError, EOFError, OSError) as exc:
@@ -230,6 +238,7 @@ def main(argv: list[str] | None = None) -> int:
                 adapter.transition_log.record_outcomes(report)
             except Exception as exc:
                 print(json.dumps({"member": ns.member, "transition_log_error": type(exc).__name__}), flush=True)
+        consequence = close_shadow_session(adapter, report)  # C3: score this session, then fold it into the model
         try:
             compacted = adapter.memory.compact() if adapter.memory is not None else 0
         except Exception:  # compaction must never end a session loop
@@ -296,7 +305,8 @@ def main(argv: list[str] | None = None) -> int:
                           "rejections": rej, "decisions": dict(adapter.stats),
                           "persona_version": persona["version"], "memories_recalled": adapter.stats_mem,
                           "health": adapter.health.summary(), "memory_compacted": compacted,
-                          "reflection": "accepted" if accepted else "rejected", "rsi": rsi_verdict},
+                          "reflection": "accepted" if accepted else "rejected", "rsi": rsi_verdict,
+                          **({"consequence": consequence} if consequence is not None else {})},
                          default=str), flush=True)
         stop.wait(ns.cooldown)
     return 0

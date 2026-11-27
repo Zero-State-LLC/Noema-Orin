@@ -56,6 +56,26 @@ class OrinAdapter:
         self.last_playbook_state: str | None = None
         self.agenda_manager = None
         self.transition_log = None
+        self.consequence_model = None
+        self.consequence_scorer = None
+
+    def _shadow_consequence(self, canonical: dict, proposal):
+        """C3 (#198): shadow-mode estimate for the chosen action. Read-only: it never alters the proposal,
+        and a failure here must never stall a turn. None when shadow mode is off."""
+        model = getattr(self, "consequence_model", None)
+        if model is None:
+            return None
+        try:
+            from .consequence import compact
+
+            prediction = model.predict(canonical, proposal)
+            scorer = getattr(self, "consequence_scorer", None)
+            if scorer is not None:
+                scorer.note(canonical, proposal, prediction)
+            return compact(prediction)
+        except Exception as exc:
+            print(json.dumps({"consequence_error": type(exc).__name__}), flush=True)
+            return None
 
     def _effective_social_cooldown(self) -> int:
         knobs = getattr(self, "policy_knobs", None) or {}
@@ -678,7 +698,8 @@ class OrinAdapter:
                 "unequipped_broken_tools": count_unequipped_broken_tools(canonical),
                 "consequence": canonical.get("last_consequence"),
             })
-        print(json.dumps({"turn": sum(self.stats.values()), "source": source,
+        shadow = self._shadow_consequence(canonical, proposal)
+        turn_line = {"turn": sum(self.stats.values()), "source": source,
                           "action": getattr(proposal, "action", None),
                           "target": getattr(proposal, "target_id", None),
                           "args_keys": sorted((getattr(proposal, "arguments", None) or {}).keys()),
@@ -691,7 +712,10 @@ class OrinAdapter:
                                               for a in canonical.get("affordances") or []
                                               if isinstance(a, dict) and a.get("available") is False
                                               and str(a.get("action") or "").upper() in (self.verbs | set(self.supply or ()))})[:4],
-                          "offered_role": sorted({o["action"] for o in options} & self.verbs)}), flush=True)
+                          "offered_role": sorted({o["action"] for o in options} & self.verbs)}
+        if shadow is not None:
+            turn_line["consequence"] = shadow  # C3 (#198): INFERRED estimate for the chosen action; telemetry only
+        print(json.dumps(turn_line), flush=True)
         self._last_tier = None
         batch_cap = int((getattr(self, "policy_knobs", None) or {}).get("harvest_batch_target", HARVEST_MAX))
         proposal = _harvest_amount(proposal, canonical, max_batch=batch_cap)
