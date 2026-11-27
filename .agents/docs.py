@@ -21,6 +21,7 @@ Two sources of truth live beside the agent workflow machine:
     python3 .agents/docs.py step --evidence "…"   finish the current step
     python3 .agents/docs.py step --user-said "…"  finish a step that needs the user's own words
     python3 .agents/docs.py escalate --evidence "…"
+    python3 .agents/docs.py resolve --user-said "…"  clear an escalated procedure once the user has resolved it
     python3 .agents/docs.py triage-audit          open issues not in exactly one triage state (gh)
 
 Runbooks ("runbooks" in procedures.json) are machines that sit beside the
@@ -365,12 +366,21 @@ def run_cmd(procs: dict[str, Any], argv: list[str]) -> str:
         if find_procedure(procs, name) is None:
             known = list(procs.get("skills", {})) + list(procs.get("runbooks", {}))
             raise DocsError(f"unknown procedure {name!r}; known: {', '.join(known)}")
+        if run and run.get("escalated"):
+            raise DocsError(f"{run['procedure']} is escalated; clear it with `resolve --user-said \"…\"`, then run again")
         if run and not run.get("done"):
             raise DocsError(f"{run['procedure']} is still running; finish it (`step`) or `escalate` first")
         _save_run({"procedure": name, "step": 0, "started": _now(), "log": []})
         return where(procs)
     if not run:
         raise DocsError("no procedure running")
+    if cmd == "resolve":
+        if not run.get("escalated"):
+            raise DocsError("nothing to resolve: the procedure is not escalated")
+        if not user_said.strip():
+            raise DocsError("resolve needs the user's own words: --user-said \"…\"")
+        _save_run(None)
+        return f"{run['procedure']} resolved ({user_said!r}); start it again with `run {run['procedure']}` if needed."
     if cmd == "escalate":
         if not evidence:
             raise DocsError("escalate needs --evidence")
@@ -380,7 +390,7 @@ def run_cmd(procs: dict[str, Any], argv: list[str]) -> str:
         return where(procs)
     if cmd == "step":
         if run.get("escalated"):
-            raise DocsError("procedure is escalated; resolve it with the user, then `run` again")
+            raise DocsError("procedure is escalated; once the user has resolved it: `resolve --user-said \"…\"`")
         proc = find_procedure(procs, run["procedure"])
         assert proc is not None
         steps = steps_of(proc)
@@ -497,7 +507,7 @@ def lifecycle_violations(lc: dict[str, Any], since: str | None = None) -> list[d
                 out.append({"key": f"{ref}:no_status", "detail": "no status in the file or its index"})
             elif state is None:
                 out.append({"key": f"{ref}:unknown_status", "detail": f"status {raw[:80]!r} is not a {kind['title']} state ({', '.join(kind['states'])})"})
-            if index:
+            if kind.get("index"):
                 if fname not in index:
                     out.append({"key": f"{ref}:not_in_index", "detail": f"missing from {kind['index']['file']}"})
                 else:
@@ -675,7 +685,7 @@ def main(argv: list[str]) -> int:
         if argv[0] == "where":
             print(where(procs))
             return 0
-        if argv[0] in ("run", "step", "escalate"):
+        if argv[0] in ("run", "step", "escalate", "resolve"):
             print(run_cmd(procs, argv))
             return 0
         if argv[0] == "triage-audit":
