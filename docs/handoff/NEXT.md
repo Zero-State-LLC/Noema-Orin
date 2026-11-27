@@ -130,3 +130,8 @@
 - m06 ran local_first for 75 min: 0 tracebacks, local_s1_calls 13, and llama-server predicted 413 tokens in total. Model calls are rare because about 80% of turns are planner/idle_skip/fallback, so the cost saving is small but real.
 - Added m03 and m05 at 11:06Z. After 20 min: 0 tracebacks, m05 role 20/20, m03 12/20, 3.2 GB RAM free.
 - Next: if it's clean after about 6h, add m01/m02/m04 (backups are `mXX.env.bak-pre-local`). Phase 3 T12 (TRT embedder) and T14 (qualify, closes #5 / G-002) remain. T14 can run now that llama-server exists: `python -m noema_orin.qualify`.
+
+## 2026-11-27 11:31Z: #5 qualification receipt (OBSERVED)
+- Fix: `jetson_telemetry.py` hardcoded hwmon0/1 and an older GPU load path. On this board (Orin Nano Super, L4T R39.2.2) the INA3221 is hwmon4 and GPU load is at `bus@0/17000000.gpu/load`. With the fix, power reads VDD_IN 6.1 W and the receipt is OBSERVED.
+- Receipt `docs/metrics/qualify-20261127T1130Z.json`: llama-server qwen2.5-3b Q4_K_M at 21.9 tok/s, prompt 290 ms, MAXN_SUPER, 3.1 GB available with 6 agents running.
+- Still NOT_COMPUTABLE: model_load_s, embed_p95_ms (T12 TRT embedder not built), command_latency_ms. #5 stays open (HOLD, human closes it).
