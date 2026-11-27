@@ -225,3 +225,25 @@ def iter_outcomes(mind: Path) -> Iterator[tuple[dict, dict, dict | None]]:
     for row in _rows(mind):
         if row.get("kind") != OUTCOME_KIND:
             yield row["obs"], row["action"], outcomes.get((row.get("session"), row.get("turn")))
+
+
+def iter_labelled(mind: Path) -> Iterator[tuple[dict, dict, dict | None, dict | None]]:
+    """Yield (observation, action, next_observation, outcome) for every logged turn (C2, #197).
+
+    `next_observation` is None for a session's last turn or across a gap; `outcome` is None when no
+    result was recorded. Either can be missing without the other.
+    """
+    outcomes = {}
+    for row in _rows(mind):
+        if row.get("kind") == OUTCOME_KIND:
+            outcomes[(row.get("session"), row.get("turn"))] = {k: row[k] for k in ("ok", "code", "failure") if k in row}
+    prev = None
+    for row in _rows(mind):
+        if row.get("kind") == OUTCOME_KIND:
+            continue
+        if prev is not None:
+            follows = row.get("session") == prev.get("session") and row.get("turn") == prev.get("turn", -2) + 1
+            yield prev["obs"], prev["action"], row["obs"] if follows else None, outcomes.get((prev.get("session"), prev.get("turn")))
+        prev = row
+    if prev is not None:
+        yield prev["obs"], prev["action"], None, outcomes.get((prev.get("session"), prev.get("turn")))
