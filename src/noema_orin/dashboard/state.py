@@ -62,7 +62,9 @@ class DashboardStateReader:
         config_dir: Path,
         systemd_runner=None,
         llama_base_url: str | None = None,
+        sysfs_probe=None,
     ) -> None:
+        self.sysfs_probe = sysfs_probe
         self.root = Path(root)
         self.config_dir = Path(config_dir)
         self.systemd_runner = systemd_runner
@@ -242,7 +244,7 @@ class DashboardStateReader:
 
         # Hardware telemetry: prefer live sysfs/llama, fall back to latest metrics.db hw_samples
         llama_metrics = fetch_llama_metrics(self.llama_base_url, timeout=0.6) if self.llama_base_url else {}
-        live_hw = collect_jetson_telemetry(llama_metrics=llama_metrics)
+        live_hw = collect_jetson_telemetry(probe=self.sysfs_probe, llama_metrics=llama_metrics)
         db_hw = dig.get("hw") if isinstance(dig.get("hw"), dict) else {}
         hw = {}
         for k, v in live_hw.items():
