@@ -161,3 +161,9 @@
 - MODE showed cloud_first while m03/m05/m06 run local_first. The snapshot now has per-agent `inference_mode` and `semantic_memory` read from mXX.env (only those keys, no token leak, checked). Cards show LOCAL/EMB badges and the header shows `local_first 3/6`.
 - Layout: the header clipped PWR/RAM/S1/JWT and the brand text wrapped over 5 lines, and agent cards overlapped in a fixed 3-row grid. The header now wraps, the brand is one line with a humanized org name, and the grid is min-content and scrollable. LOCAL S1 shows "idle" instead of 0 t/s (llama.cpp's gauge is per interval). embed-server is in the infra strip.
 - Verified in a browser over `ssh -L 8787` with live data. 260 tests OK on Orin.
+
+## 2026-11-27 13:22Z: dashboard live on the Orin's monitor
+- Cause: no graphical session (multi-user.target, gdm disabled) and the #186 kiosk unit needs Chromium, which is not installed. The kiosk was never installed, so the monitor showed nothing.
+- Fix: a system unit runs xinit + `deploy/jetson/kiosk.py` (WebKit2GTK, already on the image) on vt1, enabled at boot. Verified from a capture of :0 that the full dashboard is live at 3840x2160.
+- Embed server unit trimmed (`-b/-ub 512 -np 1`). RAM is about 1.5 GB available with all services up.
+- Widening at about 17:30Z goes ahead regardless of RAM (shared servers): m01/m02/m04 local_first, embedder on m03/m05.

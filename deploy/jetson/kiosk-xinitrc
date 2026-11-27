@@ -1,0 +1,6 @@
+#!/bin/sh
+# xinit client for the Mission Control kiosk: no blanking, no DPMS, then the WebKit window.
+xset s off
+xset s noblank
+xset -dpms
+exec /usr/bin/python3 "$HOME/noema-orin-src/deploy/jetson/kiosk.py"
