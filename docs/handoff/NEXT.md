@@ -135,3 +135,9 @@
 - Fix: `jetson_telemetry.py` hardcoded hwmon0/1 and an older GPU load path. On this board (Orin Nano Super, L4T R39.2.2) the INA3221 is hwmon4 and GPU load is at `bus@0/17000000.gpu/load`. With the fix, power reads VDD_IN 6.1 W and the receipt is OBSERVED.
 - Receipt `docs/metrics/qualify-20261127T1130Z.json`: llama-server qwen2.5-3b Q4_K_M at 21.9 tok/s, prompt 290 ms, MAXN_SUPER, 3.1 GB available with 6 agents running.
 - Still NOT_COMPUTABLE: model_load_s, embed_p95_ms (T12 TRT embedder not built), command_latency_ms. #5 stays open (HOLD, human closes it).
+
+## 2026-11-27 11:46Z: T12 semantic memory canary (m06)
+- `noema-embed-server` (bge-small f16 via llama.cpp, #178) is enabled. Qualify receipt now has embed_p95_ms 21.6.
+- m06 has `NOEMA_TRT_EMBED_URL` since 11:35Z: 34 facts embedded and 0 tracebacks fleet-wide. fleet.sh 15: role 37/90.
+- RAM: 2.5 GB available with both servers and 6 agents running. Don't add a bigger model. Widen the embedder and local_first to the other agents (each agent process is small) only if available RAM stays above 1.5 GB.
+- Widening check is due about 17:30Z: m01/m02/m04 local_first, embedder on m03/m05.
