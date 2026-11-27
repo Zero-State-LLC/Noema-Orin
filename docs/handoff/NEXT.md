@@ -94,3 +94,8 @@
 - D-074 (#145) rolled fleet-wide: low energy with no RECHARGE in the room now walks to the generator room. 25 min after: 0 turns at energy <=1 fleet-wide (m06 was 32%), and m06 did HARVEST 14/20. All 6 active, 0 tracebacks.
 - m04 is back to WAIT 12/MOVE 11 with no role actions in this window. Watch: it may have exhausted subjects within reach.
 - **Needs user:** PR #144 (AGENTS.md state machine, by scrimshawlife-ctrl) asks to "confirm before we enforce direction" on the G-gate lifecycle order. CI is green and there are no runtime changes. Left open for you.
+
+## 2026-11-27 03:17Z
+- #144 merged (recommendation: states-only gate checks, enforce direction later once a G-gate actually moves). `machine.py check` and `docs.py check` OK on main.
+- m04 idle is correct world state: all 13 inspectable subjects in reach are published, and its idle turns are planner WAIT/MOVE with no model calls, so they cost nothing. It resumes when new entities or structures appear (m02 builds, m03 repairs). A possible later slice is to allow a re-revision when an entity's condition changes. That needs a condition-change signal, so it is not urgent.
+- Fleet healthy: 0 turns at energy <=1, 0 tracebacks, no open PRs.
