@@ -244,3 +244,4 @@ m05 (speaker) fell back to ORG_MEMBER_REMOVE (4 times, once POLICY_DENIED) and O
 ## D-073: the archivist does not wait beside records it already published (2026-11-26)
 
 m04 had 8/200 role actions: 181/600 turns were idle_skip WAITs at attention 8, in rooms offering 125 RECONSTRUCT_PUBLISH records, all of subjects it had already published (D-055 hides them from the menu). `_offered_here` still counted them as work, so it stayed put. Records of `published` subjects no longer count, and m04 walks on to find new subjects.
+Follow-up (D-073b): after the first fix, m04 looped on planner INSPECTs of published entities in one room (14/21 turns). D-046's evidence INSPECT and the planner's `here` check now also skip published subjects.
