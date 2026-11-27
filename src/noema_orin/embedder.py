@@ -52,8 +52,9 @@ class HttpTrtEmbedder:
         clean = " ".join(str(text or "").split())[:512]
         if not clean:
             return None
+        openai = self.base_url.endswith("/v1")
         req = urllib.request.Request(
-            self.base_url + "/embed",
+            self.base_url + ("/embeddings" if openai else "/embed"),
             data=json.dumps({"input": clean, "model": self.model_name}).encode("utf-8"),
             headers={"content-type": "application/json"},
             method="POST",
@@ -64,6 +65,11 @@ class HttpTrtEmbedder:
         except Exception:
             return None
         vec = data.get("embedding") if isinstance(data, dict) else None
+        if vec is None and openai and isinstance(data, dict):
+            # OpenAI shape from llama-server --embedding: {"data": [{"embedding": [...]}]}
+            rows = data.get("data")
+            if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+                vec = rows[0].get("embedding")
         if not isinstance(vec, list) or not vec:
             return None
         try:
