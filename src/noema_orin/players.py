@@ -174,9 +174,10 @@ def main(argv: list[str] | None = None) -> int:
         adapter.held_track = adapter.held_tracks[-1]
     if agenda.get("build_room"):
         adapter.build_room = agenda["build_room"]
+    from .embedder import default_embedder
     from .memory import Memory, WorldMap
 
-    adapter.memory, adapter.world_map = Memory(mind), WorldMap(ns.root)
+    adapter.memory, adapter.world_map = Memory(mind, embedder=default_embedder()), WorldMap(ns.root)
     def on_turn(pid):
         record_self(ns.root, ns.member, pid)
         adapter.role_handles = role_handles(ns.root, roles)
