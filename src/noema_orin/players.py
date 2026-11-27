@@ -53,12 +53,29 @@ def build_policy(role: str):
     )
 
 
-def stagger(members: list[str], member: str, cooldown: float, turn_gap: float) -> tuple[float, float]:
+def member_phase_jitter(member: str, turn_gap: float) -> float:
+    """Deterministic sub-gap phase jitter (T3/#157) to desynchronize 6 agents off cycle-head boundaries."""
+    import hashlib
+
+    digest = hashlib.sha256(str(member).encode("utf-8")).digest()
+    frac = int.from_bytes(digest[:2], "big") / 65535.0
+    span = max(0.5, min(3.5, float(turn_gap) * 0.35))
+    return round(0.3 + frac * span, 1)
+
+
+def stagger(
+    members: list[str],
+    member: str,
+    cooldown: float,
+    turn_gap: float,
+    *,
+    jitter_s: float = 0.0,
+) -> tuple[float, float]:
     """Spread one shared model across the cohort: cooldown grows with cohort size, starts are offset."""
     n = max(1, len(members))
     cool = max(cooldown, turn_gap * n)
     idx = members.index(member) if member in members else 0
-    return cool, round(idx * cool / n, 1)
+    return cool, round(idx * cool / n + float(jitter_s), 1)
 
 
 def cohort_ids(root: Path) -> set[str]:
@@ -120,6 +137,7 @@ def main(argv: list[str] | None = None) -> int:
         build_session_dossier,
         load_agenda,
         load_or_init_knobs,
+        maybe_revert_persona_on_epoch,
         save_agenda,
     )
 
@@ -143,13 +161,15 @@ def main(argv: list[str] | None = None) -> int:
     adapter.verbs = set(spec["verbs"])
     adapter.supply = set(spec.get("supply") or ())
     adapter.builds = tuple(spec.get("builds") or ())
+    adapter.focus_tracks = tuple(spec.get("focus_tracks") or ())
     adapter.health.role = f"{persona['name']}-{role}"
     adapter.explorer = role == "surveyor"
     adapter.policy_knobs = dict(knobs)
     adapter.persona_traits = dict(persona.get("traits") or {})
     adapter.mind_dir = mind
-    if agenda.get("held_track"):
-        adapter.held_track = agenda["held_track"]
+    adapter.held_tracks = list(agenda.get("held_tracks") or ([agenda["held_track"]] if agenda.get("held_track") else []))[-2:]
+    if adapter.held_tracks:
+        adapter.held_track = adapter.held_tracks[-1]
     if agenda.get("build_room"):
         adapter.build_room = agenda["build_room"]
     from .memory import Memory, WorldMap
@@ -166,7 +186,9 @@ def main(argv: list[str] | None = None) -> int:
 
     adapter.on_turn = on_turn
     members = sorted(roles)
-    cooldown, offset = stagger(members, ns.member, ns.cooldown, ns.turn_gap)
+    cooldown, offset = stagger(
+        members, ns.member, ns.cooldown, ns.turn_gap, jitter_s=member_phase_jitter(ns.member, ns.turn_gap)
+    )
     print(json.dumps({"member": ns.member, "stagger_offset_s": offset, "cooldown_s": cooldown}), flush=True)
     if stop.wait(offset):
         return 0
@@ -197,13 +219,18 @@ def main(argv: list[str] | None = None) -> int:
             compacted = adapter.memory.compact() if adapter.memory is not None else 0
         except Exception:  # compaction must never end a session loop
             compacted = -1
+        held_tracks = list(getattr(adapter, "held_tracks", None) or ([] if not getattr(adapter, "held_track", None) else [adapter.held_track]))
         save_agenda(mind, {
-            "held_track": getattr(adapter, "held_track", None),
+            "held_track": held_tracks[-1] if held_tracks else None,
+            "held_tracks": held_tracks,
             "build_room": getattr(adapter, "build_room", None),
             "epoch": agenda.get("epoch", 0),
             "steps": agenda.get("steps", []),
             "updated_seq": adapter.health.last_source_sequence,
         })
+        persona, _reverted = maybe_revert_persona_on_epoch(
+            mind, persona, ratchet, cycle=getattr(adapter, "last_cycle", None)
+        )
         rej = rejection_summary(report)
         dossier = build_session_dossier(
             role=role,

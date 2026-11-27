@@ -17,6 +17,8 @@ from typing import Any, Callable
 
 # Deep Time fossilization horizon in NOEMA (deep-time.ts: 40 cycles).
 DEEP_TIME_EPOCH_CYCLES = 40
+# RFC-0144 §1: each Agent Player may hold up to 2 active focus tracks.
+ACTIVE_FOCUS_CAP = 2
 
 # Canary evaluation window and rollback thresholds.
 CANARY_WINDOW_SESSIONS = 3
@@ -126,6 +128,22 @@ def apply_knob_deltas(
     return nxt, True
 
 
+def _normalize_held_tracks(raw_tracks: object, legacy_track: object = None) -> list[str]:
+    tracks: list[str] = []
+    if isinstance(raw_tracks, (list, tuple)):
+        for item in raw_tracks:
+            s = str(item or "").strip().lower()
+            if s:
+                if s in tracks:
+                    tracks.remove(s)
+                tracks.append(s)
+    if not tracks and legacy_track:
+        s = str(legacy_track).strip().lower()
+        if s:
+            tracks.append(s)
+    return tracks[-ACTIVE_FOCUS_CAP:]
+
+
 def load_agenda(mind: Path) -> dict[str, Any]:
     """Load persistent medium-loop agenda surviving 30-min session restarts."""
     path = mind / "agenda.json"
@@ -133,21 +151,49 @@ def load_agenda(mind: Path) -> dict[str, Any]:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
+                held_tracks = _normalize_held_tracks(data.get("held_tracks"), data.get("held_track"))
+                data["held_tracks"] = held_tracks
+                data["held_track"] = held_tracks[-1] if held_tracks else None
                 return data
         except (ValueError, OSError):
             pass
-    return {"held_track": None, "build_room": None, "epoch": 0, "steps": [], "updated_seq": 0}
+    return {"held_track": None, "held_tracks": [], "build_room": None, "epoch": 0, "steps": [], "updated_seq": 0}
 
 
 def save_agenda(mind: Path, agenda: dict[str, Any]) -> None:
+    held_tracks = _normalize_held_tracks(agenda.get("held_tracks"), agenda.get("held_track"))
     clean = {
-        "held_track": agenda.get("held_track"),
+        "held_track": held_tracks[-1] if held_tracks else None,
+        "held_tracks": held_tracks,
         "build_room": agenda.get("build_room"),
         "epoch": int(agenda.get("epoch") or 0),
         "steps": list(agenda.get("steps") or [])[:5],
         "updated_seq": int(agenda.get("updated_seq") or 0),
     }
     atomic_write_json(mind / "agenda.json", clean)
+
+
+def maybe_revert_persona_on_epoch(
+    mind: Path,
+    persona: dict[str, Any],
+    ratchet: "RsiRatchet",
+    *,
+    cycle: int | None,
+) -> tuple[dict[str, Any], bool]:
+    """Pull persona traits gently toward role seed on Deep Time epoch rollovers (T7/#161)."""
+    if not isinstance(cycle, int) or cycle <= 0:
+        return persona, False
+    epoch = cycle // DEEP_TIME_EPOCH_CYCLES
+    last_epoch = int(ratchet.state.get("last_epoch") or 0)
+    if epoch <= last_epoch:
+        return persona, False
+    from .persona import mean_revert_toward_seed
+
+    reverted = mean_revert_toward_seed(persona)
+    atomic_write_json(mind / "persona.json", reverted)
+    ratchet.state["last_epoch"] = epoch
+    ratchet.save()
+    return reverted, True
 
 
 def build_session_dossier(

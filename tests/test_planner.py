@@ -35,11 +35,22 @@ class PlannerTests(unittest.TestCase):
                          [("ORG_INVITE", "q"), ("ORG_OFFICE_CREATE", None), ("LOOK", None)])
         self.assertEqual([o["i"] for o in out], [0, 1, 2])
 
-    def test_agreements_only_with_cohort_and_never_trade_or_access(self):
+    def test_agreements_require_colocation_and_never_trade_or_access(self):
+        # D-076 / T5 (#159): agreements require colocation (players_here) and allow colocated external diplomacy,
+        # while still permanently blocking trade and access agreements.
         mk = lambda t, p: {"action": "AGREEMENT_FORM", "target_id": p, "raw": {"agreement_type": t, "player_id": p}}
-        opts = [mk("TRADE", "player.q"), mk("access", "player.q"), mk("defense", "player.stranger"), mk("defense", "player.q")]
+        opts = [
+            mk("TRADE", "player.q"),
+            mk("access", "player.q"),
+            mk("defense", "player.away"),
+            mk("defense", "player.stranger"),
+            mk("defense", "player.q"),
+        ]
         out = refine(opts, CANON, {"player.q"})
-        self.assertEqual([(o["raw"]["agreement_type"], o["target_id"]) for o in out], [("defense", "player.q")])
+        self.assertEqual(
+            [(o["raw"]["agreement_type"], o["target_id"]) for o in out],
+            [("defense", "player.stranger"), ("defense", "player.q")],
+        )
 
     def test_no_duplicate_office(self):
         canon = {**CANON, "organizations": [{**org("org.a", 10), "offices": [{"display_name": "Notice"}]}]}
