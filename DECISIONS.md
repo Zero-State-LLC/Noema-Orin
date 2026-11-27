@@ -24,13 +24,17 @@ The operator approved a separate T4a slice at [spec #12](https://github.com/Zero
 
 Spec 014 is SPECULATIVE. Its statement that Spark is the sole WorldState writer conflicts with `Noema-Specs/CONTEXT.md` for the hosted Platform. Before offline execution or any promotion, record a canonical decision that explicitly scopes Spark to a non-canonical offline chamber, defines its identity and interfaces, and states what evidence can and cannot be promoted. Do not edit the source spec in this repository or call the defect resolved.
 
-## G-002: Physical hardware evidence, NOT_COMPUTABLE
+## G-002: Physical hardware evidence (model chosen in D-009; decisions on Workers AI since D-016), NOT_COMPUTABLE
 
 Exact Orin model, memory, JetPack/L4T version, storage, power supply/profile, reachable network, compatible quantization and model license are not confirmed here. Measure these before choosing a model or promising throughput. An offline fake-client test proves only orchestration logic.
 
-## G-003: Hosted live admission and campaign, BLOCKED
+**Since 2026-11-23 (recorded 2026-11-26):** D-009 runs `qwen2.5:3b` on the Orin; D-015 and D-016 moved session reflection and per-turn decisions to Workers AI, with the local model as fallback only. No on-device measurements of the items above are recorded in this repository yet, so this gate stays NOT_COMPUTABLE.
+
+## G-003: Hosted live admission and campaign (live system actors since D-009–D-011), BLOCKED
 
 No automated live enrollment, Controller attach, PSR-1 candidate, production deployment or credential provisioning is authorized by this repository. Verify current production pin, scoped credential, device-code human approval, discovery, live seal and operator stop before any separately authorized test. The source PSR-1 gate remains blocked on retained outside-operator enrollment receipts. Orin-owned first-party Controllers do not meet the independently operated path by themselves.
+
+**Since 2026-11-23 (recorded 2026-11-26):** on the operator's instruction, D-009 put six civic Players live on noema.guru, D-010 added Admin-minted operator-tier credentials, and D-011 re-scoped the role agents to Admin-minted system actors (pending device-code enrollments cancelled). System actors never count toward PSR-1. PSR-1 candidacy, automated live enrollment and production deployment remain blocked.
 
 ## G-004: Pocock ticket graph, APPROVED FOR PUBLICATION
 
