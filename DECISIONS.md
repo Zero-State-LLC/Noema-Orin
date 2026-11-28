@@ -369,3 +369,20 @@ Operator statement, verbatim: "approve spec". It was given in reply to the publi
 - **Second cause, the client bug again.** After a refused turn, noema-client 0.2.0 (noema-client#58) hands the next decision the rejection's observation, which has no organizations, players or services. 27 of m02's turns (15%) and 140 of m05's (45%) were decided on such a stripped view. With no treasury visible, nothing bounded the next request either.
 - **Change.** `_harvest_amount` bounds a treasury harvest (`acting_for`) by `64 - vault` from the current observation, or else from the last level seen (`_remember_vaults`; only the quartermaster adds to the vault, so the real headroom is at least that). With neither, the planner's amount stands. Pack harvests are unchanged.
 - **Unchanged:** no engine, Specs or wire change.
+
+## D-092: the storefront is where the Compact's stall stands; serve a peer before walking (2026-11-28)
+
+- **Finding.** m02 reversed 16 of 49 planner moves outside incidents. Replaying its turns through the real playbook against a copy of the shared map, 18 of 18 inbound reversal moves came from one rule, RETURN_STOREFRONT.
+- **Cause 1: wrong room.** Every storefront rule hard-coded `room.civic-exchange`. The Compact's only barter stall is `entity.barter-stall.a1f880c3` in `room.archive`, with five live BUY_ORDER listings. The exchange never had listings, so the rule always pulled.
+- **Cause 2: the map never saw the stall.** The stall entity carries `label: "barter-stall"` and no `infra_type`, and `observe_market_and_equipment` matched only `infra_type`. So `shop_stalls` stayed empty.
+- **Cause 3: a pull it could not act on.** An empty storefront needs a funded BUY_ORDER (energy 14 on arrival). m02 was pulled back at energy 5 to 7, did nothing there, and left.
+- **Cause 4: serving came second.** m02 walked toward the custodian (SEEK_CUSTODIAN), arrived with SUPPLY on offer, and RETURN_STOREFRONT pulled it straight back before the SUPPLY step ran.
+- **Change.**
+  - The map records a stall by `infra_type` or by label.
+  - `shop_planner.storefront_room()` is the room of the home org's listings, else any recorded stall, else any listing, else `room.civic-exchange`.
+  - The pull, the speaker's refresh walk and the RESTOCK_STALL agenda target all use it.
+  - The pull to an empty storefront needs energy for the hop plus a funded listing.
+  - SUPPLY_PEER runs before the pull.
+  - The turn line now names the playbook step (`step`) for planner turns, so the next analysis needs no replay.
+- **Replay after the change:** 7 of 10 reversal arrivals now SUPPLY the custodian on the spot, 2 WAIT for build fuel, 1 is a SEEK_CUSTODIAN step.
+- **Rollout note:** agents on older code delete label-only stall rows when they visit that room, so `storefront_room` also locates the stall from its listings.

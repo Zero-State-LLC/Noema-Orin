@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from ..shop_planner import plan_quartermaster_shop, quartermaster_needs_shop_visit
+from ..planner import home_org
+from ..shop_planner import plan_quartermaster_shop, quartermaster_needs_shop_visit, storefront_room
 from .common import PlaybookContext, PlaybookResult, route_to_room, step_equipment
 
 
@@ -34,11 +35,8 @@ def run_quartermaster_playbook(ctx: PlaybookContext) -> PlaybookResult | None:
         ad.dwell = 0
         return PlaybookResult("STOREFRONT", shop_prop)
 
-    if quartermaster_needs_shop_visit(canonical, ad.world_map, ctx.knobs):
-        move = route_to_room(ctx, "room.civic-exchange")
-        if move is not None:
-            return PlaybookResult("RETURN_STOREFRONT", move)
-
+    # D-092: serve a colocated peer with recorded need before walking anywhere. m02 walked to the custodian
+    # (SEEK_CUSTODIAN), arrived with SUPPLY on offer, and RETURN_STOREFRONT pulled it straight back.
     custodian = ad.role_handles.get("custodian")
     served = {r.get("target") for r in getattr(ad, "recent", [])[-10:] if r["action"] == "SUPPLY"}
     for o in options:
@@ -53,6 +51,12 @@ def run_quartermaster_playbook(ctx: PlaybookContext) -> PlaybookResult | None:
                         if ad.memory is not None and p.target_id:
                             ad.memory.note_player(str(p.target_id), "supplied cargo from treasury", sign=1, sequence=ctx.seq)
                     return PlaybookResult("SUPPLY_PEER", p)
+
+    home_id = home_org(canonical)
+    if quartermaster_needs_shop_visit(canonical, ad.world_map, ctx.knobs, home_id):
+        move = route_to_room(ctx, storefront_room(ad.world_map, home_id))
+        if move is not None:
+            return PlaybookResult("RETURN_STOREFRONT", move)
 
     vault = next((o for o in options if "SUPPLY" in ad.verbs and o["action"] == "HARVEST" and (o.get("raw") or {}).get("acting_for")), None)
     tbuild = next(

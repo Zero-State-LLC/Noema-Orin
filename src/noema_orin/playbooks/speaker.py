@@ -9,6 +9,8 @@ def run_speaker_playbook(ctx: PlaybookContext) -> PlaybookResult | None:
     from noema_client.types import ActionProposal
 
     from ..orin_adapter import _proposal, grounded_market_and_contract_digest
+    from ..planner import home_org
+    from ..shop_planner import storefront_room
 
     ad = ctx.adapter
     canonical = ctx.canonical
@@ -42,13 +44,14 @@ def run_speaker_playbook(ctx: PlaybookContext) -> PlaybookResult | None:
                     "BOARD_DIGEST",
                     ActionProposal(action="BOARD", target_id=board_opt.get("target_id"), arguments={"text": digest_txt}),
                 )
+        shop = storefront_room(ad.world_map, home_org(canonical))
         if (
             ad.world_map is not None
             and ctx.room_id
-            and ctx.room_id != "room.civic-exchange"
-            and not ad.world_map.observed_listings(room_id="room.civic-exchange")
+            and ctx.room_id != shop
+            and not ad.world_map.observed_listings(room_id=shop)
         ):
-            move = route_to_room(ctx, "room.civic-exchange")
+            move = route_to_room(ctx, shop)
             if move is not None:
                 return PlaybookResult("HERALD_REFRESH_EXCHANGE", move)
 
