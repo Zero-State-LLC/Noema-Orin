@@ -206,9 +206,10 @@ def record_hw_sample(db: sqlite3.Connection, sample: dict, *, ts: float | None =
 
 def digest(db: sqlite3.Connection, hours: float = 24) -> dict:
     since = time.time() - hours * 3600
+    # D-099: players.py ends a session that the unit's own stop cut short with the client's USER_INTERRUPT.
     rows = db.execute("SELECT member, role, count(*), sum(stop_reason='duration_elapsed'), sum(turns), sum(role_actions), "
-                      "sum(idle_actions), sum(drops), sum(stop_reason='world_incident') FROM sessions WHERE ts >= ? "
-                      "GROUP BY member ORDER BY member", (since,)).fetchall()
+                      "sum(idle_actions), sum(drops), sum(stop_reason='world_incident'), sum(stop_reason='user_interrupt') "
+                      "FROM sessions WHERE ts >= ? GROUP BY member ORDER BY member", (since,)).fetchall()
     stale_by_member: dict[str, int] = {}
     for m_name, rej_raw in db.execute("SELECT member, rejections FROM sessions WHERE ts >= ?", (since,)).fetchall():
         try:
@@ -219,11 +220,11 @@ def digest(db: sqlite3.Connection, hours: float = 24) -> dict:
             stale_n = sum(int(v) for k, v in rej_obj.items() if str(k).endswith(":STALE_HEAD") and isinstance(v, (int, float)))
             stale_by_member[m_name] = stale_by_member.get(m_name, 0) + stale_n
     out = {}
-    for member, role, n, full, turns, role_n, idle_n, drops, world_stops in rows:
+    for member, role, n, full, turns, role_n, idle_n, drops, world_stops, unit_stops in rows:
         turns = turns or 0
         stale_n = stale_by_member.get(member, 0)
         out[member] = {"role": role, "sessions": n, "full_sessions": full or 0, "turns": turns,
-                       "world_incident_sessions": world_stops or 0,
+                       "world_incident_sessions": world_stops or 0, "unit_stop_sessions": unit_stops or 0,
                        "role_action_rate": round((role_n or 0) / turns, 3) if turns else 0.0,
                        "idle_rate": round((idle_n or 0) / turns, 3) if turns else 0.0, "drops": drops or 0,
                        "stale_head_rejections": stale_n,
@@ -233,9 +234,10 @@ def digest(db: sqlite3.Connection, hours: float = 24) -> dict:
             out[member]["consequence"] = shadow
     alerts =[f"{m}: idle_rate {v['idle_rate']}" for m, v in out.items() if v["turns"] >= 20 and v["idle_rate"] > 0.6]
     # D-095: a session stopped by a world INCIDENT says nothing about the agent; the INCIDENT alert below covers the
-    # outage while it lasts. Count only the sessions the agent itself cut short.
+    # outage while it lasts. Count only the sessions the agent itself cut short. D-099: so does a restart or stop
+    # of the unit.
     for m, v in out.items():
-        own = v["sessions"] - v["world_incident_sessions"]
+        own = v["sessions"] - v["world_incident_sessions"] - v["unit_stop_sessions"]
         early = own - v["full_sessions"]
         if own >= 4 and v["full_sessions"] / own < 0.5:
             alerts.append(f"{m}: {early}/{own} sessions ended early")

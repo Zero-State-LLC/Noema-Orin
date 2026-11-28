@@ -110,6 +110,32 @@ class MetricsTests(unittest.TestCase):
             self.assertIn("m02: 3/5 sessions ended early", alerts)
             db.close()
 
+    def test_unit_stops_are_not_an_agents_early_end(self):
+        """D-099: a restart or stop of the unit now ends its session at a turn boundary with a session line that
+        says user_interrupt. Before, it was SIGKILLed and left no line at all, so the new lines must not read as
+        the agent cutting its own sessions short after a rolling restart."""
+        def write(root, member, reasons):
+            rows = []
+            for r in reasons:
+                rows += [{"member": member, "role": "custodian", "persona_version": 1},
+                         {"turn": 1, "source": "model", "action": "MOVE"},
+                         {"member": member, "role": "custodian", "actions": 1, "stop_reason": r}]
+            (root / "logs" / f"noema-player@{member}.log").write_text("\n".join(json.dumps(x) for x in rows) + "\n")
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "logs").mkdir()
+            write(root, "m01", ["user_interrupt"] * 6 + ["world_incident"] * 2 + ["duration_elapsed"] * 2)
+            write(root, "m02", ["circuit_breaker"] * 3 + ["user_interrupt"] * 5 + ["duration_elapsed"] * 2)
+            db = open_db(root)
+            collect(root, db)
+            out = digest(db)
+            alerts = out["alerts"]
+            self.assertEqual(out["members"]["m01"]["unit_stop_sessions"], 6)
+            self.assertEqual(out["members"]["m01"]["sessions"], 10, "a stopped session is still a session")
+            self.assertFalse(any(a.startswith("m01:") and "ended early" in a for a in alerts), alerts)
+            self.assertIn("m02: 3/5 sessions ended early", alerts)
+            db.close()
+
 
 if __name__ == "__main__":
     unittest.main()

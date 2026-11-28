@@ -1,15 +1,16 @@
 """Persistent civic Player loop for one Orin member (D-009).
 
 Needs the official ``noema-client`` (Python >=3.11) and an approved credential in the
-member's own config dir. Runs bounded ``play`` sessions back to back until SIGTERM.
-Decisions come from an OpenAI-compatible endpoint (local Ollama by default).
+member's own config dir. Runs bounded ``play`` sessions back to back until SIGTERM, which ends the
+current session at the next turn boundary (D-099). Decisions come from an OpenAI-compatible endpoint
+(the local llama-server by default, D-090).
 """
 
 import argparse
 import json
 import signal
 import sys
-import threading
+import time
 from pathlib import Path
 
 from .roles import DENY_ALWAYS, role_for
@@ -115,6 +116,98 @@ def record_self(root: Path, member: str, player_id: str | None) -> None:
             fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
 
 
+class StopFlag:
+    """The unit's stop signal, set from the SIGTERM handler (D-099).
+
+    Not a threading.Event. Event.set() takes the Event's lock, which Event.wait() also holds for a moment on its way
+    in and out, so a SIGTERM handled in that moment deadlocks the main thread until systemd's SIGKILL. Python also
+    runs handlers only on the main thread, so a signal the kernel gives another thread (the websockets keepalive)
+    is handled when the main thread next wakes, which in Event.wait(56) can be 56 s later. set() here is one
+    assignment, and wait() sleeps in slices of `poll` seconds, so a stop is seen within `poll` seconds whichever
+    thread took the signal.
+    """
+
+    def __init__(self, poll: float = 0.25) -> None:
+        self._flag = False
+        self.poll = poll
+
+    def set(self) -> None:
+        self._flag = True
+
+    def is_set(self) -> bool:
+        return self._flag
+
+    def wait(self, timeout: float | None = None) -> bool:
+        end = None if timeout is None else time.monotonic() + max(0.0, float(timeout))
+        while not self._flag:
+            left = self.poll if end is None else min(self.poll, end - time.monotonic())
+            if left <= 0:
+                break
+            time.sleep(left)
+        return self._flag
+
+
+class PacedAdapter:
+    """Takes play()'s between-turn pause in decide(), on the unit's stop event (D-099).
+
+    noema-client 0.2.0 sleeps between turns with time.sleep, and a session runs for up to 30 minutes. SIGTERM
+    only set `stop`, so systemd killed the unit 60 s later, mid-session, and that session lost its outcome
+    labels and its session line. The client now gets cooldown=0 and this wrapper waits instead. Once the unit
+    is stopping, decide() returns None at the next turn boundary and play() returns its report.
+
+    Turn timing is unchanged: there's no pause before a session's first turn, and a turn the pause carries past
+    the session's duration isn't taken, which is the client's own rule after its sleep. The session clock
+    starts when play() is called, so it never runs a session longer than the client would.
+    """
+
+    def __init__(self, inner, stop, pause: float, *, duration: float | None = None, clock=None) -> None:
+        self.inner = inner
+        self.stop = stop
+        self.pause = max(0.0, float(pause))
+        self.duration = duration
+        self.clock = clock or time.monotonic
+        self.begin()
+
+    def begin(self) -> None:
+        """Start a session. Call right before each client.play()."""
+        self.decided = 0
+        self.started = self.clock()
+        self.declined: str | None = None  # "stop" or "duration" once decide() has returned None
+
+    def decide(self, context):
+        if self.decided and self.pause > 0:
+            self.stop.wait(self.pause)
+        if self.stop.is_set():
+            self.declined = "stop"
+            return None
+        if self.decided and self.duration is not None and self.clock() - self.started >= self.duration:
+            self.declined = "duration"
+            return None
+        self.decided += 1
+        return self.inner.decide(context)
+
+    def settle(self, report):
+        """Return `report` the way the client's own pause would have ended it.
+
+        A declined turn makes play() stop with NO_PROPOSAL and count one failed turn. Drop that turn and name
+        the real stop: DURATION_ELAPSED, or USER_INTERRUPT with detail SIGTERM when the unit was stopped.
+        """
+        from noema_client.types import StopReason
+
+        if self.declined is None or getattr(report, "stop_reason", None) != StopReason.NO_PROPOSAL:
+            return report
+        last = report[-1] if len(report) else None
+        if last is not None and getattr(last, "proposal", "") is None and getattr(last, "reason", None) == "no_proposal":
+            report.pop()
+            report.attempted = max(0, report.attempted - 1)
+            report.rejected = max(0, report.rejected - 1)
+        if self.declined == "stop":
+            report.stop_reason, report.detail = StopReason.USER_INTERRUPT, "SIGTERM"
+        else:
+            report.stop_reason, report.detail = StopReason.DURATION_ELAPSED, None
+        return report
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Persistent Orin civic Player")
     ap.add_argument("--member", required=True)
@@ -144,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
 
     home = ns.root / ns.member
     mind = home / "mind"
-    stop = threading.Event()
+    stop = StopFlag()  # D-099: not a threading.Event, see StopFlag
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     spec = role_for(role)
     persona = load_or_seed(mind, role)
@@ -204,6 +297,7 @@ def main(argv: list[str] | None = None) -> int:
         members, ns.member, ns.cooldown, ns.turn_gap, jitter_s=member_phase_jitter(ns.member, ns.turn_gap)
     )
     print(json.dumps({"member": ns.member, "stagger_offset_s": offset, "cooldown_s": cooldown}), flush=True)
+    paced = PacedAdapter(adapter, stop, cooldown, duration=ns.session_seconds)  # D-099
     if stop.wait(offset):
         return 0
     print(json.dumps({"member": ns.member, "role": role, "persona": persona["name"], "persona_version": persona["version"]}), flush=True)
@@ -218,8 +312,10 @@ def main(argv: list[str] | None = None) -> int:
         if adapter.transition_log is not None:
             adapter.transition_log.new_session()  # never pair turns across a reconnect or session boundary
         close_shadow_session(adapter, None)  # turns left by a dropped session: learn budgets from them, score nothing
+        paced.begin()
         try:
-            report = client.play(duration=ns.session_seconds, cooldown=cooldown, adapter=adapter)
+            # D-099: the pause between turns is taken in paced.decide(), where SIGTERM can cut it short.
+            report = client.play(duration=ns.session_seconds, cooldown=0, adapter=paced)
         except (ConnectionError, EOFError, OSError) as exc:
             print(json.dumps({"member": ns.member, "transport_drop": type(exc).__name__, "retry_in_s": cooldown}), flush=True)
             client.close() if hasattr(client, "close") else None
@@ -231,6 +327,8 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"member": ns.member, "transport_drop": type(exc).__name__, "retry_in_s": cooldown}), flush=True)
             stop.wait(cooldown)
             continue
+        report = paced.settle(report)
+        cut_short = paced.declined == "stop"  # D-099: the unit's stop ended this session, not the agent or the world
         line = report.as_dict()
         if adapter.transition_log is not None:
             # C1 (#196): label this session's logged turns from the client's results. Must never end the loop.
@@ -273,15 +371,20 @@ def main(argv: list[str] | None = None) -> int:
             loop_breaks=max(0, int(adapter.stats.get("loop_break", 0)) - loop_breaks_before),
             deep_time_seen=dict(getattr(adapter, "deep_time_seen", {})),
         )
-        rsi_verdict = ratchet.evaluate_session(dossier, persona, knobs)
+        # D-099: a session the stop cut short gives the ratchet no fitness sample. Its rates come from however
+        # many turns ran before the restart, and one noisy sample can roll back a canary (3-session window).
+        rsi_verdict = None if cut_short else ratchet.evaluate_session(dossier, persona, knobs)
         accepted = False
-        if rsi_verdict["verdict"] == "ROLLED_BACK":
+        if rsi_verdict is None:
+            pass
+        elif rsi_verdict["verdict"] == "ROLLED_BACK":
             restored = rollback_to_version(mind, rsi_verdict["rollback_persona_version"])
             if restored is not None:
                 persona = restored
             knobs = dict(rsi_verdict["rollback_knobs"])
             atomic_write_json(mind / "policy_knobs.json", knobs)
-        elif ratchet.can_propose() and dossier["turns"] >= 5:
+        elif ratchet.can_propose() and dossier["turns"] >= 5 and not stop.is_set():
+            # A stopping unit exits instead: reflect() can wait 60 s on the cloud, as long as systemd's stop timeout.
             patch = reflect(adapter, persona, adapter.recent, dossier=dossier, knobs=knobs)
             if isinstance(patch, dict):
                 cand_knobs, knobs_ok = apply_knob_deltas(knobs, patch.get("knob_deltas"))
@@ -305,7 +408,8 @@ def main(argv: list[str] | None = None) -> int:
                           "rejections": rej, "decisions": dict(adapter.stats),
                           "persona_version": persona["version"], "memories_recalled": adapter.stats_mem,
                           "health": adapter.health.summary(), "memory_compacted": compacted,
-                          "reflection": "accepted" if accepted else "rejected", "rsi": rsi_verdict,
+                          "reflection": "accepted" if accepted else "skipped" if (cut_short or stop.is_set()) else "rejected",
+                          "rsi": rsi_verdict,
                           **({"consequence": consequence} if consequence is not None else {})},
                          default=str), flush=True)
         stop.wait(ns.cooldown)
