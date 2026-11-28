@@ -45,7 +45,7 @@ def classify_alerts(raw: list[str], *, hw: dict[str, Any], units: dict[str, dict
         t = str(text)
         if any(mk in t for mk in _EXPECTED_ALERT_MARKERS):
             level = "expected"
-        elif "rollback" in t or "energy 0" in t or "traceback" in t.lower():
+        elif "rollback" in t or "energy 0" in t or "traceback" in t.lower() or "INCIDENT" in t:
             level = "crit"
         else:
             level = "warn"

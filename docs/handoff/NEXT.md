@@ -201,3 +201,8 @@
 - m06 1 h soak: 126 rows/h, 20.3 KB/row (2.56 MB/h per agent), RSS 43 MB, 0 errors. Shadow 31/31 correct, but every case was tn, so there is no rejection signal yet.
 - `NOEMA_TRANSITION_LOG=1` and `NOEMA_CONSEQUENCE_SHADOW=1` are now in `~/.config/noema-orin/runtime-overrides.env` (backup `.bak-pre-c5`). All 6 are active.
 - Next: once rejections accumulate, re-read the digest for tp/fp. Watch free RAM (1.7 GB).
+
+## 2026-11-28 00:20Z: world-01 auto-INCIDENT recovered
+- The hosted world entered INCIDENT on 2026-11-27 at about 19:30Z, right after STALE_HEAD rejections (a settlement commit failed). For about 4.7 h every mutation was blocked, and the fleet only showed "sessions ended early".
+- Checked: durable head == DO (rev 45180, seq 86843, unsettled 0). Then ran `POST /v1/admin/lifecycle {"action":"recover"}`, which did a `restore` from the verified head and returned ACTIVE/HEALTHY. Revision advanced to 45195 within 4 min.
+- Added a crit dashboard and digest alert: "world INCIDENT: latest session stopped on WORLD_INCIDENT". Root cause is filed upstream on Noema.

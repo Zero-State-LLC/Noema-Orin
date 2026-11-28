@@ -237,6 +237,14 @@ def digest(db: sqlite3.Connection, hours: float = 24) -> dict:
         member = src.removeprefix("noema-player@").removeprefix("noema-").removesuffix(".log")
         alerts.append(f"{member}: energy 0 for last {streak} turns (Noema#907)")
     alerts += cost_alerts(db, hours)
+    incident_members = [m for (m,) in db.execute(
+        "SELECT member FROM sessions s WHERE ts >= ? AND stop_reason = 'world_incident' AND ts = "
+        "(SELECT max(ts) FROM sessions WHERE member = s.member) ORDER BY member",
+        (time.time() - 3600,),
+    ).fetchall()]
+    if incident_members:
+        alerts.insert(0, f"world INCIDENT: latest session stopped on WORLD_INCIDENT for "
+                         f"{len(incident_members)} member(s) ({', '.join(incident_members)}); world mutation blocked")
     for member, reason in db.execute(
         "SELECT member, reason FROM rsi_events WHERE ts >= ? AND verdict = 'ROLLED_BACK' ORDER BY ts DESC",
         (since,),

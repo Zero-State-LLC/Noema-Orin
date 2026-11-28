@@ -54,6 +54,26 @@ class MetricsTests(unittest.TestCase):
             self.assertEqual((out["turns"], out["role"]), (8, "founder"))
             db.close()
 
+    def test_world_incident_alert_tracks_latest_session_only(self):
+        def write(root, member, reasons):
+            rows = []
+            for r in reasons:
+                rows += [{"member": member, "role": "custodian", "persona_version": 1},
+                         {"turn": 1, "source": "model", "action": "MOVE"},
+                         {"member": member, "role": "custodian", "actions": 1, "stop_reason": r}]
+            (root / "logs" / f"noema-player@{member}.log").write_text("\n".join(json.dumps(x) for x in rows) + "\n")
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "logs").mkdir()
+            write(root, "m01", ["duration_elapsed", "world_incident"])
+            write(root, "m02", ["world_incident", "duration_elapsed"])
+            db = open_db(root)
+            collect(root, db)
+            alerts = digest(db)["alerts"]
+            self.assertTrue(alerts[0].startswith("world INCIDENT"), alerts)
+            self.assertIn("(m01)", alerts[0])
+            db.close()
+
     def test_zero_energy_streak_alert(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
