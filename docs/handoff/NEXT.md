@@ -34,6 +34,14 @@
 - When the first newcomer appears, confirm a founder welcome (memory kind `welcomed`).
 - The cost alarm (D-058) shows in `shared/digest.json`. Check it after a full day.
 
+## 2026-11-28 11:05Z: INCIDENT 4, agent wipes (Noema#986), D-098
+
+- **INCIDENT 4.** A statement timeout on Rivet-Custodian's MOVE at 10:20:43Z put the world into INCIDENT. The gate was clean (rev 47023 == head, 0 unsettled). A guarded recover restored ACTIVE/HEALTHY at 10:25:25Z, and all six agents were acting again by 10:26:48Z. The evidence is on Noema#983. It's the same class as INCIDENT 3, which #985 (unmerged) fixes. The watcher was restarted as `incident_watch.sh` (public status plus fleet probe).
+- **D-097 widened.** `f4a2e53` rolled to m01, m03, m04, m05 and maint (10:07Z to 10:14Z). All 7 units were active. m02's two CONVERTs after the canary were refused BUDGET_EXCEEDED, which is honest: compute was at cap and there was no SILICA_CELL. No INVALID_REQUEST since then.
+- **Agent wipes (Noema#986).** A TOOBIG save compaction deletes entered admin-minted agent Players. It happened 8 times in 18 h. The next turn shows exactly the default budgets, and lots are lost. Which agents survive depends on whether their last connection was a WS resume (`live`) or an AUTH (`system`). Reproduced with a throwaway vitest on engine main.
+- **D-098.** The adapter re-enters on "Enter the world first.". Outside INCIDENTs, 311 of 4,895 turns (6.4%) were spent not in the world. Canary next.
+- **Embedder.** `noema-embed-server.service` is active and :8082 `/health` is ok.
+
 ## 2026-11-25 22:45Z: treasury construction live
 - Specs#467 merged, then engine Noema#957 deployed as Worker b7ca6c7c (pin #958 merged), then Orin #117 (D-061) and #118 (D-062) live.
 - Live: m02 sees "Build a generator for Reach Compact" with the vault at 36. The build hasn't happened yet: the generator costs the holder 8 energy and m02 runs at energy 1 to 3. With an empty hold WAIT rests only to 2, and cargo fuel gives +2 per cargo. This is the same energy ceiling as S19.

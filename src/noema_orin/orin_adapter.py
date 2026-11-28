@@ -539,13 +539,25 @@ class OrinAdapter:
             self.cohort_ids = self.on_turn(self.self_id)
         options = self._menu(context)
         source = "model"
-        try:
-            with nvtx_range("playbook_plan"):
-                proposal = self._plan(context, options)
-        except Exception as exc:  # memory must never stall a turn
-            print(json.dumps({"memory_error": type(exc).__name__}), flush=True)
-            proposal = None
-        if proposal is not None:
+        reenter = _needs_reentry(context.get("canonical") or {})
+        proposal = None
+        if not reenter:
+            try:
+                with nvtx_range("playbook_plan"):
+                    proposal = self._plan(context, options)
+            except Exception as exc:  # memory must never stall a turn
+                print(json.dumps({"memory_error": type(exc).__name__}), flush=True)
+                proposal = None
+        if reenter:
+            # D-098: the engine deleted this Player mid-session (a TOOBIG save drops admin-minted agents, Noema#986)
+            # and refuses every verb with "Enter the world first." until it re-enters; the client never does.
+            # Skip the planner too: the observation is the entry room with default budgets, not this Player's state.
+            from noema_client.types import ActionProposal
+
+            source, proposal = "reenter", ActionProposal(action="ENTER_WORLD")
+            self.last_playbook_state = None
+            self.stats["reenter"] = self.stats.get("reenter", 0) + 1
+        elif proposal is not None:
             source = "planner"
             self.stats["planner"] += 1
         elif not has_role_verb(options, self.verbs | set(self.supply or ())):
@@ -584,7 +596,7 @@ class OrinAdapter:
                 proposal = self._ask(context, options)
             except Exception:
                 proposal = None
-        if source in ("planner", "idle_skip"):
+        if source in ("planner", "idle_skip", "reenter"):
             pass
         elif proposal is not None:
             self.stats["model"] += 1
@@ -601,7 +613,7 @@ class OrinAdapter:
             key = ("WAIT", None)
         refuel_wait = (source == "planner" and key[0] == "WAIT"
                        and _wait_refuels((context.get("canonical") or {}).get("resources") or {}))
-        if (len(self.recent) >= 2 and not refuel_wait
+        if (len(self.recent) >= 2 and not refuel_wait and source != "reenter"
                 and all((r["action"], r.get("target")) == key for r in self.recent[-2:])):
             from noema_client.types import ActionProposal
 
@@ -673,7 +685,7 @@ class OrinAdapter:
         self.health.record_turn(
             verb=str(getattr(proposal, "action", "") or ""),
             used_workers_ai=bool(getattr(self, "_last_remote", False)),
-            used_planner=source in ("planner", "idle_skip", "guard"),
+            used_planner=source in ("planner", "idle_skip", "guard", "reenter"),
             used_local=bool(getattr(self, "_last_local", False)),
             used_local_s1=bool(getattr(self, "_last_local_s1", False)),
             source_sequence=int(canonical.get("sequence") or 0),
@@ -1053,6 +1065,12 @@ def _budget_blocked(aff: dict) -> bool:
     """S4: offered but unaffordable for a budget or cargo reason, so the room still has the work.
     "Not enough stock" means the node is depleted: the work is gone."""
     return "stock" not in str(aff.get("reason") or "").lower()
+
+
+def _needs_reentry(canonical: dict) -> bool:
+    """D-098: the last command was refused NOT_IN_WORLD ("Enter the world first.", world-actions.ts), so this Player
+    is not in the world and every verb but ENTER_WORLD will be refused the same way."""
+    return str(canonical.get("last_consequence") or "").strip().lower().startswith("enter the world first")
 
 
 def _depleted(canonical: dict) -> bool:
