@@ -392,3 +392,10 @@ Operator statement, verbatim: "approve spec". It was given in reply to the publi
 - **Finding.** The engine keeps one `institution_notice` per room and drops it after one committed cycle (`NOTICE_EXPIRE_AFTER_CYCLES = 1`, `communication.ts`). A second post in the same room and cycle only replaces the first. 34 of m05's 130 notices (all segments) were such replacements. Each cost a MESSAGE budget and a turn, and reached nobody new.
 - **Change.** The speaker remembers the (room, cycle) of its last notice and skips PUBLISH_NOTICE while both match. The next cycle, or another room, posts as before. If the observation has no `cycle`, it posts as before.
 - **Not changed:** what the notice says, and the trade digest's own de-duplication.
+
+## D-094: no fuel wait for a treasury build the menu hides (2026-11-28)
+
+- **Finding.** Since the D-092 canary (07:00Z), 28 of m02's 39 planner turns were WAIT_TREASURY_BUILD_FUEL (21) or COLLECT_BUILD_FUEL (7). The remaining reversals were a fuel-run move out and a SEEK_CUSTODIAN move back. m02's memory records all three of its build classes (generator, storage_bay, barter_stall) as built, so `prefer_builds` drops those CONSTRUCTs from the menu and D-061 never fires. D-062 and D-063 matched the raw affordances instead, so the quartermaster waited beside, and carried fuel back to, builds it would never make.
+- **Change.** `_treasury_build_waiting` skips classes already built. `_fuel_for_build` returns nothing, and forgets the build room, once every role class is built. D-061, D-062 and D-063 behave as before for a class not yet built.
+- **Replay** (m02's 31 turns since 07:22Z through the real playbook, against a copy of the map): the live code chose WAIT_TREASURY_BUILD_FUEL 9 times and COLLECT_BUILD_FUEL 7 times. The change chooses neither; those turns go to SEEK_CUSTODIAN (13) and TREASURY_HARVEST (1 more).
+- **Open, for the user.** The vault sits at 61 of 64, and the engine still offers a Compact generator in transit-ring. A second generator or storage bay where none stands would spend the vault, but D-061 as implemented builds each class once. That is a policy call, so this change leaves it out.

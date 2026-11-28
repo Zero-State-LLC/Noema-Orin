@@ -76,7 +76,7 @@ def run_quartermaster_playbook(ctx: PlaybookContext) -> PlaybookResult | None:
     if (
         "SUPPLY" in ad.verbs
         and _vault_storage(canonical) >= treasury_floor
-        and _treasury_build_waiting(canonical, ad.builds)
+        and _treasury_build_waiting(canonical, ad.builds, ad._built_classes())
         and _wait_refuels(canonical.get("resources") or {})
     ):
         ad.dwell = 0
