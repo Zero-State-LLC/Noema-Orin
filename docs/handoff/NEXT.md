@@ -254,3 +254,28 @@
 - **INCIDENT 3, 07:05:43Z to 07:10:33Z.** The trigger was a settle RPC that failed on a Postgres statement timeout. The turn code was literally `canceling statement due to statement timeout`. This path, unlike #984's tempo race, goes straight to INCIDENT. The gate held (revision 46377 equal to the head, flags false, 0 unsettled), and a guarded `recover` restored the world. It advanced normally afterwards. Evidence and a proposed engine fix are on Noema#983 (comment 7235850321). Scripts: `~/.jcode/scratch/guarded_recover.py` and `overview_gate.py`.
 - **Alerting:** a session-scoped watcher polls the Orin turn logs every minute for WORLD_INCIDENT and wakes the operating session. A durable push channel still waits on grill round 2 (recipient and channel).
 - **Logs:** transition logs rotate into `transitions-00000N.jsonl.gz`. Analyses that read only `transitions.jsonl` undercount; m05's live segment held 1 of 130 notices.
+
+## 2026-11-28 08:30Z: D-094, engine fix #985, and the 07:13Z transient explained
+- **D-094 (#234, `5138d08`) and its amendment (#235, `eb13c57`): no fuel wait for a treasury build the menu hides.**
+  - After D-092, 28 of m02's 39 planner turns were WAIT_TREASURY_BUILD_FUEL or COLLECT_BUILD_FUEL.
+  - Its memory records all three build classes as built, so `prefer_builds` never offers those CONSTRUCTs and D-061 never fires.
+  - The wait, the fuel run and the shared router's WAIT_BUILD_ENERGY now skip built classes.
+  - Replay over m02's 49 turns since 07:22Z: those steps fall to 0.
+  - On the m02 canary since 08:15:29Z, the first 10 turns were SEEK_CUSTODIAN, SUPPLY, TREASURY_HARVEST and RECHARGE, with no fuel waits and 0 refusals.
+- **Open for the user:** the vault sits at 61 of 64, and the engine still offers Compact generator and storage-bay builds. Building a second one of a class is a policy call. D-061 as implemented builds each class once.
+- **D-093 canary (m05 since 07:22Z):** 13 notices in 13 distinct (room, cycle) slots, so no repeats. Before the change, 34 of 130 were repeats.
+- **m02's SUPPLY FORBIDDEN** was "They are not here to receive supplies" (`world-actions.ts:4910`): the custodian moved between the observation and the act. It isn't a bug (1 of 4 SUPPLYs).
+- **Noema#985:**
+  - A Postgres statement timeout on the player settle path now resyncs and stays ACTIVE, and the actor gets `SETTLEMENT_RETRY`. That was the INCIDENT 3 trigger.
+  - Local result: 3046 tests pass and tsc is clean. CI is green.
+  - Review is requested from galadriel-openclaw and partner-agents. Deploying it is the user's call.
+- **The 07:13Z transient is explained** (#983 comment 7236596593).
+  - Commands interleave inside the world DO across the settle `await`, because there is no mutex.
+  - A late failure restores its stale pre-command snapshot over a concurrent commit, which leaves the DO sequence one behind the head.
+  - A concurrent lost race's contention branch writes ACTIVE/HEALTHY and clears another command's INCIDENT with no operator recover.
+  - Both reproduce on origin/main with the real DO harness. #985 removes the first one for statement timeouts.
+  - Suggested to the engine owners: serialize mutating commands per DO, and don't clear an INCIDENT from the contention branch.
+- **Unlabelled turns:** `client.play()` raises on a transport drop, so `record_outcomes` never runs for that session. m05 had 162 drops against 241 completed sessions, m01 81 against 311.
+- **m05 idles 75% of its turns.** Once its notice slot is used, `focus` strips idle verbs and `_ask` strips the planner-only text verbs, so the model gets an empty menu. The generic fallback then INSPECTs the same entity (`relay-7`) again and again. The local model is healthy: three probes answered in about 2 s.
+  - Where an idle speaker should go (a herald patrol) is the same kind of routing decision as grill Q3. It costs energy that an empty hold cannot regain without RECHARGE, so it waits for the user.
+- **Rollout (verified):** a full rolling restart onto `eb13c57` (D-091 to D-094) ran from 08:27:39Z (m01) to 08:35:41Z (maint-patrol). All 7 units are active, and the dashboard was restarted (HTTP 200). A kiosk screenshot shows the live panel with UNITS 6/6 and SSE LIVE. The INCIDENT watcher stayed quiet.
