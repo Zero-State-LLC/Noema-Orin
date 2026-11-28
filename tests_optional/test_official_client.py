@@ -1,4 +1,4 @@
-"""Pinned noema-client v0.1.23 loopback proof; run separately on Python >=3.11.
+"""Pinned noema-client v0.2.0 loopback proof; run separately on Python >=3.11.
 
 The official client's tests/fake_server.py must be on PYTHONPATH. No other
 network destination is allowed and no real-world credential is accepted.
@@ -40,7 +40,7 @@ class LoopbackProof(unittest.TestCase):
                 origin = Path(module.__file__).resolve()
                 if not any(origin.is_relative_to(root) for root in roots):
                     raise AssertionError(f"{module.__name__} did not import from installed site-packages")
-            if noema_client.__version__ not in {"0.1.23", "0.1.24"}:
+            if noema_client.__version__ not in {"0.2.0"}:  # D-087
                 raise AssertionError("unexpected official client version")
 
     def setUp(self):

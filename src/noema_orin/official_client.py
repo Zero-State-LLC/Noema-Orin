@@ -1,6 +1,6 @@
 """Credential-free, loopback-only proof of the pinned first-party Controller client.
 
-Not a production adapter or CLI route. Requires noema-client v0.1.23 and Python 3.11+.
+Not a production adapter or CLI route. Requires noema-client v0.2.0 and Python 3.11+.
 """
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ class OfficialLoopbackClient:
         if any(os.environ.get(key) for key in _SELECTORS):
             raise ValueError("inherited NOEMA configuration is forbidden in loopback proof")
         from noema_client import NoemaClient, __version__
-        if __version__ not in {"0.1.23", "0.1.24"}:
+        if __version__ not in {"0.2.0"}:  # D-087: production pin (89a1fcac)
             raise ValueError("unexpected official client version")
         self.server = server
         # Own the directory: accepting even an empty caller path could redirect
