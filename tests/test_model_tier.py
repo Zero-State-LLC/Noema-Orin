@@ -49,6 +49,54 @@ class HarvestAmount(unittest.TestCase):
         from noema_orin.orin_adapter import _harvest_amount
         self.assertEqual(_harvest_amount(self._p(), {"resources": {"storage": 16}}).arguments["amount"], 1)
 
+    def test_treasury_harvest_is_bounded_by_vault_headroom(self):
+        """D-091: a treasury harvest skips the pack, so the vault cap bounds it, not free pack storage.
+
+        `_harvest_amount` ran after the quartermaster playbook and replaced its vault-aware amount with
+        min(8, free pack storage 16, stock) = 8. At vault 61 the engine refused every one ("The
+        treasury vault is full."): 24 of m02's 37 treasury harvests.
+        """
+        from noema_client.types import ActionProposal
+        from noema_orin.orin_adapter import TREASURY_CAP, _harvest_amount
+        org = "org.reach-compact.1"
+        c = {"resources": {"storage": 16},
+             "location": {"entities": [{"entity_id": "e.cache", "stock_amount": 9999}]},
+             "organizations": [{"org_id": org, "treasury": {"storage": 61}}]}
+        p = ActionProposal(action="HARVEST", target_id="e.cache",
+                           arguments={"operation": "HARVEST", "acting_for": org, "amount": 3})
+        self.assertEqual(_harvest_amount(p, c).arguments["amount"], TREASURY_CAP - 61)
+
+    def test_treasury_harvest_without_vault_view_keeps_its_amount(self):
+        """No treasury in this observation and none seen before: do not guess; keep what the planner chose."""
+        from noema_client.types import ActionProposal
+        from noema_orin.orin_adapter import _harvest_amount
+        c = {"resources": {"storage": 16}, "location": {"entities": [{"entity_id": "e.cache", "stock_amount": 9999}]},
+             "organizations": []}
+        p = ActionProposal(action="HARVEST", target_id="e.cache",
+                           arguments={"operation": "HARVEST", "acting_for": "org.x", "amount": 2})
+        self.assertEqual(_harvest_amount(p, c).arguments["amount"], 2)
+
+    def test_stripped_observation_uses_last_seen_vault(self):
+        """D-091: after a rejection, client 0.2.0 hands the next turn the rejection's stripped observation
+        (no organizations), so the vault reads as unknown. The last level seen bounds the request: only the
+        quartermaster adds to the vault, so the real headroom is at least that large."""
+        from noema_client.types import ActionProposal
+        from noema_orin.orin_adapter import _harvest_amount
+        c = {"resources": {"storage": 16}, "location": {"entities": [{"entity_id": "e.cache", "stock_amount": 9999}]},
+             "organizations": []}
+        p = ActionProposal(action="HARVEST", target_id="e.cache",
+                           arguments={"operation": "HARVEST", "acting_for": "org.x", "amount": 8})
+        self.assertEqual(_harvest_amount(p, c, known_vaults={"org.x": 61}).arguments["amount"], 3)
+
+    def test_decide_remembers_vault_levels(self):
+        from noema_orin.orin_adapter import _remember_vaults
+        seen = {}
+        _remember_vaults(seen, {"organizations": [{"org_id": "org.x", "treasury": {"storage": 58}},
+                                                  {"org_id": "org.y"}]})
+        self.assertEqual(seen, {"org.x": 58})
+        _remember_vaults(seen, {"organizations": []})
+        self.assertEqual(seen, {"org.x": 58}, "a stripped observation does not erase what was seen")
+
 
 class WaitRefuels(unittest.TestCase):
     def test_energy_one_empty_hold_now_waits_for_energy(self):
