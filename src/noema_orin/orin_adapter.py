@@ -173,29 +173,21 @@ class OrinAdapter:
             return cloud
         if os.environ.get("NOEMA_DECIDE_LOCAL_FALLBACK", "1") != "1":
             return {}
-        if response_format is not None:
-            llama_fb = call_llama_server(
-                base_url=self.base_url,
-                model=self.model,
-                system=system,
-                user=user,
-                response_format=response_format,
-                max_tokens=max(num_predict, 60),
-                timeout=min(self.timeout, 20.0),
-            )
-            if llama_fb is not None:
-                self._last_local = True
-                return llama_fb
-        payload = {"model": self.model, "stream": False, "format": "json",
-                   "options": {"temperature": 0.4, "num_ctx": self.num_ctx, "num_predict": num_predict},
-                   "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
-        self._last_local = True  # D-075: a real local-model call (counted as an Ollama fallback)
-        req = urllib.request.Request(self.base_url.removesuffix("/v1") + "/api/chat", data=json.dumps(payload).encode(),
-                                     headers={"content-type": "application/json"}, method="POST")
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            text = (json.loads(resp.read().decode()).get("message") or {}).get("content") or "{}"
-        data = json.loads(text[text.find("{"): text.rfind("}") + 1] or "{}")
-        return data if isinstance(data, dict) else {}
+        # D-090: the last resort is llama-server's OpenAI route, with or without a JSON schema. The Ollama
+        # /api/chat path is gone (llama-server answers it 404, and Ollama is retired on the Orin).
+        llama_fb = call_llama_server(
+            base_url=self.base_url,
+            model=self.model,
+            system=system,
+            user=user,
+            response_format=response_format,
+            max_tokens=max(num_predict, 60),
+            timeout=min(self.timeout, 20.0),
+        )
+        if llama_fb is not None:
+            self._last_local = True  # D-075: a real local-model call (counted as a local fallback)
+            return llama_fb
+        return {}
 
     def _menu(self, context) -> list[dict]:
         from .planner import focus, refine
@@ -1331,5 +1323,6 @@ def _cloud_call(path: str, system: str, user: str, *, max_tokens: int | None = N
 
 
 def from_env(brief: str) -> OrinAdapter:
-    return OrinAdapter(base_url=os.environ.get("NOEMA_LLM_BASE", "http://127.0.0.1:11434/v1"),
-                       model=os.environ.get("NOEMA_LLM_MODEL", "qwen2.5:3b"), brief=brief)
+    # D-090: llama-server (:8081, OpenAI route) is the only local runtime; Ollama is retired.
+    return OrinAdapter(base_url=os.environ.get("NOEMA_LLM_BASE", "http://127.0.0.1:8081/v1"),
+                       model=os.environ.get("NOEMA_LLM_MODEL", "qwen2.5-3b"), brief=brief)

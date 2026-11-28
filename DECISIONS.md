@@ -355,3 +355,9 @@ Operator statement, verbatim: "approve spec". It was given in reply to the publi
 - **Problem.** Every unit appends to `~/noema-players/logs/*.log` (`StandardOutput=append:`). The Orin has no logrotate (the package is not installed), so the logs only grow: 15 MB after four days and about 2 MB per agent.
 - **Change.** `noema_orin.logrotate` plus `noema-logrotate.timer` (hourly). A log of 8 MB or more is gzip-copied to `.1.gz` (keeping 5) and then truncated in place. Truncation keeps the inode, so each unit's open O_APPEND descriptor keeps writing at offset 0 without a restart. The cap is about 48 MB per log.
 - **Not covered:** `metrics.db` and `transitions.jsonl` keep their own bounds (`transitions.py` rotation, D-078).
+
+## D-090: Ollama retired; llama-server is the only local runtime (2026-11-28)
+
+- **Evidence.** In the last 72 h Ollama logged one request (`/api/ps`, a health probe). No agent env sets `NOEMA_LLM_BASE`, so `from_env()` defaulted the last-resort fallback to Ollama `:11434` and its `/api/chat`. llama-server answers `/api/chat` with 404, so that path only worked while Ollama ran. Ollama also kept a second runtime enabled with 28 MB idle.
+- **Change.** The last local fallback calls llama-server's OpenAI route (`call_llama_server`), with or without a JSON schema. `from_env()` defaults to `http://127.0.0.1:8081/v1` and `qwen2.5-3b`. The player and maint units order `After=noema-llama-server.service` instead of `ollama.service`.
+- **Kept.** The Ollama blob store stays on disk: the Qwen2.5-3B GGUF that llama-server loads is a symlink into `/usr/share/ollama/.ollama/models/blobs/`. Only the service is disabled. Rollback: `sudo systemctl enable --now ollama`.

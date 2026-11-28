@@ -1,6 +1,6 @@
 [Unit]
 Description=NOEMA maintenance patrol (system actor player.reach-maint3)
-After=network-online.target ollama.service
+After=network-online.target noema-llama-server.service
 PartOf=noema-players.target
 
 [Service]
