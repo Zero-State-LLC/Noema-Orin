@@ -42,6 +42,33 @@
 - **D-098.** The adapter re-enters on "Enter the world first.". Outside INCIDENTs, 311 of 4,895 turns (6.4%) were spent not in the world. Canary next.
 - **Embedder.** `noema-embed-server.service` is active and :8082 `/health` is ok.
 
+## 2026-11-28 20:10Z: D-098 at work, D-099 graceful stop live, D-100 m02 breaker loop
+
+- **D-098 widened at 11:58Z to 12:06Z.** All seven units run it.
+  - **11:47Z wipe.** m02 to m06 were reset, and m01 survived. The two canaries re-entered on their next turn. The three units still on old code took 8, 12 and 14 refused turns.
+  - **18:58Z wipe.** m01 to m05 were reset, and m06 survived. All five re-entered on their next turn (18:59:34Z to 19:00:21Z).
+  - The budget-reset detector now counts 33 resets in 10 events since 11-27 14:54Z.
+  - Posted to Noema#986 (comments 7243922195 and 7244787446). Lost lots and budgets still need the engine fix.
+- **D-099 (#244, `6a12d66`): SIGTERM ends a session at the next turn boundary.**
+  - **Before:** all 10 journalled player stops ended in SIGKILL at 60 s, and 10 killed sessions went unlabelled.
+  - **m06 canary at 18:40:53Z:** the stop took 0.3 s with no SIGKILL. The session line reads `user_interrupt`/`SIGTERM`, `rsi: null`, `reflection: skipped`, and all 4 of its turns are labelled. The first new turn came 50 s later.
+  - **Widen, 18:42Z to 18:53Z:** the gate passed on new-process turns. The old code still SIGKILLed once on that stop.
+  - **Dashboard:** restarted. 200 OK, the kiosk is active and the screenshot shows all units ACTIVE.
+  - **Next restarts:** a restart should no longer wait out the 60 s stop timeout.
+- **Rolling-restart gate fixed (same PR).** In the D-098 widen, the gate passed on old-process turns for three of four units. The next unit stopped 15 s after the previous start, but the new processes took their first turn 16 to 39 s after starting.
+- **D-100 (#245): m02's breaker loop.**
+  - **The loop:** from 14:43Z to 18:57Z, m02 tripped the client breaker in 108 sessions in a row. It sent CONVERT compute without silica, then a loop-break LOOK at attention 0.
+  - **Size:** 340 of the fleet's 3,580 labelled turns since 09:07Z. This drove the kiosk alert "m02: 117/138 sessions ended early".
+  - **Fix:** the menu drops a compute CONVERT without 2 SILICA_CELL, and a loop break WAITs when LOOK is unaffordable.
+  - **Replay:** the 326 stuck observations give 326 WAITs, against 219 CONVERTs and 107 LOOKs from the old code.
+  - **m02 escaped the loop on its own before the fix.** It still sent two compute CONVERTs without silica at 19:21Z (energy 33, 17 SALVAGE_COMPOSITE). Both were refused, and D-100 would have dropped both.
+  - **Canary on m02 at 19:47:25Z:** the stop took 0.3 s with no SIGKILL, and all 19 turns of the cut session are labelled. The first new turn came 16 s after the restart. In its first 12 turns m02 sent no CONVERT and no unaffordable LOOK.
+  - **Widen, 20:00:12Z to 20:04:30Z** (m06, m03, m05, m04, m01, maint): every stop took 0.2 to 0.4 s with no SIGKILL. Six units restarted in 4 min 17 s; before D-099 seven took about 9.5 min. All seven units are active on `0dbc78c`.
+- **Open, small:** 23 fallback INSPECTs (m01 14, m05 9) were refused BUDGET_EXCEEDED even though the observation showed enough attention for the advertised cost. The engine saw less attention than the observation did. The cause isn't found yet, so this is the next candidate slice.
+- **`?:ACTION_REJECTED` explained (next slice, D-101).** It is the session-opening ENTER_WORLD, refused during an INCIDENT. `play()` records that turn as a bare CommandResult, with no proposal, and `rejection_summary` reads only TurnResults, so the WORLD_INCIDENT code is lost. 681 sessions carry it, and 678 of those also carry a WORLD_INCIDENT refusal.
+  - **Effect:** the RSI ratchet counts it as the persona's rejection, and it scored 663 world_incident sessions as baseline samples. Baselines fell to 0.1458 during the long INCIDENTs.
+  - **Risk:** no rollback has happened yet. A canary in flight during an INCIDENT would fail on the rejection rate and be quarantined.
+
 ## 2026-11-25 22:45Z: treasury construction live
 - Specs#467 merged, then engine Noema#957 deployed as Worker b7ca6c7c (pin #958 merged), then Orin #117 (D-061) and #118 (D-062) live.
 - Live: m02 sees "Build a generator for Reach Compact" with the vault at 36. The build hasn't happened yet: the generator costs the holder 8 energy and m02 runs at energy 1 to 3. With an empty hold WAIT rests only to 2, and cargo fuel gives +2 per cargo. This is the same energy ceiling as S19.
