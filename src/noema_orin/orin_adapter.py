@@ -711,7 +711,10 @@ class OrinAdapter:
         print(json.dumps(turn_line), flush=True)
         self._last_tier = None
         batch_cap = int((getattr(self, "policy_knobs", None) or {}).get("harvest_batch_target", HARVEST_MAX))
-        proposal = _harvest_amount(proposal, canonical, max_batch=batch_cap)
+        if not hasattr(self, "_vault_seen"):
+            self._vault_seen = {}
+        _remember_vaults(self._vault_seen, canonical)
+        proposal = _harvest_amount(proposal, canonical, max_batch=batch_cap, known_vaults=self._vault_seen)
         transition_log = getattr(self, "transition_log", None)
         if transition_log is not None:
             # D-078: opt-in, Controller-local. Logs the proposal as returned; must never stall a turn.
@@ -964,12 +967,34 @@ def _vault_harvest_amount(opt: dict, canonical: dict) -> int:
     return max(1, int(min(HARVEST_MAX, stock if isinstance(stock, (int, float)) else 1, TREASURY_CAP - vault)))
 
 
-def _harvest_amount(proposal, canonical: dict, *, max_batch: int = HARVEST_MAX):
+def _remember_vaults(seen: dict, canonical: dict) -> None:
+    """D-091: keep the last treasury storage seen per org; a stripped observation never erases it."""
+    for o in canonical.get("organizations") or []:
+        if isinstance(o, dict) and o.get("org_id") and isinstance(o.get("treasury"), dict):
+            storage = o["treasury"].get("storage")
+            if isinstance(storage, (int, float)):
+                seen[o["org_id"]] = storage
+
+
+def _harvest_amount(proposal, canonical: dict, *, max_batch: int = HARVEST_MAX, known_vaults: dict | None = None):
     """HARVEST costs 2 energy flat and WAIT burns 1 cargo for +2 energy, so amount 1 only breaks even.
 
     Take up to max_batch, bounded by free storage and the node's visible stock.
+    D-091: a treasury harvest (`acting_for`) goes to the org vault, not the pack, so the vault headroom bounds
+    it, from this observation or else the last level seen. With neither, the planner's amount stands.
     """
     if proposal is None or str(getattr(proposal, "action", "")).upper() != "HARVEST":
+        return proposal
+    org = (proposal.arguments or {}).get("acting_for")
+    if org:
+        vault = next(((o.get("treasury") or {}).get("storage") for o in canonical.get("organizations") or []
+                      if isinstance(o, dict) and o.get("org_id") == org and isinstance(o.get("treasury"), dict)), None)
+        if not isinstance(vault, (int, float)):
+            vault = (known_vaults or {}).get(org)
+        if isinstance(vault, (int, float)):
+            asked = int((proposal.arguments or {}).get("amount") or 1)
+            proposal.arguments = {**(proposal.arguments or {}),
+                                  "amount": max(1, min(asked, int(TREASURY_CAP - vault)))}
         return proposal
     free = (canonical.get("resources") or {}).get("storage")
     if not isinstance(free, (int, float)) or free < 2:

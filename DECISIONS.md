@@ -361,3 +361,10 @@ Operator statement, verbatim: "approve spec". It was given in reply to the publi
 - **Evidence.** In the last 72 h Ollama logged one request (`/api/ps`, a health probe). No agent env sets `NOEMA_LLM_BASE`, so `from_env()` defaulted the last-resort fallback to Ollama `:11434` and its `/api/chat`. llama-server answers `/api/chat` with 404, so that path only worked while Ollama ran. Ollama also kept a second runtime enabled with 28 MB idle.
 - **Change.** The last local fallback calls llama-server's OpenAI route (`call_llama_server`), with or without a JSON schema. `from_env()` defaults to `http://127.0.0.1:8081/v1` and `qwen2.5-3b`. The player and maint units order `After=noema-llama-server.service` instead of `ollama.service`.
 - **Kept.** The Ollama blob store stays on disk: the Qwen2.5-3B GGUF that llama-server loads is a symlink into `/usr/share/ollama/.ollama/models/blobs/`. Only the service is disabled. Rollback: `sudo systemctl enable --now ollama`.
+
+## D-091: a treasury harvest asks only for the vault headroom (2026-11-28)
+
+- **Finding.** 24 of m02's 37 treasury HARVESTs were refused with "The treasury vault is full." (`world-actions.ts:6496`: `vault + amount > 64`). The quartermaster playbook sets a vault-aware amount (`_vault_harvest_amount`), but `decide()` then ran `_harvest_amount`, which replaced it with min(8, free pack storage, stock). That ignores the vault, so at vault 61 the request was 8.
+- **Second cause, the client bug again.** After a refused turn, noema-client 0.2.0 (noema-client#58) hands the next decision the rejection's observation, which has no organizations, players or services. 27 of m02's turns (15%) and 140 of m05's (45%) were decided on such a stripped view. With no treasury visible, nothing bounded the next request either.
+- **Change.** `_harvest_amount` bounds a treasury harvest (`acting_for`) by `64 - vault` from the current observation, or else from the last level seen (`_remember_vaults`; only the quartermaster adds to the vault, so the real headroom is at least that). With neither, the planner's amount stands. Pack harvests are unchanged.
+- **Unchanged:** no engine, Specs or wire change.
