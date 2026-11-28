@@ -50,8 +50,18 @@ NOT_ABOUT_ACTION = frozenset({
 
 
 def outcome_of(result: Any) -> dict:
-    """One client turn result as an outcome: `{"ok": True}` or `{"ok": False, "code": ..., "failure": ...}`."""
-    out: dict = {"ok": bool(getattr(result, "ok", False))}
+    """One client turn result as an outcome: `{"ok": True}` or `{"ok": False, "code": ..., "failure": ...}`.
+
+    noema-client 0.2.0 marks a WebSocket ACT_RESULT ok whenever it carries an observation, so a world
+    rejection (HTTP 200, body ok=false plus an observation) arrives as ok=True with the error attached
+    (noema-client#58). `masked_rejection` recovers the server's verdict from the result itself.
+    """
+    masked = masked_rejection(result)
+    out: dict = {"ok": bool(getattr(result, "ok", False)) and masked is None}
+    if masked is not None:
+        out["code"] = masked[:MAX_CODE_CHARS]
+        out["failure"] = "ACTION_REJECTED"
+        return out
     if not out["ok"]:
         error = getattr(getattr(result, "result", None), "error", None) or {}
         failure = getattr(result, "failure", None)
@@ -61,6 +71,30 @@ def outcome_of(result: Any) -> dict:
         if failure:
             out["failure"] = str(failure)[:MAX_CODE_CHARS]
     return out
+
+
+def masked_rejection(result: Any) -> str | None:
+    """The server's error code when a turn the client reported ok was in fact rejected, else None.
+
+    The CommandResult keeps the error and the raw frame even when its `ok` is wrong, so this reads the
+    server's own verdict (`body.ok is False`, or an error code on the result) rather than guessing from
+    prose. Once the client honours `body.ok` (noema-client#58) such turns arrive with ok=False and this
+    returns None for them.
+    """
+    if not getattr(result, "ok", False):
+        return None
+    command = getattr(result, "result", None)
+    if command is None:
+        return None
+    raw = getattr(command, "raw", None)
+    if not isinstance(raw, Mapping):
+        return None  # only the WebSocket path keeps the frame, and only it masks rejections
+    body = raw.get("body") if isinstance(raw.get("body"), Mapping) else {}
+    error = getattr(command, "error", None)
+    code = str(error.get("code") or "") if isinstance(error, Mapping) else ""
+    if "ok" in body:
+        return (code or "ACTION_REJECTED") if body.get("ok") is False else None
+    return code or None
 
 
 def about_action(outcome: Any) -> bool:

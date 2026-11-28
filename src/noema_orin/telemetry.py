@@ -2,19 +2,25 @@
 
 from collections import Counter
 
+from .transitions import masked_rejection
+
 
 def rejection_summary(turns) -> dict:
-    """Count failed turns by (verb, code) and record the argument keys that were sent."""
+    """Count failed turns by (verb, code) and record the argument keys that were sent.
+
+    A turn the client reported ok but the server rejected (noema-client#58) counts as failed too.
+    """
     counts: Counter = Counter()
     keys: dict[str, list[str]] = {}
     for t in turns or []:
-        if getattr(t, "ok", True):
+        masked = masked_rejection(t)
+        if getattr(t, "ok", True) and masked is None:
             continue
         prop = getattr(t, "proposal", None)
         verb = str(getattr(prop, "action", None) or "?").upper()
         res = getattr(t, "result", None)
         err = (getattr(res, "error", None) or {}) if res is not None else {}
-        code = str(err.get("code") or getattr(t, "reason", None) or getattr(getattr(t, "failure", None), "value", None) or "?")
+        code = str(masked or err.get("code") or getattr(t, "reason", None) or getattr(getattr(t, "failure", None), "value", None) or "?")
         label = f"{verb}:{code}"
         counts[label] += 1
         args = getattr(prop, "arguments", None) or {}

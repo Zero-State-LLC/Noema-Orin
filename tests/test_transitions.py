@@ -229,6 +229,84 @@ class OutcomeTests(unittest.TestCase):
         self.assertEqual(len(self._outcomes()[0][2]["code"]), 80)
 
 
+class MaskedRejectionTests(unittest.TestCase):
+    """noema-client 0.2.0 marks a rejected WebSocket ACT_RESULT ok because it carries an observation.
+
+    The fleet logged 144 of 386 mutating turns as accepted that the world had refused (100 of them
+    MESSAGEs answered "Name a recipient and write a message."). The server's own verdict is still in
+    the result, so the outcome must follow it. Shapes copied from a live frame.
+    """
+
+    @staticmethod
+    def _ws_turn(action, *, body_ok, code=None, client_ok=True):
+        error = {"code": code, "message": "recipient_id and text required"} if code else None
+        body = {"ok": body_ok, "observation": {"play_text": "Nothing changes."}}
+        if error:
+            body["error"] = error
+        command = SimpleNamespace(ok=client_ok, error=error, raw={"type": "ACT_RESULT", "body": body})
+        return SimpleNamespace(ok=client_ok, reason=None, failure=None,
+                               proposal=SimpleNamespace(action=action, target_id=None, arguments={"kind": "social"}),
+                               result=command)
+
+    def test_masked_rejection_is_an_action_rejection(self):
+        from noema_orin.transitions import about_action, outcome_of
+
+        out = outcome_of(self._ws_turn("MESSAGE", body_ok=False, code="INVALID_REQUEST"))
+        self.assertEqual(out, {"ok": False, "code": "INVALID_REQUEST", "failure": "ACTION_REJECTED"})
+        self.assertTrue(about_action(out), "a refused proposal is a verdict on the action")
+
+    def test_masked_world_incident_is_not_about_the_action(self):
+        from noema_orin.transitions import about_action, outcome_of
+
+        out = outcome_of(self._ws_turn("HARVEST", body_ok=False, code="WORLD_INCIDENT"))
+        self.assertFalse(out["ok"])
+        self.assertFalse(about_action(out))
+
+    def test_accepted_frame_stays_ok(self):
+        from noema_orin.transitions import outcome_of
+
+        self.assertEqual(outcome_of(self._ws_turn("WAIT", body_ok=True)), {"ok": True})
+
+    def test_fixed_client_result_is_read_once(self):
+        """After noema-client#58 the client itself says ok=False; nothing is double counted."""
+        from noema_orin.transitions import masked_rejection, outcome_of
+
+        turn = self._ws_turn("MESSAGE", body_ok=False, code="INVALID_REQUEST", client_ok=False)
+        self.assertIsNone(masked_rejection(turn))
+        self.assertEqual(outcome_of(turn)["ok"], False)
+
+    def test_http_result_without_frame_is_trusted(self):
+        from noema_orin.transitions import masked_rejection
+
+        turn = _turn("LOOK")
+        turn.result.raw = None
+        self.assertIsNone(masked_rejection(turn))
+
+    def test_session_rejection_summary_counts_masked_rejections(self):
+        from noema_orin.telemetry import rejection_summary
+
+        turns = [self._ws_turn("MESSAGE", body_ok=False, code="INVALID_REQUEST"),
+                 self._ws_turn("MESSAGE", body_ok=False, code="INVALID_REQUEST"),
+                 self._ws_turn("WAIT", body_ok=True)]
+        self.assertEqual(rejection_summary(turns)["by_verb_code"], {"MESSAGE:INVALID_REQUEST": 2})
+
+    def test_logged_outcomes_follow_the_server_verdict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            mind = Path(tmp) / "mind"
+            mind.mkdir()
+            log = TransitionLog(mind)
+            log.new_session()
+            for i, action in enumerate(["MESSAGE", "WAIT"]):
+                log.append(canonical=_obs(i + 1), proposal=_prop(action), source="fallback")
+            report = [SimpleNamespace(ok=True), self._ws_turn("MESSAGE", body_ok=False, code="INVALID_REQUEST"),
+                      self._ws_turn("WAIT", body_ok=True)]
+            self.assertEqual(log.record_outcomes(report), 2)
+            from noema_orin.transitions import iter_outcomes
+
+            outcomes = [o for _obs, _a, o in iter_outcomes(mind)]
+            self.assertEqual(outcomes, [{"ok": False, "code": "INVALID_REQUEST", "failure": "ACTION_REJECTED"}, {"ok": True}])
+
+
 @unittest.skipUnless(_HAS_CLIENT, "needs noema-client")
 class DecideHookTests(unittest.TestCase):
     def _adapter(self):
