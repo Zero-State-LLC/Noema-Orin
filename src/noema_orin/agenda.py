@@ -195,10 +195,12 @@ class AgendaManager:
                 )
             )
         elif role == "quartermaster":
+            from .shop_planner import storefront_room
+
             candidates.append(
                 AgendaStep(
                     goal_kind="RESTOCK_STALL",
-                    target_room="room.civic-exchange",
+                    target_room=storefront_room(world_map),  # D-092: the stall's room, not a fixed one
                     created_seq=seq,
                     expires_seq=exp,
                     priority=round(0.75 + thrift * 0.2, 3),

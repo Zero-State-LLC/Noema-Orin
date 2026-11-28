@@ -455,7 +455,10 @@ class WorldMap(_Closable):
 
         stalls = [
             e for e in entities
-            if str(e.get("infra_type") or "").lower() == "barter_stall" and e.get("entity_id")
+            if e.get("entity_id")
+            and (str(e.get("infra_type") or "").lower() == "barter_stall"
+                 # D-092: live stalls carry only `label: "barter-stall"`; the map never recorded the Compact's stall
+                 or str(e.get("label") or "").lower().replace("-", "_") == "barter_stall")
         ]
         listing_count_by_stall: dict[str, int] = {}
         for l in listings:

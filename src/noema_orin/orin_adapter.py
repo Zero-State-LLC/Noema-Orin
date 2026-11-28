@@ -706,6 +706,8 @@ class OrinAdapter:
                                               if isinstance(a, dict) and a.get("available") is False
                                               and str(a.get("action") or "").upper() in (self.verbs | set(self.supply or ()))})[:4],
                           "offered_role": sorted({o["action"] for o in options} & self.verbs)}
+        if source == "planner" and self.last_playbook_state:
+            turn_line["step"] = self.last_playbook_state  # D-092: which playbook rule chose a planner turn
         if shadow is not None:
             turn_line["consequence"] = shadow  # C3 (#198): INFERRED estimate for the chosen action; telemetry only
         print(json.dumps(turn_line), flush=True)

@@ -298,10 +298,15 @@ def quartermaster_needs_shop_visit(
     canonical: dict[str, Any],
     world_map,
     knobs: dict[str, Any] | None = None,
+    home_org_id: str | None = None,
 ) -> bool:
-    """True when m02 is outside civic-exchange with surplus stock or missing storefront listings (T4/#158)."""
+    """True when m02 is away from the storefront with surplus stock or a storefront with no live listings (T4/#158).
+
+    D-092: the storefront is the room of the Compact's recorded barter stall (`storefront_room`), not a fixed room.
+    """
     loc = canonical.get("location") or {}
-    if loc.get("room_id") == "room.civic-exchange":
+    shop = storefront_room(world_map, home_org_id)
+    if loc.get("room_id") == shop:
         return False
     knobs = knobs or {}
     battery_reserve = max(0, min(3, int(knobs.get("battery_reserve_target", 1))))
@@ -323,12 +328,48 @@ def quartermaster_needs_shop_visit(
         return True
     if world_map is not None and hasattr(world_map, "observed_listings"):
         listings = [
-            l for l in world_map.observed_listings(room_id="room.civic-exchange")
+            l for l in world_map.observed_listings(room_id=shop)
             if int(l.get("fills_remaining") or 0) > 0
         ]
         if not listings:
-            return True
+            # D-092: only pull when the visit can list something. An empty storefront needs a funded BUY_ORDER
+            # (ore_buy_energy + 8 on arrival, plan_quartermaster_shop step 4); m02 was pulled back at energy 5-7,
+            # did nothing there, left, and was pulled back again (18 of 18 replayed reversals).
+            res = canonical.get("resources") if isinstance(canonical.get("resources"), dict) else {}
+            energy = res.get("energy")
+            need = compute_shop_prices(int(knobs.get("shop_margin_bias", 0)))["ore_buy_energy"] + 8
+            here = loc.get("room_id")
+            hops = (world_map.distances(here) or {}).get(shop) if here and hasattr(world_map, "distances") else None
+            if isinstance(energy, (int, float)) and isinstance(hops, int):
+                return energy - 2 * hops >= need
+            return False
     return False
+
+
+STOREFRONT_DEFAULT = "room.civic-exchange"  # RFC-0141 §2.2's intended site; used until a stall is recorded
+
+
+def storefront_room(world_map, home_org_id: str | None = None) -> str:
+    """D-092: where the Compact's storefront is. Live evidence: its only barter stall stands in room.archive.
+
+    Prefer the room of the home org's listings, then any recorded stall (most recently seen), then any listing,
+    else STOREFRONT_DEFAULT.
+    """
+    if world_map is None or not hasattr(world_map, "observed_stalls"):
+        return STOREFRONT_DEFAULT
+    stalls = world_map.observed_stalls()
+    listings = world_map.observed_listings() if hasattr(world_map, "observed_listings") else []
+    if home_org_id:
+        # A listing names its stall and room, so it locates the storefront even where the stall row is missing
+        # (agents on pre-D-092 code delete label-only stall rows on every visit to that room).
+        for l in listings:
+            if l.get("owner_id") == home_org_id and l.get("room_id"):
+                return str(l["room_id"])
+    if stalls:
+        return str(stalls[0]["room_id"])
+    if listings and listings[0].get("room_id"):
+        return str(listings[0]["room_id"])
+    return STOREFRONT_DEFAULT
 
 
 def plan_quartermaster_shop(
