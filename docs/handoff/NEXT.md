@@ -279,3 +279,14 @@
 - **m05 idles 75% of its turns.** Once its notice slot is used, `focus` strips idle verbs and `_ask` strips the planner-only text verbs, so the model gets an empty menu. The generic fallback then INSPECTs the same entity (`relay-7`) again and again. The local model is healthy: three probes answered in about 2 s.
   - Where an idle speaker should go (a herald patrol) is the same kind of routing decision as grill Q3. It costs energy that an empty hold cannot regain without RECHARGE, so it waits for the user.
 - **Rollout (verified):** a full rolling restart onto `eb13c57` (D-091 to D-094) ran from 08:27:39Z (m01) to 08:35:41Z (maint-patrol). All 7 units are active, and the dashboard was restarted (HTTP 200). A kiosk screenshot shows the live panel with UNITS 6/6 and SSE LIVE. The INCIDENT watcher stayed quiet.
+
+## 2026-11-28 08:48Z: D-095, the kiosk banner shows only real alerts
+- **D-095 (#237, `841a4fd`):** the per-agent "sessions ended early" alert now leaves out sessions stopped by a world INCIDENT.
+  - Before, six of seven units carried it hours after recovery (m01 134/163). 133 of m01's 163 sessions in 24 h had stopped on WORLD_INCIDENT.
+  - On the live `metrics.db` the alerts go from 8 to 2: `m01: idle_rate 1.0` and `m04: idle_rate 0.97`. The dashboard shows those muted by design (#203).
+  - Deployed, and the dashboard was restarted. The kiosk banner, which showed "ALERTS (6)" at 08:38Z, is clear at 08:47Z.
+  - A live INCIDENT still raises the crit banner line, so nothing about outage visibility changed.
+- **Still waiting on the user:**
+  - Grill round 1 (Q1 founder work route, Q2 treasury figure, Q3 archivist routing (also covers where an idle speaker goes), Q4 consent scrub, Q5 the #984/#985 reviewer, Q6 token renewal) and round 2 (alert channel, "cohort").
+  - Deploying Noema#984 and #985.
+  - Whether the quartermaster may build a second generator or storage bay (D-094 open item).
