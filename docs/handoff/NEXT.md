@@ -290,3 +290,11 @@
   - Grill round 1 (Q1 founder work route, Q2 treasury figure, Q3 archivist routing (also covers where an idle speaker goes), Q4 consent scrub, Q5 the #984/#985 reviewer, Q6 token renewal) and round 2 (alert channel, "cohort").
   - Deploying Noema#984 and #985.
   - Whether the quartermaster may build a second generator or storage bay (D-094 open item).
+
+## 2026-11-28 09:00Z: D-096 live on m05, noema-client#59
+- **D-096 (#239, `6e924ca`):** the speaker's trade digest now names the stall's room. It said "Exchange stall", but the Compact's only stall is in the Archive.
+  - Live on m05 since 08:51:54Z. The first digest after the restart (seq 89774) reads "the Compact TRADE_NOTICE: Archive stall: BUY_ORDER(FERROUS_ORE), …". The last one before it read "Exchange stall".
+  - Only m05 posts digests, so the other units need no restart. The venv on disk is `6e924ca` for every unit.
+- **noema-client#59:** `play()` loses the session's turn results when the transport drops, so those turns stay unlabelled (32 sessions in the last 8 h).
+  - Suggested fix: return a partial `PlayReport` with a `TRANSPORT_DROP` stop reason, like the existing `world_incident` and `circuit_breaker` stops.
+  - Nothing to change on the Orin until the client exposes the partial report.
