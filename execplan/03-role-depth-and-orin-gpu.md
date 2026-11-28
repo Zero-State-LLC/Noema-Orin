@@ -29,7 +29,7 @@ All constitutional boundaries remain intact:
 - [x] (2026-11-27) `T11` (#165): Grounded character voice synthesis (`voice.py`) with deterministic seq/number/privacy verifier and template fallback.
 - [x] (2026-11-27) `T12` (#166): TensorRT FP16 `bge-small` embedder (`embedder.py`), `fact_embeddings` float16 table with `ON DELETE CASCADE`, hybrid FTS5/cosine recall, and `deploy/jetson/build_trt_embedder.sh`.
 - [x] (2026-11-27) `T13` (#167): Tegra/INA3221 hardware telemetry (`jetson_telemetry.py`), `metrics.db` `hw_samples`, `noema-player@.service` cgroup limits, and `deploy/jetson/noema-power-profile.service`.
-- [ ] `T14` (#168 / `#5`): Opt-in `qualify.py`, `nvtx_trace.py`, `deploy/jetson/profile_nsys.sh`, and `README.md` sync implemented; awaiting physical Jetson Orin Nano execution to archive `OBSERVED` receipt and flip `G-002` / close `#5`.
+- [x] (2026-11-27) `T14` (#168 / `#5`): Opt-in `qualify.py`, `nvtx_trace.py`, `deploy/jetson/profile_nsys.sh`, and `README.md` sync implemented. Physical run on the Jetson Orin Nano archived as `docs/evidence/qualify-orin-20261127T1457Z.json` (20.6 tok/s, embed p95 12 ms, 5.8 W); `G-002` APPROVED and `#5`/`#168` closed (#207, #208).
 
 ## Ticket Graph & Blocking Edges
 

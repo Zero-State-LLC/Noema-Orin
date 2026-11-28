@@ -335,3 +335,10 @@ Operator statement, verbatim: "approve spec". It was given in reply to the publi
 - **Change.** `build_session_dossier` splits `by_verb_code` with the same set the consequence model uses (`transitions.NOT_ABOUT_ACTION`, D-083). Only action rejections feed `rejection_count` and `rejection_rate`. World and connection failures go to a new `world_failure_count`. `rejections_by_code` keeps every code for reflection.
 - **NOT_IN_WORLD joins the set.** "Enter the world first." fails every verb alike when ENTER_WORLD did not land (mostly during an INCIDENT: 39 masked turns), so it is not a verdict on the proposal.
 - **Unchanged:** no engine, Specs or wire change. Thresholds stay as they are.
+
+## D-087: CI runs the suite against the production client (2026-11-28)
+
+- **Problem.** The synthetic CI job installs no noema-client, so every test gated on it skipped (52 at the time of the gap analysis), including the production decide path and the D-085/#221 tests. The optional loopback job pinned 16ec5d1 (0.1.23/0.1.24) while production ran 0.2.0.
+- **Pin.** Production runs noema-client 0.2.0 at `89a1fcac`. Each module in the Orin venv matches that commit by SHA-256 (checked 2026-11-28 04:59Z).
+- **Change.** New job `production-client-suite` (ubuntu-24.04-arm, Python 3.12, like the Orin) installs that commit and runs the full suite. It fails if any test still skips for want of the client. The loopback job and `official_client.py` now pin 0.2.0 too. The proof passed 14/14 on the Orin against the installed client.
+- **When the client changes.** Bump both pins together with the Orin venv (noema-client#58 is the next candidate).

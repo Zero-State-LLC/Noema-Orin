@@ -134,6 +134,43 @@ jobs:
           else
             git diff --check HEAD^ HEAD
           fi
+  production-client-suite:
+    # The synthetic job skips every test that needs noema-client, including the production decide path
+    # (DecideHookTests, DecideShadowTests, the fallback and masked-rejection tests). Production runs
+    # noema-client 0.2.0 at 89a1fcac on Python 3.12 (file hashes checked against the Orin venv, D-087).
+    name: Production client suite (ubuntu-24.04-arm, Python 3.12, noema-client 0.2.0)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v7.0.1
+        with:
+          repository: Zero-State-LLC/noema-client
+          ref: 89a1fcac4c7c8ec9da7442e2392af85fac733fd8
+          path: client-prod
+          persist-credentials: false
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Install exact production client
+        run: |
+          test "$(git -C client-prod rev-parse HEAD)" = 89a1fcac4c7c8ec9da7442e2392af85fac733fd8
+          python -m pip install ./client-prod
+          python -c "import noema_client; assert noema_client.__version__ == '0.2.0', noema_client.__version__"
+      - name: Run the full suite with the client installed
+        env:
+          NOEMA_TOKEN: ''
+          NOEMA_SERVER: ''
+          NOEMA_CONFIG_DIR: ''
+          NOEMA_WORLD_ID: ''
+          NOEMA_ADMIN_TOKEN: ''
+        run: |
+          PYTHONPATH=src python -m unittest discover -s tests -v 2>&1 | tee "$RUNNER_TEMP/unittest.log"
+          # Every skip reason in tests/ that names the client ("needs noema-client", "requires noema_client", ...).
+          skipped=$(grep -ciE "skipped '[^']*noema[-_]client" "$RUNNER_TEMP/unittest.log" || true)
+          echo "client-gated skips: $skipped"
+          test "$skipped" = 0
   official-client-loopback:
     name: Official client loopback (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
@@ -152,7 +189,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           repository: Zero-State-LLC/noema-client
-          ref: 16ec5d1f472295055439975f88567a43fe6ee3b0
+          ref: 89a1fcac4c7c8ec9da7442e2392af85fac733fd8
           path: client-pin
           persist-credentials: false
       - uses: actions/setup-python@v7.1.0
@@ -160,7 +197,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install exact client and Orin package
         run: |
-          test "$(git -C client-pin rev-parse HEAD)" = 16ec5d1f472295055439975f88567a43fe6ee3b0
+          test "$(git -C client-pin rev-parse HEAD)" = 89a1fcac4c7c8ec9da7442e2392af85fac733fd8
           python -m pip install ./client-pin .
       - name: Verify installed real client against loopback fixture
         env:
