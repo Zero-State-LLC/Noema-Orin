@@ -236,3 +236,12 @@
 - **D-086 (#224):** WORLD_INCIDENT, STALE_HEAD and NOT_IN_WORLD no longer count toward a persona's RSI rejection rate. Otherwise the newly visible rejections would roll back and quarantine any canary mutation during an outage.
 - Deployed: m05+m06 canary at 04:31Z (m05 went from a MESSAGE every other turn to 0 in the next 10 turns), then fleet-wide at 04:53Z. 337 tests OK on the Orin.
 - **Grill round 1 (Q1–Q6) is still waiting on the user:** founder menu-gap route, treasury sharing, archivist routing, consent scrub, #984 reviewer, token renewal. Round 2 is queued: alert recipient and channel, and the term "cohort" vs the glossary's "Controller group".
+
+## 2026-11-28 05:40Z: ops slices D-087 to D-091
+- **D-087 (#226):** a new CI job runs all 337 tests against the production client (noema-client 0.2.0 at `89a1fcac`; every module's SHA-256 matches the Orin venv). The job log shows `client-gated skips: 0`. The loopback proof is re-pinned to 0.2.0 (14/14 on the Orin). execplan/03 T14 is ticked.
+- **D-088 (#227):** llama-server now runs one slot with `--ctx-size 4096 --parallel 1 --cache-ram 1024`. Measured: RSS 0.24 GB plus 0.44 GB swap, down from 0.74 GB plus 3.4 GB. System swap fell from 4.1 to 0.7 GB, and a probe answered in 437 ms. Backup: `~/.config/systemd/user/noema-llama-server.service.bak-pre-d088`.
+- **D-089 (#227):** `noema-logrotate.timer` runs hourly. A log over 8 MB is gzipped to `.1.gz` (keep 5) and truncated in place, so open descriptors keep working. It is enabled, and the first run rotated nothing (all logs under 8 MB).
+- **D-090 (#228):** Ollama is retired. The last-resort fallback uses llama-server's OpenAI route, and units order after `noema-llama-server`. `ollama.service` is disabled and stopped. The 1.93 GB blob is kept, because the GGUF is a symlink into it. Unit backups: `*.service.bak-pre-d090`.
+- **D-091 (#229):** a treasury HARVEST asks only for the vault headroom. 24 of m02's 37 had been refused "vault is full": the pack-harvest sizing overrode the playbook's amount (8 at vault 61). Canary m02 since 05:35Z.
+- **Another effect of the client bug:** after a refused turn, 0.2.0 hands the next decision the rejection's stripped observation (no organizations, players or services). That was 45% of m05's decisions and 15% of m02's. noema-client#58 fixes it at the source, so its review matters more than it first looked.
+- Still open on the user: grill round 1 (Q1–Q6), the #984 reviewer, and a decision on noema-client#58 (or a reviewer for it).

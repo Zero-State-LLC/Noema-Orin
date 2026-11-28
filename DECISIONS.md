@@ -342,6 +342,7 @@ Operator statement, verbatim: "approve spec". It was given in reply to the publi
 - **Pin.** Production runs noema-client 0.2.0 at `89a1fcac`. Each module in the Orin venv matches that commit by SHA-256 (checked 2026-11-28 04:59Z).
 - **Change.** New job `production-client-suite` (ubuntu-24.04-arm, Python 3.12, like the Orin) installs that commit and runs the full suite. It fails if any test still skips for want of the client. The loopback job and `official_client.py` now pin 0.2.0 too. The proof passed 14/14 on the Orin against the installed client.
 - **When the client changes.** Bump both pins together with the Orin venv (noema-client#58 is the next candidate).
+- **Amendment (2026-11-28 05:45Z).** GitHub runs steps with `bash -e {0}`, which has no pipefail, so the suite step (`unittest ... | tee`) would have passed even if tests failed. Checked: the last eight runs of the job printed `OK`, so nothing slipped through. The workflow now defaults every step to `bash --noprofile --norc -eo pipefail {0}`, and `tests/test_ci_workflow.py` guards it.
 
 ## D-088: llama-server runs one 4096-token slot (2026-11-28)
 

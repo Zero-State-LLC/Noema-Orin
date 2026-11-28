@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# D-087 amendment: GitHub's default `bash -e {0}` has no pipefail, so `cmd | tee log` passes when cmd fails.
+defaults:
+  run:
+    shell: bash --noprofile --norc -eo pipefail {0}
+
 jobs:
   synthetic-foundation:
     name: Synthetic foundation (${{ matrix.os }}, Python ${{ matrix.python-version }})
