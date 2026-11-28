@@ -162,9 +162,11 @@ class ConsequenceModel:
             return cls(**kwargs)
 
     def observe(self, obs: Any, action: Any, next_obs: Any = None, outcome: Any = None) -> None:
+        from .transitions import about_action
+
         name, target_id = _action_of(action)
-        if not name:
-            return
+        if not name or not about_action(outcome):
+            return  # an outage or a lost connection teaches nothing about this action, budgets included
         obs = _mapping(obs)
         self.update(features(obs, name, target_id), _snapshot(obs),
                     _snapshot(next_obs) if isinstance(next_obs, Mapping) else None, _mapping(outcome).get("ok"))
@@ -262,20 +264,26 @@ class ShadowScorer:
         Returns the per-verb summary, or None when there is nothing to score. Always folds the
         session's turns into `model` and resets.
         """
-        from .transitions import decided_results
+        from .transitions import about_action, decided_results, outcome_of
 
         turns, self._turns = self._turns, []
         if not turns:
             return None
-        outcomes = {turn: bool(getattr(result, "ok", False)) for turn, result in decided_results([t["action"] for t in turns], report)}
+        outcomes = {turn: outcome_of(result) for turn, result in decided_results([t["action"] for t in turns], report)}
         verbs: dict[str, dict] = {}
+        excluded = 0
         for index, turn in enumerate(turns):
             after = turns[index + 1]["snapshot"] if index + 1 < len(turns) else None
-            ok = outcomes.get(index)
+            outcome = outcomes.get(index)
+            ok = outcome["ok"] if outcome is not None else None
             row = verbs.setdefault(turn["action"], {"turns": 0, "predicted": 0, "tp": 0, "fp": 0, "fn": 0, "tn": 0,
                                                     "budget_scored": 0, "_error": 0.0})
             row["turns"] += 1
             prediction = turn["prediction"]
+            if not about_action(outcome):  # the world or the connection failed: neither scored nor learned
+                excluded += 1
+                row["predicted"] += 1 if prediction.get("label") == "INFERRED" else 0
+                continue
             if prediction.get("label") == "INFERRED":
                 row["predicted"] += 1
                 p = prediction.get("rejected_p")
@@ -298,7 +306,8 @@ class ShadowScorer:
             row["budget_mae"] = round(error / row["budget_scored"], 4) if row["budget_scored"] else NOT_COMPUTABLE
             by_verb[verb] = row
         predicted = sum(row["predicted"] for row in verbs.values())
-        return {"label": "INFERRED", "turns": len(turns), "no_prediction": len(turns) - predicted, "by_verb": by_verb}
+        return {"label": "INFERRED", "turns": len(turns), "no_prediction": len(turns) - predicted,
+                "excluded": excluded, "by_verb": by_verb}
 
 
 def attach_shadow(adapter: Any, mind: Path, env: Mapping[str, str] | None = None) -> bool:
