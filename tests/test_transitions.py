@@ -262,6 +262,14 @@ class MaskedRejectionTests(unittest.TestCase):
         self.assertFalse(out["ok"])
         self.assertFalse(about_action(out))
 
+    def test_not_in_world_is_not_about_the_action(self):
+        """D-086: "Enter the world first." fails every verb alike; it says nothing about the proposal."""
+        from noema_orin.transitions import about_action, outcome_of
+
+        out = outcome_of(self._ws_turn("HARVEST", body_ok=False, code="NOT_IN_WORLD"))
+        self.assertEqual(out["code"], "NOT_IN_WORLD")
+        self.assertFalse(about_action(out))
+
     def test_accepted_frame_stays_ok(self):
         from noema_orin.transitions import outcome_of
 

@@ -120,6 +120,24 @@ class HardenedRsiTests(unittest.TestCase):
             self.assertFalse(ok2)
             self.assertEqual(why, "quarantined")
 
+    def test_world_failures_do_not_count_as_rejections(self):
+        """D-086: an INCIDENT or a settlement race is the world's failure, not the persona's (cf. D-083).
+
+        The ratchet hard-fails a candidate above a 15% rejection rate, so counting WORLD_INCIDENT and
+        STALE_HEAD would quarantine a mutation for an outage it did not cause.
+        """
+        turn_log = [{"seq": i, "room": "r1", "action": "REPAIR", "budgets": {"energy": 5}} for i in range(1, 11)]
+        dossier = build_session_dossier(
+            role="custodian",
+            role_verbs=set(role_for("custodian")["verbs"]),
+            turn_log=turn_log,
+            rejections={"by_verb_code": {"REPAIR:WORLD_INCIDENT": 6, "MOVE:STALE_HEAD": 2, "REPAIR:NOT_FOUND": 1}},
+        )
+        self.assertEqual(dossier["rejection_count"], 1)
+        self.assertEqual(dossier["rejection_rate"], 0.1)
+        self.assertEqual(dossier["world_failure_count"], 8)
+        self.assertEqual(dossier["rejections_by_code"]["REPAIR:WORLD_INCIDENT"], 6)
+
     def test_persistent_agenda_round_trip(self):
         with tempfile.TemporaryDirectory() as d:
             mind = Path(d)

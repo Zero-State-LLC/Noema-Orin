@@ -46,6 +46,8 @@ NOT_ABOUT_ACTION = frozenset({
     "RETRYABLE_TRANSPORT", "AUTH_REQUIRED", "WORLD_NOT_READY", "WORLD_PAUSED", "WORLD_INCIDENT",
     "SETTLEMENT_FAILURE", "SETTLEMENT_RESYNC", "PROTOCOL", "SEAL",
     "INCIDENT", "PAUSED", "NOT_ACTIVE", "STALE_HEAD",
+    # D-086: the session is not in the world (ENTER_WORLD failed, usually during an INCIDENT); any verb fails.
+    "NOT_IN_WORLD",
 })
 
 

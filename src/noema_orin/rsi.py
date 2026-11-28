@@ -211,7 +211,15 @@ def build_session_dossier(
     role_hits = sum(1 for t in turn_log if str(t.get("action") or "").upper() in role_verbs)
     idle_hits = sum(1 for t in turn_log if str(t.get("action") or "").upper() in {"LOOK", "WAIT", "INSPECT", "MOVE"})
     rej_map = (rejections or {}).get("by_verb_code") if isinstance(rejections, dict) else {}
-    rej_total = sum(int(v) for v in (rej_map or {}).values() if isinstance(v, (int, float)))
+    # D-086: a world outage or a settlement race is not the persona's fault (same set as D-083).
+    from .transitions import NOT_ABOUT_ACTION
+
+    def _world(label: str) -> bool:
+        return str(label).rsplit(":", 1)[-1].upper() in NOT_ABOUT_ACTION
+
+    counts = {k: int(v) for k, v in (rej_map or {}).items() if isinstance(v, (int, float))}
+    world_total = sum(v for k, v in counts.items() if _world(k))
+    rej_total = sum(v for k, v in counts.items() if not _world(k))
     rooms = sorted({str(t.get("room")) for t in turn_log if t.get("room")})
     seqs = sorted({int(t["seq"]) for t in turn_log if isinstance(t.get("seq"), int) and t["seq"] > 0})
     zero_streak = 0
@@ -254,6 +262,7 @@ def build_session_dossier(
         "idle_rate": round(idle_hits / total, 4) if total else 0.0,
         "rejection_rate": round(min(1.0, rej_total / total), 4) if total else 0.0,
         "rejection_count": rej_total,
+        "world_failure_count": world_total,
         "rejections_by_code": dict(rej_map or {}),
         "loop_break_rate": round(min(1.0, loop_breaks / total), 4) if total else 0.0,
         "zero_energy_streak": zero_streak,
