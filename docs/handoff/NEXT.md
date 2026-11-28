@@ -206,3 +206,8 @@
 - The hosted world entered INCIDENT on 2026-11-27 at about 19:30Z, right after STALE_HEAD rejections (a settlement commit failed). For about 4.7 h every mutation was blocked, and the fleet only showed "sessions ended early".
 - Checked: durable head == DO (rev 45180, seq 86843, unsettled 0). Then ran `POST /v1/admin/lifecycle {"action":"recover"}`, which did a `restore` from the verified head and returned ACTIVE/HEALTHY. Revision advanced to 45195 within 4 min.
 - Added a crit dashboard and digest alert: "world INCIDENT: latest session stopped on WORLD_INCIDENT". Root cause is filed upstream on Noema.
+
+## 2026-11-28 01:47Z
+- #215 (D-083: the consequence model ignores world-level failures) is deployed. Canary m03+m06 ran 4 min with 0 tracebacks, then rolled the rest. All 6 are active and the dashboard is active. 325 tests OK on the Orin.
+- Root-cause fix for the 11-27 incident: Noema#984. A lost settlement race in the tempo alarm now resyncs and stays ACTIVE instead of going to INCIDENT. 3045 Worker tests pass and tsc is clean. It needs a code-owner review (BLOCKED, REVIEW_REQUIRED), and the production deploy is gated on the operator under the Noema grant.
+- World ACTIVE/HEALTHY since recovery (rev 45180 to 45396+). The remaining STALE_HEAD rate is about 1 per session.
