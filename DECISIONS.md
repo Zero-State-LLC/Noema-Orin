@@ -342,3 +342,16 @@ Operator statement, verbatim: "approve spec". It was given in reply to the publi
 - **Pin.** Production runs noema-client 0.2.0 at `89a1fcac`. Each module in the Orin venv matches that commit by SHA-256 (checked 2026-11-28 04:59Z).
 - **Change.** New job `production-client-suite` (ubuntu-24.04-arm, Python 3.12, like the Orin) installs that commit and runs the full suite. It fails if any test still skips for want of the client. The loopback job and `official_client.py` now pin 0.2.0 too. The proof passed 14/14 on the Orin against the installed client.
 - **When the client changes.** Bump both pins together with the Orin venv (noema-client#58 is the next candidate).
+
+## D-088: llama-server runs one 4096-token slot (2026-11-28)
+
+- **Measured before.** `--ctx-size 8192 --parallel 2` gave two 4096-token slots. The largest prompt ever was 2281 tokens (`n_tokens_max`), and `n_busy_slots_per_decode` was 1.0: two requests never overlapped. The process held 0.74 GB resident with 3.4 GB of anonymous memory in swap. The prompt cache (`--cache-ram`, default 8 GiB) and the second slot were the likely bulk.
+- **Change.** `--ctx-size 4096 --parallel 1 --cache-ram 1024`. The unit file in the repo now also matches the live binary path (`%h/llama.cpp/build/bin`, not `/usr/local/bin`). Live backup: `~/.config/systemd/user/noema-llama-server.service.bak-pre-d088`.
+- **Measured after (05:04Z).** Ready in 5 s, one slot of 4096 tokens, RSS 0.24 GB plus 0.44 GB swap. System swap fell from 4.1 GB to 0.7 GB, and available RAM rose from 2.27 to 2.91 GB.
+- **Rollback.** Copy the backup over the unit, then `systemctl --user daemon-reload && systemctl --user restart noema-llama-server`.
+
+## D-089: hourly rotation for the unit logs (2026-11-28)
+
+- **Problem.** Every unit appends to `~/noema-players/logs/*.log` (`StandardOutput=append:`). The Orin has no logrotate (the package is not installed), so the logs only grow: 15 MB after four days and about 2 MB per agent.
+- **Change.** `noema_orin.logrotate` plus `noema-logrotate.timer` (hourly). A log of 8 MB or more is gzip-copied to `.1.gz` (keeping 5) and then truncated in place. Truncation keeps the inode, so each unit's open O_APPEND descriptor keeps writing at offset 0 without a restart. The cap is about 48 MB per log.
+- **Not covered:** `metrics.db` and `transitions.jsonl` keep their own bounds (`transitions.py` rotation, D-078).

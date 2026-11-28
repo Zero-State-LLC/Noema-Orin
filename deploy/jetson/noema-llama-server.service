@@ -6,15 +6,19 @@ After=network-online.target
 Type=simple
 EnvironmentFile=-%h/.config/noema-orin/llama-server.env
 # Defaults fit comfortably inside Jetson Orin Nano 8GB unified RAM (~2.7 GiB total).
+# D-088: one 4096-token slot. Measured 2026-11-28: largest prompt ever 2281 tokens (n_tokens_max),
+# n_busy_slots_per_decode 1.0 (never two requests at once), and with 8192 x 2 slots 3.4 GB of the
+# server's anonymous memory sat in swap. --cache-ram 1024 caps the host-side prompt cache (default 8 GiB).
 Environment=NOEMA_GGUF_MODEL=%h/models/Qwen2.5-3B-Instruct-Q4_K_M.gguf
 Environment=NOEMA_LLAMA_PORT=8081
-ExecStart=/usr/local/bin/llama-server \
+ExecStart=%h/llama.cpp/build/bin/llama-server \
   --model ${NOEMA_GGUF_MODEL} \
   --host 127.0.0.1 \
   --port ${NOEMA_LLAMA_PORT} \
   --n-gpu-layers 99 \
-  --ctx-size 8192 \
-  --parallel 2 \
+  --ctx-size 4096 \
+  --parallel 1 \
+  --cache-ram 1024 \
   --cache-reuse 256 \
   -ctk q8_0 \
   -ctv q8_0 \

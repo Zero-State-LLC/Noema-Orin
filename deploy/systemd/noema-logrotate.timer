@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly NOEMA unit log rotation (D-089)
+
+[Timer]
+OnBootSec=15min
+OnCalendar=hourly
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

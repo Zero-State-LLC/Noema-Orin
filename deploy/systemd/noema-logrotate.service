@@ -1,0 +1,8 @@
+[Unit]
+Description=Rotate the append-only NOEMA unit logs (D-089; no logrotate on the Orin)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/noema-players
+ExecStart=%h/noema-players/.venv/bin/python -m noema_orin.logrotate --max-mb 8 --keep 5
+Nice=15
