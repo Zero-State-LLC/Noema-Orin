@@ -407,3 +407,9 @@ Operator statement, verbatim: "approve spec". It was given in reply to the publi
 - **Change.** `metrics.digest()` adds `world_incident_sessions` per member. The early-end alert counts only the sessions the agent itself ended: total minus world-INCIDENT stops, with the same 4-session minimum and 50% threshold.
 - **Live check** (the same `metrics.db`, before and after): the alerts go from 8 to 2. The six early-end lines are gone, and `m01: idle_rate 1.0` and `m04: idle_rate 0.97` remain. Those are the real ones, and they wait on grill Q1 and Q3.
 - **Not changed:** the world INCIDENT alert, the idle-rate alert, and the stored session rows.
+
+## D-096: the trade digest names the room where the stall stands (2026-11-28)
+
+- **Finding.** The speaker's TRADE_NOTICE digest always said "Exchange stall: …". The Compact's only stall, with its 5 BUY_ORDERs, stands in the Archive (D-092), so every digest pointed readers to Civic Exchange, where no stall stands.
+- **Change.** `grounded_market_and_contract_digest` names the room recorded for the listings (from the shared map's `rooms.name`). If several rooms are listed, they are joined with " / ". The room id is the fallback when no name is recorded. Live today that gives "Archive stall: BUY_ORDER(FERROUS_ORE), …".
+- **Not changed:** which listings are summarised, the 280-character cap, and the de-duplication key.

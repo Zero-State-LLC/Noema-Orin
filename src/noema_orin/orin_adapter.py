@@ -1226,7 +1226,19 @@ def grounded_market_and_contract_digest(
                     item_tag = f"({token})"
                     break
             summaries.append(f"{kind}{item_tag}")
-        parts.append("Exchange stall: " + ", ".join(summaries))
+        # D-096: name the room the stall stands in (the Compact's is in the Archive, D-092); "Exchange stall" sent
+        # readers to Civic Exchange, where none stands. Group by room; fall back to the room id when no name is known.
+        rooms: list[str] = []
+        for l in listings[:3]:
+            rid = str(l.get("room_id") or "")
+            if rid and rid not in rooms:
+                rooms.append(rid)
+        names = []
+        for rid in rooms:
+            row = world_map.db.execute("SELECT name FROM rooms WHERE room_id=?", (rid,)).fetchone() if hasattr(world_map, "db") else None
+            names.append((row[0] if row and row[0] else rid))
+        where = " / ".join(names) if names else "Market"
+        parts.append(f"{where} stall: " + ", ".join(summaries))
     if contracts:
         c_summaries = []
         for c in contracts[:2]:

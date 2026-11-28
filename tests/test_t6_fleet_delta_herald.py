@@ -143,6 +143,30 @@ class ArchivistDeltaSupersessionTests(unittest.TestCase):
 
 
 class SpeakerGroundedMarketDigestTests(unittest.TestCase):
+    def test_digest_names_the_room_where_the_stall_stands(self):
+        """D-096: the Compact's only stall is in the Archive (D-092), but every digest said "Exchange stall", sending
+        readers to Civic Exchange, where no stall stands."""
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            wm = WorldMap(root)
+            mem = Memory(root / "mind")
+            try:
+                wm.observe("room.archive", "Archive", 88746, [], [])
+                wm.observe_market_and_equipment(
+                    "room.archive", "player.Vellum-Archivist",
+                    {"sequence": 88746,
+                     "location": {"entities": [{"entity_id": "entity.barter-stall.a1f880c3", "entity_type": "INFRASTRUCTURE",
+                                                "label": "barter-stall", "condition": 100}]},
+                     "shop_listings": [{"listing_id": "listing.aff795cc", "stall_id": "entity.barter-stall.a1f880c3",
+                                         "listing_kind": "BUY_ORDER", "fills_remaining": 1,
+                                         "offer_asset": {"kind": "RESOURCE", "resource": "energy", "amount": 6},
+                                         "ask_asset": {"kind": "LOT", "material": "FERROUS_ORE", "amount": 3}}]})
+                text = grounded_market_and_contract_digest(mem, wm, {"sequence": 88800}, org_name="the Compact")
+                self.assertIn("Archive stall: BUY_ORDER(FERROUS_ORE)", text)
+                self.assertNotIn("Exchange", text)
+            finally:
+                mem.close()
+
     def test_m05_publishes_grounded_trade_and_contract_digest_with_seq_citation(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
@@ -186,6 +210,7 @@ class SpeakerGroundedMarketDigestTests(unittest.TestCase):
                 self.assertIn("observed at seq 512", digest_text)
                 self.assertIn("CORE_SWAP", digest_text)
                 self.assertIn("CRAFT_ITEM", digest_text)
+                self.assertIn("room.civic-exchange stall:", digest_text, "no room name recorded: fall back to the id")
                 self.assertLessEqual(len(digest_text), 280)
                 # Deduplicated once noticed until state changes
                 self.assertIsNone(grounded_market_and_contract_digest(mem, wm, canon, org_name="Reach Compact"))
