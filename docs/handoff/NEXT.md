@@ -298,3 +298,10 @@
 - **noema-client#59:** `play()` loses the session's turn results when the transport drops, so those turns stay unlabelled (32 sessions in the last 8 h).
   - Suggested fix: return a partial `PlayReport` with a `TRANSPORT_DROP` stop reason, like the existing `world_incident` and `circuit_breaker` stops.
   - Nothing to change on the Orin until the client exposes the partial report.
+
+## 2026-11-28 09:10Z: D-097 canary, noema-client#60
+- **D-097 (#241, `f4a2e53`): CONVERT carries its `convert_mode`.** noema-client 0.2.0 drops the field (it's not in `ARGUMENT_KEYS`), so the engine refused every CONVERT with INVALID_REQUEST. That was 11 CONVERTs fleet-wide, all chosen by the model, including 2 of m02's 3 refusals after the rollout.
+  - Canary on m02 and m06 since 09:07Z and 09:08Z. The venv on disk is `f4a2e53` for every unit.
+  - The other units keep running `eb13c57` (m05 `6e924ca`) until the canary is checked. Look for a CONVERT accepted, or at least none refused INVALID_REQUEST, then widen the rollout.
+  - Upstream: noema-client#60 (add `convert_mode` to `ARGUMENT_KEYS`).
+- **Post-rollout refusal check** (outcomes since 08:27:39Z, first closed sessions): m01 1/31 (STALE_HEAD), m02 2/31 (both the CONVERT bug), m03 1/31 (BUDGET_EXCEEDED), m04 0/31. Before D-091 to D-094, 27 of 32 m02 treasury harvests had been refused.
