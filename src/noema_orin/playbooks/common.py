@@ -193,6 +193,9 @@ def step_supply_and_dwell_route(ctx: PlaybookContext) -> PlaybookResult | None:
             return PlaybookResult("ROUTE_EMPTY_HOLD", ActionProposal(action="MOVE", target_id=direction))
 
     if ad.builds and _hold_ready(canonical):
+        # D-094: a class already built is not built again (`prefer_builds` drops its CONSTRUCT), so never wait for it.
+        built = ad._built_classes() if hasattr(ad, "_built_classes") else set()
+        want = tuple(b for b in ad.builds if b not in built)
         pick = next(
             (o for o in options if o["action"] == "CONSTRUCT" and str((o.get("raw") or {}).get("class") or "") in ad.builds),
             None,
@@ -204,7 +207,7 @@ def step_supply_and_dwell_route(ctx: PlaybookContext) -> PlaybookResult | None:
             if isinstance(a, dict)
             and str(a.get("operation") or "").upper() == "CONSTRUCT"
             and a.get("available") is False
-            and str(a.get("class") or "") in ad.builds
+            and str(a.get("class") or "") in want
             and "materials" not in str(a.get("reason") or "")
         ]
         if blocked and "HARVEST" in (ad.verbs | set(ad.supply or ())):

@@ -97,6 +97,27 @@ class BuildFuelRespectsBuiltClasses(unittest.TestCase):
         p = a._plan({"canonical": c}, _options(c, a.allowed))
         self.assertEqual((a.last_playbook_state, p.action, p.target_id), ("COLLECT_BUILD_FUEL", "MOVE", "north"))
 
+    def _router_canon(self, cls):
+        """Hold ready (10 cargo), a personal CONSTRUCT of `cls` blocked on the holder's energy, nothing else on offer."""
+        return {"resources": {"energy": 5, "attention": 8, "storage": 6},
+                "location": {"room_id": "room.storage-district", "exits": []},
+                "organizations": [{"org_id": "org.c", "treasury": {"storage": 61}}],
+                "affordances": [{"action": "BUILD", "verb": "BUILD", "operation": "CONSTRUCT", "class": cls,
+                                 "available": False, "reason": "You do not have enough resources to construct."}]}
+
+    def test_router_does_not_wait_for_energy_to_build_a_built_class(self):
+        """After D-094 the shared router's WAIT_BUILD_ENERGY took over the loop (2 of m02's first 6 turns)."""
+        a = self._qm(BUILT_ALL)
+        c = self._router_canon("generator")
+        a._plan({"canonical": c}, a._menu({"canonical": c}))
+        self.assertNotEqual(a.last_playbook_state, "WAIT_BUILD_ENERGY")
+
+    def test_router_still_waits_for_energy_to_build_an_unbuilt_class(self):
+        a = self._qm({"storage_bay", "barter_stall"})
+        c = self._router_canon("generator")
+        p = a._plan({"canonical": c}, a._menu({"canonical": c}))
+        self.assertEqual((a.last_playbook_state, p.action), ("WAIT_BUILD_ENERGY", "WAIT"))
+
 
 if __name__ == "__main__":
     unittest.main()
