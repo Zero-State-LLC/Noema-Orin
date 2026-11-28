@@ -413,3 +413,9 @@ Operator statement, verbatim: "approve spec". It was given in reply to the publi
 - **Finding.** The speaker's TRADE_NOTICE digest always said "Exchange stall: …". The Compact's only stall, with its 5 BUY_ORDERs, stands in the Archive (D-092), so every digest pointed readers to Civic Exchange, where no stall stands.
 - **Change.** `grounded_market_and_contract_digest` names the room recorded for the listings (from the shared map's `rooms.name`). If several rooms are listed, they are joined with " / ". The room id is the fallback when no name is recorded. Live today that gives "Archive stall: BUY_ORDER(FERROUS_ORE), …".
 - **Not changed:** which listings are summarised, the 280-character cap, and the de-duplication key.
+
+## D-097: CONVERT carries its convert_mode (2026-11-28)
+
+- **Finding.** After the D-094 rollout, every CONVERT m02 sent was refused with INVALID_REQUEST ("convert_mode must be power or compute", `world-actions.ts`). The affordance offers `convert_mode: "power"` (cmd `convert power`). noema-client 0.2.0 copies only the fields in `ARGUMENT_KEYS` into a proposal, and `convert_mode` isn't one of them, so the field never reached the engine. Across the logs, 11 CONVERTs were sent fleet-wide, all of them chosen by the model.
+- **Change.** `_proposal` adds `convert_mode` to a CONVERT from the affordance field, or from `power`/`compute` in its `cmd`. No other action changes.
+- **Upstream.** The client should add `convert_mode` to `ARGUMENT_KEYS`. The Orin fix stays harmless after that, because it only fills in a missing field.

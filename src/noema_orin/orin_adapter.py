@@ -1148,6 +1148,13 @@ def _proposal(opt: dict, default_args: dict, memory=None, *, world_map=None, can
     if base is None:
         return ActionProposal(action=opt["action"], target_id=opt.get("target_id"), arguments=dict(default_args.get(opt["action"], {})))
     args = {**default_args.get(base.action, {}), **_cmd_args(opt["raw"]), **dict(base.arguments or {})}
+    if base.action == "CONVERT" and not args.get("convert_mode"):
+        # D-097: noema-client 0.2.0 drops `convert_mode` (not in ARGUMENT_KEYS); the engine refuses CONVERT without it.
+        raw = opt["raw"]
+        mode = raw.get("convert_mode") or next(
+            (w for w in str(raw.get("cmd") or "").split() if w in ("power", "compute")), None)
+        if mode:
+            args["convert_mode"] = mode
     if base.action == "SUPPLY":
         args.setdefault("amount", SUPPLY_AMOUNT)  # engine requires 1..5; model-picked SUPPLY carried none
     if base.action == "ORG_OFFICE_ACT":
