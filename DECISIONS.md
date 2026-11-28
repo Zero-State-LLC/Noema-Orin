@@ -386,3 +386,9 @@ Operator statement, verbatim: "approve spec". It was given in reply to the publi
   - The turn line now names the playbook step (`step`) for planner turns, so the next analysis needs no replay.
 - **Replay after the change:** 7 of 10 reversal arrivals now SUPPLY the custodian on the spot, 2 WAIT for build fuel, 1 is a SEEK_CUSTODIAN step.
 - **Rollout note:** agents on older code delete label-only stall rows when they visit that room, so `storefront_room` also locates the stall from its listings.
+
+## D-093: at most one notice per room per world cycle (2026-11-28)
+
+- **Finding.** The engine keeps one `institution_notice` per room and drops it after one committed cycle (`NOTICE_EXPIRE_AFTER_CYCLES = 1`, `communication.ts`). A second post in the same room and cycle only replaces the first. 34 of m05's 130 notices (all segments) were such replacements. Each cost a MESSAGE budget and a turn, and reached nobody new.
+- **Change.** The speaker remembers the (room, cycle) of its last notice and skips PUBLISH_NOTICE while both match. The next cycle, or another room, posts as before. If the observation has no `cycle`, it posts as before.
+- **Not changed:** what the notice says, and the trade digest's own de-duplication.
