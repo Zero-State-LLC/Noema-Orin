@@ -262,7 +262,12 @@ class OrinAdapter:
 
         loc = canonical.get("location") or {}
         here = loc.get("room_id")
-        if _treasury_build_waiting(canonical, self.builds) or any(
+        built = self._built_classes()
+        if self.builds and all(b in built for b in self.builds):
+            # D-094: every role class is built, so no treasury build will be offered: drop the fuel run.
+            self.build_room = None
+            return None
+        if _treasury_build_waiting(canonical, self.builds, built) or any(
                 (o.get("raw") or {}).get("acting_for") and o["action"] in ("CONSTRUCT", "BUILD") for o in options):
             self.build_room = here
         goal = getattr(self, "build_room", None)
@@ -923,10 +928,12 @@ TREASURY_BUILD_FLOOR = 12  # D-061: build cost (5-6) + two SUPPLYs (3 each) stay
 BUILD_FUEL_CARGO = 4  # D-063: 4 cargo x WAIT +2 = 8 energy, a generator's holder share
 
 
-def _treasury_build_waiting(canonical: dict, builds) -> bool:
-    """A treasury build of a role class is offered here and blocked only on the holder's own resources."""
+def _treasury_build_waiting(canonical: dict, builds, built=()) -> bool:
+    """A treasury build of a role class is offered here and blocked only on the holder's own resources.
+    D-094: a class already built is not waited for; `prefer_builds` drops its CONSTRUCT from the menu."""
+    want = {b for b in builds if b not in set(built)}
     return any(isinstance(a, dict) and a.get("acting_for") and str(a.get("operation") or "").upper() == "CONSTRUCT"
-               and a.get("available") is False and str(a.get("class") or "") in builds
+               and a.get("available") is False and str(a.get("class") or "") in want
                and "treasury" not in str(a.get("reason") or "").lower()
                for a in canonical.get("affordances") or [])
 
