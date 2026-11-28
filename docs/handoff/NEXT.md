@@ -215,3 +215,7 @@
 ## 2026-11-28 02:57Z
 - Noema#984: fixed the Codex P1 (after a lost race the tempo stayed in RESOLVE with no alarm). Contention now reopens a schedulable COLLECT that keeps the batch, and the retry commits. 5 targeted tests, 3046 suite pass, tsc clean, CI green. It still needs a code-owner review, then an operator yes for the prod deploy.
 - World ACTIVE/HEALTHY at rev 45654. All 6 are running full sessions.
+
+## 2026-11-28 03:08Z: upgrade and gap analysis
+- `docs/analysis/upgrade-gaps-20261128.md`: 15 ranked gaps with live evidence. Top items: loop-break and planner oscillation (12–27% of turns, up to 33% MOVE reversals), m05 fallback MESSAGE spam (379 per 1000 turns), and m01/m04 with no role work (needs a product call). Also 3.2 GB of llama-server RAM for 0 player calls in 3 h, no push alert for crit, no log rotation, and the transition logs aren't backed up.
+- Next: items 1–2 (canary m02 and m05), then 6–7.
