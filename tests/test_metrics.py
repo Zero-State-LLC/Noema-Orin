@@ -87,6 +87,29 @@ class MetricsTests(unittest.TestCase):
             self.assertEqual(digest(db)["alerts"], ["m03: energy 0 for last 12 turns (Noema#907)"])
             db.close()
 
+    def test_world_incident_stops_are_not_an_agents_early_end(self):
+        """D-095: 133 of m01's 163 sessions in 24h stopped on WORLD_INCIDENT during three world INCIDENTs, and the
+        kiosk showed 'm01: 134/163 sessions ended early' for every member, hours after the world recovered. Those
+        sessions say nothing about the agent; the world INCIDENT alert already covers the outage while it lasts."""
+        def write(root, member, reasons):
+            rows = []
+            for r in reasons:
+                rows += [{"member": member, "role": "custodian", "persona_version": 1},
+                         {"turn": 1, "source": "model", "action": "MOVE"},
+                         {"member": member, "role": "custodian", "actions": 1, "stop_reason": r}]
+            (root / "logs" / f"noema-player@{member}.log").write_text("\n".join(json.dumps(x) for x in rows) + "\n")
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "logs").mkdir()
+            write(root, "m01", ["world_incident"] * 8 + ["duration_elapsed"] * 2)
+            write(root, "m02", ["circuit_breaker"] * 3 + ["world_incident"] * 5 + ["duration_elapsed"] * 2)
+            db = open_db(root)
+            collect(root, db)
+            alerts = digest(db)["alerts"]
+            self.assertFalse(any(a.startswith("m01:") and "ended early" in a for a in alerts), alerts)
+            self.assertIn("m02: 3/5 sessions ended early", alerts)
+            db.close()
+
 
 if __name__ == "__main__":
     unittest.main()
