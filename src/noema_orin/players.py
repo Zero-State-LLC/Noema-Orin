@@ -16,6 +16,9 @@ from pathlib import Path
 from .roles import DENY_ALWAYS, role_for
 from .telemetry import rejection_summary, stop_detail
 
+# D-101: stop reasons that say the world stopped the session. Neither sample the RSI ratchet nor ask for a reflection.
+WORLD_STOPS = frozenset({"world_incident", "world_paused"})
+
 
 def build_policy(role: str):
     from noema_client.policy import ClientPolicy
@@ -330,6 +333,11 @@ def main(argv: list[str] | None = None) -> int:
         report = paced.settle(report)
         cut_short = paced.declined == "stop"  # D-099: the unit's stop ended this session, not the agent or the world
         line = report.as_dict()
+        # D-101: an INCIDENT or a PAUSE ended this session. Its fitness measures the world, not the persona: 663 such
+        # sessions were scored as baseline samples (window 3), and the baselines of m01, m03 and m04 fell to 0.1458
+        # during the long INCIDENTs. A canary scored on such sessions could be rolled back and its patch quarantined
+        # for a world outage.
+        world_ended = line.get("stop_reason") in WORLD_STOPS
         if adapter.transition_log is not None:
             # C1 (#196): label this session's logged turns from the client's results. Must never end the loop.
             try:
@@ -373,7 +381,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         # D-099: a session the stop cut short gives the ratchet no fitness sample. Its rates come from however
         # many turns ran before the restart, and one noisy sample can roll back a canary (3-session window).
-        rsi_verdict = None if cut_short else ratchet.evaluate_session(dossier, persona, knobs)
+        rsi_verdict = None if cut_short or world_ended else ratchet.evaluate_session(dossier, persona, knobs)
         accepted = False
         if rsi_verdict is None:
             pass
@@ -408,7 +416,7 @@ def main(argv: list[str] | None = None) -> int:
                           "rejections": rej, "decisions": dict(adapter.stats),
                           "persona_version": persona["version"], "memories_recalled": adapter.stats_mem,
                           "health": adapter.health.summary(), "memory_compacted": compacted,
-                          "reflection": "accepted" if accepted else "skipped" if (cut_short or stop.is_set()) else "rejected",
+                          "reflection": "accepted" if accepted else "skipped" if (cut_short or world_ended or stop.is_set()) else "rejected",
                           "rsi": rsi_verdict,
                           **({"consequence": consequence} if consequence is not None else {})},
                          default=str), flush=True)

@@ -1,8 +1,16 @@
 """Secret-free session telemetry (slice S1). Codes, verbs and argument key names only; never values."""
 
 from collections import Counter
+from types import SimpleNamespace
 
 from .transitions import masked_rejection
+
+
+def _opening_entry(t) -> bool:
+    """D-101: noema-client's play() reports the session-opening ENTER_WORLD as the bare CommandResult from act(),
+    not as a TurnResult. Only a CommandResult has `idempotency_key`; a TurnResult always has `proposal`, even when
+    it is None."""
+    return not hasattr(t, "proposal") and hasattr(t, "idempotency_key")
 
 
 def rejection_summary(turns) -> dict:
@@ -13,6 +21,11 @@ def rejection_summary(turns) -> dict:
     counts: Counter = Counter()
     keys: dict[str, list[str]] = {}
     for t in turns or []:
+        if _opening_entry(t):
+            # D-101: read as the ENTER_WORLD it stands for. It has no proposal or result of its own, so it was
+            # counted as "?:ACTION_REJECTED" and its code (WORLD_INCIDENT in 678 of 681 live sessions) was lost.
+            t = SimpleNamespace(ok=getattr(t, "ok", True), reason=None, failure=getattr(t, "failure", None),
+                                proposal=SimpleNamespace(action="ENTER_WORLD", arguments={}), result=t)
         masked = masked_rejection(t)
         if getattr(t, "ok", True) and masked is None:
             continue
