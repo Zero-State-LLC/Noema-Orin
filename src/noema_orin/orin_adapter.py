@@ -376,7 +376,9 @@ class OrinAdapter:
         if allowed and "MOVE" not in allowed:  # operator tier may not move (OPERATOR-MAINT-EVOLVE §1)
             return ActionProposal(action="WAIT")
         if not _can_afford_move(context.get("canonical") or {}):
-            return ActionProposal(action="LOOK")  # a MOVE the engine will refuse is not a loop break
+            # A MOVE the engine will refuse is not a loop break. Neither is a LOOK at attention 0 (D-100: m02 sent 109
+            # such LOOKs); WAIT restores 2 attention and burns cargo for energy.
+            return ActionProposal(action="LOOK" if _can_afford_look(context.get("canonical") or {}) else "WAIT")
         exits = {e.get("to_room_id"): e.get("direction") for e in loc.get("exits") or [] if isinstance(e, dict) and e.get("direction")}
         if not exits:
             return ActionProposal(action="WAIT")
@@ -408,6 +410,15 @@ class OrinAdapter:
         last = self.fallback.decide(context)
         act = getattr(last, "action", None)
         allowed = getattr(self, "allowed", None)
+        if act == "CONVERT":
+            # D-100: the generic adapter reads raw affordances, so it would send a CONVERT the hold can't feed, and
+            # without its convert_mode (D-097). Send the role menu's CONVERT, which passes both checks, or WAIT.
+            from noema_client.types import ActionProposal
+
+            conv = next((o for o in _options(context.get("canonical") or {}, frozenset(allowed or ()))
+                         if o["action"] == "CONVERT"), None)
+            prop = _proposal(conv, self.default_args, self.memory) if conv is not None else None
+            return prop if prop is not None else ActionProposal(action="WAIT")
         # D-071: the generic adapter ignores the role; m05 (speaker) fell back to ORG_MEMBER_REMOVE (leave the
         # Compact) and ORG_OFFICE_VACATE (quit its Notice office). Off-role verbs become WAIT too.
         # D-085: so does a textless MESSAGE/SHOUT/BOARD, which the engine always refuses.
@@ -622,7 +633,8 @@ class OrinAdapter:
             if _depleted(context.get("canonical") or {}):
                 proposal = ActionProposal(action="WAIT")
             else:
-                proposal = self._loop_break_move(context) if key[0] != "MOVE" else ActionProposal(action="LOOK")
+                proposal = self._loop_break_move(context) if key[0] != "MOVE" else ActionProposal(
+                    action="LOOK" if _can_afford_look(context.get("canonical") or {}) else "WAIT")
         prop_args = getattr(proposal, "arguments", None) or {}
         rec_entry = {
             "action": getattr(proposal, "action", None),
@@ -1098,6 +1110,12 @@ def _wait_refuels(res: dict) -> bool:
     return energy <= 0 or storage < 16 or energy < 2
 
 
+def _can_afford_look(canonical: dict) -> bool:
+    """Engine actions.ts COSTS.LOOK: attention 1."""
+    attention = (canonical.get("resources") or {}).get("attention")
+    return not isinstance(attention, (int, float)) or attention >= 1
+
+
 def _can_afford_move(canonical: dict) -> bool:
     """Engine transport.ts: MOVE costs 1 energy, +1 while carrying anything (storage < 16)."""
     res = canonical.get("resources") or {}
@@ -1118,6 +1136,31 @@ def _hold_empty(canonical: dict) -> bool:
     """Engine: hold occupied = STORAGE_CAPACITY(16) - free storage. Empty hold blocks REPAIR/CONSTRUCT."""
     storage = (canonical.get("resources") or {}).get("storage")
     return isinstance(storage, (int, float)) and storage >= 16
+
+
+def _convert_has_material(aff: dict, canonical: dict) -> bool:
+    """D-100: the engine offers CONVERT as available on budgets alone. The material check runs only on the command
+    (world-actions.ts): compute needs 2 SILICA_CELL in the hold. m02 sent 231 compute CONVERTs in 9.5 h holding only
+    SALVAGE_COMPOSITE, every one refused BUDGET_EXCEEDED.
+
+    Reads the observation's `material_lots`. The engine first squares the lots with the hold (`reconcileMaterialLots`:
+    a shortfall is credited as SALVAGE_COMPOSITE, an excess trimmed), so the silica it can spend is at most the
+    silica listed. Only compute mode is checked: power also burns 3 untyped cargo, which a cargo rig makes hard to
+    count from free storage, and no power CONVERT has been refused. Unknown modes or an unreadable lot list keep the
+    CONVERT on offer.
+    """
+    mode = str(aff.get("convert_mode") or next(
+        (w for w in str(aff.get("cmd") or "").split() if w in ("power", "compute")), "")).lower()
+    lots = canonical.get("material_lots")
+    if mode != "compute" or not isinstance(lots, list):
+        return True
+    silica = 0
+    for lot in lots:
+        if not isinstance(lot, dict) or not isinstance(lot.get("amount"), (int, float)):
+            return True
+        if lot.get("material") == "SILICA_CELL":
+            silica += int(lot["amount"])
+    return silica >= 2
 
 
 def _requires_met(aff: dict, resources: dict) -> bool:
@@ -1149,6 +1192,8 @@ def _options(canonical: dict, allowed: frozenset) -> list[dict]:
         shown = str(aff.get("action") or aff.get("verb") or "").upper()
         op = str(aff.get("operation") or shown).upper()
         if allowed and op not in allowed and shown not in allowed:
+            continue
+        if op == "CONVERT" and not _convert_has_material(aff, canonical):
             continue
         out.append({"i": len(out), "action": shown if shown in allowed else op, "label": str(aff.get("label") or "")[:60],
                     "target_id": aff.get("target_id") or aff.get("target"), "target_label": aff.get("target_label"),
