@@ -2,6 +2,10 @@
 
 Evidence comes from the live Orin fleet (`metrics.db` digest, the last 1000 decision rows per agent, llama-server `/metrics`, unit files) and the repo at `4fb376a`. The clean window is the 2.5 h since the 00:18Z world recovery; 24 h figures include the 4.7 h INCIDENT.
 
+> **Correction (2026-11-28 04:35Z).** Two findings below were wrong because the fleet's outcome labels were wrong. noema-client 0.2.0 marks a rejected WebSocket ACT_RESULT ok whenever it carries an observation, and the Worker attaches one to every rejection (noema-client#58). Checked against the next observation, 144 of 386 mutating turns logged as accepted had been refused.
+> - **Item 2:** m05's fallback MESSAGEs were not reaching anyone. A MESSAGE affordance carries no text, so the engine refused each one ("Name a recipient and write a message."). That was 111 of 159 checked. The recipient list below is what m05 tried to send, not what was delivered. Fixed by D-085 (#222).
+> - **Items 14 and 15:** "real rejection signal is sparse" and "shadow accuracy shows only tn" were artifacts of the same bug. Rejections were frequent but labelled ok. The turn log labels them correctly from #221, so re-measure before judging stage 2.
+
 ## Measured state
 
 | Agent | Role | Role-action rate (2.5 h) | Idle rate | Decision sources (last ~340 turns) |
