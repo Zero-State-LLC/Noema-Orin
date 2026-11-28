@@ -211,3 +211,7 @@
 - #215 (D-083: the consequence model ignores world-level failures) is deployed. Canary m03+m06 ran 4 min with 0 tracebacks, then rolled the rest. All 6 are active and the dashboard is active. 325 tests OK on the Orin.
 - Root-cause fix for the 11-27 incident: Noema#984. A lost settlement race in the tempo alarm now resyncs and stays ACTIVE instead of going to INCIDENT. 3045 Worker tests pass and tsc is clean. It needs a code-owner review (BLOCKED, REVIEW_REQUIRED), and the production deploy is gated on the operator under the Noema grant.
 - World ACTIVE/HEALTHY since recovery (rev 45180 to 45396+). The remaining STALE_HEAD rate is about 1 per session.
+
+## 2026-11-28 02:57Z
+- Noema#984: fixed the Codex P1 (after a lost race the tempo stayed in RESOLVE with no alarm). Contention now reopens a schedulable COLLECT that keeps the batch, and the retry commits. 5 targeted tests, 3046 suite pass, tsc clean, CI green. It still needs a code-owner review, then an operator yes for the prod deploy.
+- World ACTIVE/HEALTHY at rev 45654. All 6 are running full sessions.
