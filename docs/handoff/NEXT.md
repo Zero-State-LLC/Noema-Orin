@@ -1,4 +1,4 @@
-# NEXT (2026-11-25 22:00Z)
+# NEXT (2026-11-28 04:55Z, latest entry at the bottom)
 
 ## State
 - Live on the Orin as of 21:52Z: D-053 to D-059 (#111 to #115) plus #116 (this docs slice: notice/work-queue noise filters).
@@ -228,3 +228,11 @@
 - Consent (D-079 open item): strip other Players' message text and handles from transition rows at write time. Anything more needs a Specs ruling.
 - Role rooms: close it (Specs reject new rooms, and the engine creates rooms only at genesis).
 - Ops: llama `--ctx-size 4096 --parallel 1` (3.1 GB of its buffers are in swap), point `NOEMA_LLM_BASE` at llama-server, then disable Ollama, email crit alerts via AgentMail (the Signal container is unhealthy), re-mint tokens before about 12-24.
+
+## 2026-11-28 04:55Z: second INCIDENT, client ok bug, D-085/D-086
+- **Second world INCIDENT** from about 03:13:00Z to 03:46:50Z (34 min). Same signature as the first: `meta.status=INCIDENT` with `settlement_ok=true`, `unsettled_count=0`, and head == DO (rev 45724, seq 87829). It followed 9 STALE_HEAD rejections between 02:35Z and 02:55Z. Recovered with admin `recover` (`recover_mode: restore`), then ACTIVE and rev 45733 within 3 min. Evidence is on Noema#983. That makes two INCIDENTs in about 8 h, and **Noema#984 is still the fix, waiting on a code-owner review** (`partner-agents` or galadriel; admins don't bypass).
+- **noema-client 0.2.0 reports world rejections as ok over WebSocket.** `protocol.py:285` sets ok=True whenever an observation is attached, and the Worker attaches one to every rejection (HTTP 200, body ok=false). Checked against the next observation, 144 of 386 mutating turns logged ok were refused. Client fix: **noema-client#58**, CI green and open for review. Until it ships, Orin reads the server's verdict from the frame itself (#221, `masked_rejection`).
+- **m05 "MESSAGE spam" was refused, not delivered.** A MESSAGE affordance carries no text, so the engine refused every fallback MESSAGE (111 of 159 checked). D-085 (#222): scripted turns and the model never send a textless MESSAGE, SHOUT or BOARD. The gap analysis is corrected (#223).
+- **D-086 (#224):** WORLD_INCIDENT, STALE_HEAD and NOT_IN_WORLD no longer count toward a persona's RSI rejection rate. Otherwise the newly visible rejections would roll back and quarantine any canary mutation during an outage.
+- Deployed: m05+m06 canary at 04:31Z (m05 went from a MESSAGE every other turn to 0 in the next 10 turns), then fleet-wide at 04:53Z. 337 tests OK on the Orin.
+- **Grill round 1 (Q1–Q6) is still waiting on the user:** founder menu-gap route, treasury sharing, archivist routing, consent scrub, #984 reviewer, token renewal. Round 2 is queued: alert recipient and channel, and the term "cohort" vs the glossary's "Controller group".
