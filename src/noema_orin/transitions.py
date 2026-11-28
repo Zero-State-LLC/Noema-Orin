@@ -39,6 +39,36 @@ MAX_CODE_CHARS = 80
 DEFAULT_MAX_MB = 16
 DEFAULT_KEEP = 32
 
+# Client failure classes and server codes that describe the world or the connection, not the proposed
+# action: an outage, a pause, a lost connection, or a revision race with another writer. A turn that
+# failed this way is logged as it happened, but it is not a verdict on the action (Noema#983).
+NOT_ABOUT_ACTION = frozenset({
+    "RETRYABLE_TRANSPORT", "AUTH_REQUIRED", "WORLD_NOT_READY", "WORLD_PAUSED", "WORLD_INCIDENT",
+    "SETTLEMENT_FAILURE", "SETTLEMENT_RESYNC", "PROTOCOL", "SEAL",
+    "INCIDENT", "PAUSED", "NOT_ACTIVE", "STALE_HEAD",
+})
+
+
+def outcome_of(result: Any) -> dict:
+    """One client turn result as an outcome: `{"ok": True}` or `{"ok": False, "code": ..., "failure": ...}`."""
+    out: dict = {"ok": bool(getattr(result, "ok", False))}
+    if not out["ok"]:
+        error = getattr(getattr(result, "result", None), "error", None) or {}
+        failure = getattr(result, "failure", None)
+        failure = getattr(failure, "value", failure)
+        code = error.get("code") if isinstance(error, Mapping) else None
+        out["code"] = str(code or getattr(result, "reason", None) or failure or "?")[:MAX_CODE_CHARS]
+        if failure:
+            out["failure"] = str(failure)[:MAX_CODE_CHARS]
+    return out
+
+
+def about_action(outcome: Any) -> bool:
+    """False when a recorded failure was the world's or the connection's, not the action's."""
+    if not isinstance(outcome, Mapping) or outcome.get("ok") is not False:
+        return True
+    return not ({str(outcome.get(k) or "").upper() for k in ("code", "failure")} & NOT_ABOUT_ACTION)
+
 
 def _scrub(value: Any, dropped: list[int]) -> Any:
     if isinstance(value, Mapping):
@@ -126,13 +156,7 @@ class TransitionLog:
         rows = []
         for turn, result in decided_results(self._actions, report):
             row = {"v": SCHEMA_VERSION, "kind": OUTCOME_KIND, "label": "TELEMETRY", "session": self.session,
-                   "turn": turn, "ok": bool(getattr(result, "ok", False))}
-            if not row["ok"]:
-                error = getattr(getattr(result, "result", None), "error", None) or {}
-                failure = getattr(getattr(result, "failure", None), "value", None)
-                row["code"] = str(error.get("code") or getattr(result, "reason", None) or failure or "?")[:MAX_CODE_CHARS]
-                if failure:
-                    row["failure"] = str(failure)[:MAX_CODE_CHARS]
+                   "turn": turn, **outcome_of(result)}
             rows.append(row)
         if rows:
             self._write(rows)

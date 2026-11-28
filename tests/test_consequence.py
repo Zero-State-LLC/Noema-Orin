@@ -374,3 +374,82 @@ class DecideShadowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _outage(action, code="WORLD_INCIDENT", failure="WORLD_INCIDENT"):
+    return SimpleNamespace(ok=False, reason=None, failure=SimpleNamespace(value=failure), proposal=SimpleNamespace(action=action),
+                           result=SimpleNamespace(ok=False, error={"code": code}))
+
+
+class WorldLevelFailureTests(unittest.TestCase):
+    """A turn that failed because the world or the connection was unavailable says nothing about the action."""
+
+    def _predictions(self, model):
+        return [model.predict(_obs(e), _act("REPAIR", "e.relay")) for e in range(8)]
+
+    def test_outage_failures_are_not_learned_as_rejections_or_as_zero_cost(self):
+        baseline, model = _trained(), _trained()
+        for _ in range(50):
+            model.observe(_obs(5), _act("REPAIR", "e.relay"), _obs(5), {"ok": False, "code": "WORLD_INCIDENT", "failure": "WORLD_INCIDENT"})
+            model.observe(_obs(5), _act("REPAIR", "e.relay"), _obs(5), {"ok": False, "code": "STALE_HEAD", "failure": "ACTION_REJECTED"})
+            model.observe(_obs(5), _act("REPAIR", "e.relay"), _obs(5), {"ok": False, "code": "RETRYABLE_TRANSPORT", "failure": "RETRYABLE_TRANSPORT"})
+        self.assertEqual(self._predictions(model), self._predictions(baseline))
+
+    def test_a_rejection_of_the_action_itself_still_counts(self):
+        model = ConsequenceModel(min_support=3)
+        for _ in range(6):
+            model.observe(_obs(1), _act("REPAIR", "e.relay"), _obs(1), {"ok": False, "code": "BUDGET_EXCEEDED", "failure": "ACTION_REJECTED"})
+        self.assertGreater(model.predict(_obs(1), _act("REPAIR", "e.relay"))["rejected_p"], 0.8)
+
+    def test_outage_rows_already_in_the_log_are_skipped_on_refit(self):
+        with tempfile.TemporaryDirectory() as d:
+            mind = Path(d)
+            log = TransitionLog(mind)
+            proposal = SimpleNamespace(action="REPAIR", target_id="e.relay", arguments=None)
+            log.new_session()
+            for _ in range(6):
+                log.append(canonical=_obs(5), proposal=proposal, source="planner")
+            log.record_outcomes([_result("REPAIR")] * 6)
+            clean = self._predictions(ConsequenceModel.fit_from_log(mind, min_support=3))
+            log.new_session()
+            for _ in range(40):
+                log.append(canonical=_obs(5), proposal=proposal, source="planner")
+            log.record_outcomes([_outage("REPAIR")] * 40)
+            self.assertEqual(self._predictions(ConsequenceModel.fit_from_log(mind, min_support=3)), clean)
+            self.assertLess(clean[5]["rejected_p"], 0.5)
+
+    def test_the_scorer_neither_scores_nor_folds_outage_turns_and_counts_them(self):
+        from noema_orin.consequence import ShadowScorer
+
+        baseline, model, scorer = _trained(), _trained(), ShadowScorer()
+        for _ in range(10):
+            scorer.note(_obs(5), _act("REPAIR", "e.relay"), model.predict(_obs(5), _act("REPAIR", "e.relay")))
+        report = [_result("REPAIR")] + [_outage("REPAIR", "STALE_HEAD", "ACTION_REJECTED")] + [_outage("REPAIR")] * 8
+        summary = scorer.finish(report, model)
+        repair = summary["by_verb"]["REPAIR"]
+        self.assertEqual(summary["excluded"], 9)
+        self.assertEqual((repair["tp"], repair["fp"], repair["fn"], repair["tn"]), (0, 0, 0, 1))
+        self.assertEqual(repair["budget_scored"], 1)  # only the accepted turn; outage turns are not scored
+        self.assertLessEqual(model.predict(_obs(5), _act("REPAIR", "e.relay"))["rejected_p"],
+                             baseline.predict(_obs(5), _act("REPAIR", "e.relay"))["rejected_p"])
+
+    def test_live_fold_and_refit_still_agree_across_an_outage(self):
+        from noema_orin.consequence import ShadowScorer
+
+        with tempfile.TemporaryDirectory() as d:
+            mind = Path(d)
+            log, scorer, live = TransitionLog(mind), ShadowScorer(), ConsequenceModel(min_support=2)
+            log.new_session()
+            proposal = SimpleNamespace(action="REPAIR", target_id="e.relay", arguments=None)
+            turns = []
+            for i in range(12):
+                energy = i % 6
+                log.append(canonical=_obs(energy), proposal=proposal, source="planner")
+                scorer.note(_obs(energy), proposal, live.predict(_obs(energy), proposal))
+                turns.append(_outage("REPAIR") if i % 4 == 3 else _result("REPAIR", energy >= 3, None if energy >= 3 else "BUDGET_EXCEEDED"))
+            log.record_outcomes(turns)
+            scorer.finish(turns, live)
+            refit = ConsequenceModel.fit_from_log(mind, min_support=2)
+            for energy in range(8):
+                self.assertEqual(live.predict(_obs(energy), _act("REPAIR", "e.relay")),
+                                 refit.predict(_obs(energy), _act("REPAIR", "e.relay")), energy)
