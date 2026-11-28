@@ -65,6 +65,31 @@ class CloudDecideTests(unittest.TestCase):
                 mock.patch("urllib.request.urlopen", side_effect=OSError):
             self.assertEqual(self._adapter()._chat("s", "u"), {})
 
+    def test_last_resort_uses_openai_route_not_ollama(self):
+        """D-090: the last local fallback goes to llama-server's /v1/chat/completions, never Ollama /api/chat.
+
+        llama-server answers /api/chat with 404, so the old path only worked while Ollama ran.
+        """
+        body = json.dumps({"choices": [{"message": {"content": '{"choice": 2}'}}]}).encode()
+        a = self._adapter()
+        a.base_url = "http://127.0.0.1:8081/v1"
+        env = {k: v for k, v in self.ENV.items()}
+        env.pop("MEMORY_SYNC_URL")
+        with mock.patch.dict("os.environ", env, clear=True), \
+                mock.patch("urllib.request.urlopen", return_value=_Resp(body)) as u:
+            self.assertEqual(a._chat("s", "u", num_predict=60), {"choice": 2})
+        urls = [c[0][0].full_url for c in u.call_args_list]
+        self.assertTrue(urls, "a local call was made")
+        self.assertTrue(all(url.endswith("/v1/chat/completions") for url in urls), urls)
+        self.assertFalse(any("/api/chat" in url for url in urls))
+
+    def test_default_base_is_llama_server(self):
+        from importlib.util import find_spec
+        if not find_spec("noema_client"):
+            self.skipTest("needs noema-client")
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(orin_adapter.from_env("brief").base_url, "http://127.0.0.1:8081/v1")
+
 
 if __name__ == "__main__":
     unittest.main()

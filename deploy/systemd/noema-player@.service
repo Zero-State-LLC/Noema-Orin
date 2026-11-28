@@ -1,6 +1,6 @@
 [Unit]
 Description=NOEMA Orin system role agent %i (Admin-minted, reserved system- id)
-After=network-online.target ollama.service
+After=network-online.target noema-llama-server.service
 PartOf=noema-players.target
 
 [Service]
