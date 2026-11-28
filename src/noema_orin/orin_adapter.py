@@ -312,9 +312,9 @@ class OrinAdapter:
         # D-051: SUPPLY is planner-only (need-gated, D-048). The model spent 20/30 turns supplying blind.
         # S11: the founder's MESSAGE is planner-only too (one welcome per non-cohort Player).
         # D-059: notices are planner-only (posted when a new fact exists).
-        hidden = set(self._hidden_verbs())
-        if not self._social_outreach_ready():
-            hidden |= {"MESSAGE", "SHOUT", "BOARD"}
+        # D-085: the model picks an index, never words, so a social option it picks always goes out textless
+        # and the engine refuses it. Social verbs with text come only from the planner (notice, digest).
+        hidden = set(self._hidden_verbs()) | TEXT_VERBS
         options = [{**o, "i": i} for i, o in enumerate(o for o in options if o["action"] not in hidden)]
         if not options:
             return None
@@ -406,14 +406,15 @@ class OrinAdapter:
             for opt in options:
                 if tier(opt) and (opt["action"], opt.get("target_id")) not in tried:
                     prop = _proposal(opt, self.default_args, self.memory)
-                    if prop is not None:
+                    if prop is not None and not _needs_text(prop.action, prop.arguments):
                         return prop
         last = self.fallback.decide(context)
         act = getattr(last, "action", None)
         allowed = getattr(self, "allowed", None)
         # D-071: the generic adapter ignores the role; m05 (speaker) fell back to ORG_MEMBER_REMOVE (leave the
         # Compact) and ORG_OFFICE_VACATE (quit its Notice office). Off-role verbs become WAIT too.
-        if act in hidden or (allowed and act not in allowed):
+        # D-085: so does a textless MESSAGE/SHOUT/BOARD, which the engine always refuses.
+        if act in hidden or (allowed and act not in allowed) or _needs_text(act, getattr(last, "arguments", None)):
             # D-068: the generic adapter reads raw affordances, so it re-offered the founder's MESSAGE (183 sends).
             from noema_client.types import ActionProposal
 
@@ -843,6 +844,16 @@ SPEND_READY = 5  # D-050: cargo MOVE 2 + REPAIR 3 (engine COSTS)
 UBIQUITOUS = frozenset({"CONSTRUCT", "BUILD"})
 # D-069: FOCUS is offered in every room; holding it already, m06 WAITed in place 257/385 turns at energy 80.
 STAY_EXEMPT = frozenset({"FOCUS", "COMMIT.FOCUS"})
+# D-085: the engine refuses these without text, and an affordance never carries any (`message tester "hello"`
+# maps to {kind: social}). Only a planner step that wrote grounded text may send one.
+TEXT_VERBS = frozenset({"MESSAGE", "SHOUT", "BOARD"})
+
+
+def _needs_text(action, arguments) -> bool:
+    """True when `action` is a social verb and `arguments` carry no text to say (D-085)."""
+    if str(action or "").upper() not in TEXT_VERBS:
+        return False
+    return not str((arguments or {}).get("text") or "").strip()
 
 
 def _route_verbs(verbs) -> set[str]:
