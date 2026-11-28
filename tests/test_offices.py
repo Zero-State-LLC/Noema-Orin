@@ -457,6 +457,25 @@ class SupplyProposalTests(unittest.TestCase):
                                     {"i": 1, "action": "HARVEST", "label": "Harvest", "raw": {}}])
         self.assertNotIn("SUPPLY", seen.get("user", ""))
 
+    def test_d085_model_never_sees_textless_social_verbs(self):
+        """The model answers with a menu index, never words, so it cannot supply MESSAGE text either."""
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        a.recent, a.system, a.memories, seen = [], "", [], {}
+
+        def chat(instruction, user, **kw):
+            seen["user"] = user
+            return {"choice": 0}
+        a._chat, a.memory, a.default_args = chat, None, {}
+        a._last_social_turn, a.stats = -999, {}
+        a._ask({"canonical": {}}, [{"i": 0, "action": "MESSAGE", "label": "Message tester", "raw": {}},
+                                    {"i": 1, "action": "SHOUT", "label": "Shout", "raw": {}},
+                                    {"i": 2, "action": "RECHARGE", "label": "Recharge", "raw": {}}])
+        self.assertNotIn("MESSAGE", seen.get("user", ""))
+        self.assertNotIn("SHOUT", seen.get("user", ""))
+        self.assertIn("RECHARGE", seen.get("user", ""))
+
 
 class RouteVerbTests(unittest.TestCase):
     def test_d052_route_skips_ubiquitous_construct(self):
@@ -536,6 +555,45 @@ class SupersedeOnceTests(unittest.TestCase):
 
 class FallbackAllowlistTests(unittest.TestCase):
     """D-071: the generic fallback cannot pick verbs outside the role's allow list."""
+
+    def test_speaker_fallback_never_sends_textless_message(self):
+        """D-085: a MESSAGE affordance carries no text, so the engine refuses every scripted one.
+
+        m05 sent 159 fallback MESSAGEs; 111 of the next observations read "Name a recipient and write
+        a message." The fallback must take the next role verb, or WAIT, instead.
+        """
+        from importlib.util import find_spec
+        if not find_spec("noema_client"):
+            self.skipTest("needs noema-client")
+        from noema_orin.orin_adapter import OrinAdapter
+
+        a = OrinAdapter.__new__(OrinAdapter)
+        spec = role_for("speaker")
+        a.verbs, a.allowed, a.recent, a.default_args, a.memory = set(spec["verbs"]), frozenset(spec["allow"]), [], {}, None
+
+        class F:
+            def decide(self, context):
+                from noema_client.types import ActionProposal
+                return ActionProposal(action="MESSAGE", target_id="player.tester")
+
+        a.fallback = F()
+        msg = {"action": "MESSAGE", "target_id": "player.tester", "raw": {
+            "action": "MESSAGE", "verb": "MESSAGE", "cmd": 'message tester "hello"', "kind": "social",
+            "target_id": "player.tester", "available": True}}
+        shout = {"action": "SHOUT", "target_id": None, "raw": {"action": "SHOUT", "available": True}}
+        recharge = {"action": "RECHARGE", "target_id": "entity.generator.1", "raw": {
+            "action": "RECHARGE", "operation": "RECHARGE", "target_id": "entity.generator.1", "available": True}}
+        self.assertEqual(a._role_fallback({}, [msg, shout]).action, "WAIT")
+        self.assertEqual(a._role_fallback({}, [msg, shout, recharge]).action, "RECHARGE")
+
+    def test_social_verb_with_text_is_still_allowed(self):
+        """A social proposal that already carries text (a planner notice) is untouched."""
+        from noema_orin.orin_adapter import _needs_text
+
+        self.assertTrue(_needs_text("MESSAGE", {"kind": "social"}))
+        self.assertTrue(_needs_text("BOARD", {}))
+        self.assertFalse(_needs_text("MESSAGE", {"text": "Stall at the exchange: 3 ore."}))
+        self.assertFalse(_needs_text("RECHARGE", {}))
 
     def test_speaker_never_leaves_org(self):
         from importlib.util import find_spec
