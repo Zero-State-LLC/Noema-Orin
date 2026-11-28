@@ -219,3 +219,12 @@
 ## 2026-11-28 03:08Z: upgrade and gap analysis
 - `docs/analysis/upgrade-gaps-20261128.md`: 15 ranked gaps with live evidence. Top items: loop-break and planner oscillation (12–27% of turns, up to 33% MOVE reversals), m05 fallback MESSAGE spam (379 per 1000 turns), and m01/m04 with no role work (needs a product call). Also 3.2 GB of llama-server RAM for 0 player calls in 3 h, no push alert for crit, no log rotation, and the transition logs aren't backed up.
 - Next: items 1–2 (canary m02 and m05), then 6–7.
+
+## 2026-11-28 03:33Z: open-decisions research
+- `docs/research/open-decisions-20261128.md` (engine, Specs and live evidence with file:line citations).
+- **Founder idle is an Orin bug.** The engine shows the org treasury only to `OPERATE_RESOURCE_ACCOUNT` holders (`world-actions.ts:1236`). m01 holds none, so `plan_civic_contract` reads treasury 0 and never posts. Verified by replaying it on m01's live observation. Governance and COMMEMORATE wait for menu rows the engine never emits (no affordance row exists).
+- Archivist: COMMEMORATE has the same dead check. New evidence appears from harvest scars (3 harvests), lore crystallization (about 20 cycles) and crime residues (12-cycle TTL).
+- S19 option B is not needed: cargo fuel is still +2. m03's blocks are missing regional lots and the RECHARGE cap of 10.
+- Consent (D-079 open item): strip other Players' message text and handles from transition rows at write time. Anything more needs a Specs ruling.
+- Role rooms: close it (Specs reject new rooms, and the engine creates rooms only at genesis).
+- Ops: llama `--ctx-size 4096 --parallel 1` (3.1 GB of its buffers are in swap), point `NOEMA_LLM_BASE` at llama-server, then disable Ollama, email crit alerts via AgentMail (the Signal container is unhealthy), re-mint tokens before about 12-24.
